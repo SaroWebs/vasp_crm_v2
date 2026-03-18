@@ -18,11 +18,16 @@ class ClientSsoController extends Controller
          $client = Client::query()
             ->where('code', $code)
             ->first();
-        if (! $client->sso_enabled) {
+        
+        if (!$client) {
+            abort(404, 'Client not found.');
+        }
+        
+        if (!$client->sso_enabled) {
             abort(403, 'SSO is disabled for this client.');
         }
 
-        if (! $client->sso_secret) {
+        if (!$client->sso_secret) {
             abort(403, 'SSO secret is not configured for this client.');
         }
 
