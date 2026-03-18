@@ -61,6 +61,10 @@ Route::get('/clients/{clientCode}/sso/test', [AdminClientSsoTestController::clas
 
 Route::get('/s/{code}', [ClientSsoController::class, 'consume'])->name('sso.consume');
 
+Route::get('/c/{client:code}/logout', function (\App\Models\Client $client) {
+    return inertia('client/Logout');
+})->name('client.logout.page');
+
 Route::prefix('c/{client:code}')
     ->name('client.')
     ->middleware(['web', 'auth:organization', 'organization.client'])
