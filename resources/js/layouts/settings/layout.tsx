@@ -1,4 +1,4 @@
-import Heading from '@/components/heading';
+﻿import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
@@ -40,7 +40,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const { auth } = usePage<SharedData>().props;
 
     const navItems = sidebarNavItems.filter((item) => {
-        if (item.title === 'Two-Factor Auth' && auth?.guard === 'client') {
+        if (item.title === 'Two-Factor Auth' && auth?.guard === 'organization') {
             return false;
         }
         return true;
@@ -91,3 +91,4 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         </div>
     );
 }
+

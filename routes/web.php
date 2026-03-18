@@ -2,10 +2,16 @@
 
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\AdminClientSsoTestController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTicketController;
+use App\Http\Controllers\Client\ClientPortalAuthController;
+use App\Http\Controllers\Client\ClientCommentAttachmentController;
+use App\Http\Controllers\Client\ClientTicketCommentController;
+use App\Http\Controllers\Client\ClientTicketController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientSsoController;
 use App\Http\Controllers\CommentAttachmentController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
@@ -34,6 +40,7 @@ use App\Http\Controllers\TimeTrackingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserTaskController;
 use App\Http\Controllers\WorkloadMatrixController;
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +49,48 @@ use Inertia\Inertia;
 Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
+
+Route::get('/testx/{client:code}', function (Client $client) {
+    $client->load('product');
+    return response()->json([
+        'client' => $client,
+    ]);
+});
+
+Route::get('/clients/{clientCode}/sso/test', [AdminClientSsoTestController::class, 'redirectToSso'])->name('clients.sso.test');
+
+Route::get('/s/{code}', [ClientSsoController::class, 'consume'])->name('sso.consume');
+
+Route::prefix('c/{client:code}')
+    ->name('client.')
+    ->middleware(['web', 'auth:organization', 'organization.client'])
+    ->group(function () {
+        Route::get('/', function (Request $request, $client) {
+            return redirect()->route('client.tickets.index', $client);
+        })->name('dashboard');
+
+        Route::post('/logout', [ClientPortalAuthController::class, 'logout'])->name('logout');
+
+        Route::controller(ClientTicketController::class)->group(function () {
+            Route::get('/tickets', 'index')->name('tickets.index');
+            Route::get('/tickets/create', 'create')->name('tickets.create');
+            Route::post('/tickets', 'store')->name('tickets.store');
+            Route::get('/tickets/{ticket}', 'show')->name('tickets.show');
+            Route::get('/tickets/{ticket}/edit', 'edit')->name('tickets.edit');
+            Route::patch('/tickets/{ticket}', 'update')->name('tickets.update');
+            Route::delete('/tickets/{ticket}', 'destroy')->name('tickets.destroy');
+        });
+
+        Route::controller(ClientTicketCommentController::class)->group(function () {
+            Route::get('/tickets/{ticket}/comments', 'index')->name('tickets.comments.index');
+            Route::post('/tickets/{ticket}/comments', 'store')->name('tickets.comments.store');
+            Route::patch('/tickets/{ticket}/comments/{comment}', 'update')->name('tickets.comments.update');
+            Route::delete('/tickets/{ticket}/comments/{comment}', 'destroy')->name('tickets.comments.destroy');
+        });
+
+        Route::delete('/tickets/{ticket}/comments/{comment}/attachments/{attachment}', [ClientCommentAttachmentController::class, 'destroy'])
+            ->name('comments.attachments.destroy');
+    });
 
 Route::get('/link', function () {
     Artisan::call('storage:link');
@@ -248,6 +297,8 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
             Route::delete('/clients/{client}/force-delete', 'forceDelete');
             Route::get('/clients/{client}/organization-users', 'getClientOrganizationUsers');
         });
+
+        
 
         // Client organization users (manage)
         Route::controller(OrganizationUserController::class)->group(function () {

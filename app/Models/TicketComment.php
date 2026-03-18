@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TicketComment extends Model
@@ -26,9 +26,9 @@ class TicketComment extends Model
     /**
      * Get the attachments for the comment.
      */
-    public function attachments(): HasMany
+    public function attachments(): MorphMany
     {
-        return $this->hasMany(CommentAttachment::class, 'comment_id');
+        return $this->morphMany(CommentAttachment::class, 'comment');
     }
 
     /**

@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+﻿import { Head, usePage } from '@inertiajs/react';
 
 import AppearanceTabs from '@/components/appearance-tabs';
 import HeadingSmall from '@/components/heading-small';
@@ -17,7 +17,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function Appearance() {
     const { auth } = usePage<SharedData>().props;
-    const Layout = auth?.guard === 'client' ? ClientLayout : AppLayout;
+    const Layout = auth?.guard === 'organization' ? ClientLayout : AppLayout;
 
     return (
         <Layout breadcrumbs={breadcrumbs}>
@@ -35,3 +35,4 @@ export default function Appearance() {
         </Layout>
     );
 }
+

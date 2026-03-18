@@ -20,12 +20,16 @@ class Client extends Model
         'address',
         'status',
         'product_id',
+        'sso_enabled',
+        'sso_secret',
     ];
 
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'sso_enabled' => 'boolean',
+            'sso_secret' => 'encrypted',
         ];
     }
 

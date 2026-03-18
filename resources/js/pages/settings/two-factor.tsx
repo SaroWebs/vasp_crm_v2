@@ -1,4 +1,4 @@
-import HeadingSmall from '@/components/heading-small';
+﻿import HeadingSmall from '@/components/heading-small';
 import TwoFactorRecoveryCodes from '@/components/two-factor-recovery-codes';
 import TwoFactorSetupModal from '@/components/two-factor-setup-modal';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +40,7 @@ export default function TwoFactor({
     } = useTwoFactorAuth();
     const [showSetupModal, setShowSetupModal] = useState<boolean>(false);
     const { auth } = usePage<SharedData>().props;
-    const Layout = auth?.guard === 'client' ? ClientLayout : AppLayout;
+    const Layout = auth?.guard === 'organization' ? ClientLayout : AppLayout;
 
     return (
         <Layout breadcrumbs={breadcrumbs}>
@@ -141,3 +141,4 @@ export default function TwoFactor({
         </Layout>
     );
 }
+

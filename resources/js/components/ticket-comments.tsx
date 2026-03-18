@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+﻿import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,9 +21,13 @@ import SingleComment from './tasks/single-comment';
 
 interface TicketCommentsProps {
     ticketId: number;
+    basePath?: string;
 }
 
-export default function TicketComments({ ticketId }: TicketCommentsProps) {
+export default function TicketComments({
+    ticketId,
+    basePath: providedBasePath,
+}: TicketCommentsProps) {
     const { auth } = usePage().props as any;
     const [comments, setComments] = useState<TicketComment[]>([]);
     const [deletedComments, setDeletedComments] = useState<TicketComment[]>([]);
@@ -38,18 +42,18 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
 
     const currentUserId = auth?.user?.id;
     const isAdmin = auth?.guard === 'admin';
-    const isClient = auth?.guard === 'client';
+    const isClient = auth?.guard === 'organization';
     const isSuperAdmin = isAdmin && auth?.user?.role?.slug === 'superadmin';
 
     // Determine base path for API calls
-    const basePath = isAdmin ? '/admin' : '';
+    const apiBasePath = providedBasePath ?? (isAdmin ? '/admin' : '');
 
     const fetchComments = async (showLoading = true) => {
         try {
             if (showLoading) setLoading(true);
             setError(null);
             const response = await axios.get(
-                `${basePath}/tickets/${ticketId}/comments`,
+                `${apiBasePath}/tickets/${ticketId}/comments`,
             );
             if (response.data.success) {
                 setComments(response.data.data);
@@ -66,7 +70,7 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
 
         try {
             const response = await axios.get(
-                `${basePath}/tickets/${ticketId}/comments/deleted`,
+                `${apiBasePath}/tickets/${ticketId}/comments/deleted`,
             );
             if (response.data.success) {
                 setDeletedComments(response.data.data);
@@ -82,7 +86,7 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
     const handleRestoreComment = async (commentId: number) => {
         try {
             const response = await axios.patch(
-                `${basePath}/tickets/${ticketId}/comments/${commentId}/restore`,
+                `${apiBasePath}/tickets/${ticketId}/comments/${commentId}/restore`,
             );
             if (response.data.success) {
                 const restoredComment = response.data.data;
@@ -109,7 +113,7 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
 
         try {
             const response = await axios.delete(
-                `${basePath}/tickets/${ticketId}/comments/${commentId}/force-delete`,
+                `${apiBasePath}/tickets/${ticketId}/comments/${commentId}/force-delete`,
             );
             if (response.data.success) {
                 setDeletedComments((prev) =>
@@ -195,7 +199,7 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
             });
 
             const response = await axios.post(
-                `${basePath}/tickets/${ticketId}/comments`,
+                `${apiBasePath}/tickets/${ticketId}/comments`,
                 formData,
                 {
                     headers: {
@@ -267,7 +271,7 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
         if (isAdmin && comment.commented_by_type === 'user') {
             return comment.commented_by === currentUserId;
         }
-        if (isClient && comment.commented_by_type === 'client') {
+        if (isClient && comment.commented_by_type === 'organization_user') {
             return comment.commented_by === currentUserId;
         }
         return false;
@@ -341,6 +345,7 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
                                     key={comment.id}
                                     comment={comment}
                                     ticketId={ticketId}
+                                    basePath={apiBasePath || undefined}
                                     isOwn={isOwnComment(comment)}
                                     onUpdate={handleCommentUpdate}
                                     onDelete={handleCommentDelete}
@@ -509,3 +514,5 @@ export default function TicketComments({ ticketId }: TicketCommentsProps) {
         </Card>
     );
 }
+
+

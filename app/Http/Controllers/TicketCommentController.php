@@ -414,7 +414,7 @@ class TicketCommentController extends Controller
         // Store file with safe filename
         $path = $file->storeAs('comment-files/' . $comment->ticket_id, $safeFilename, 'public');
 
-        return CommentAttachment::create([
+        return $comment->attachments()->create([
             'comment_id' => $comment->id,
             'file_path' => $path,
             'file_type' => $file->getClientMimeType(),

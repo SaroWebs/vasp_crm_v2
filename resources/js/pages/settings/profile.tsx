@@ -1,4 +1,4 @@
-import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
+﻿import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Transition } from '@headlessui/react';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
@@ -28,7 +28,7 @@ export default function Profile({
     status?: string;
 }) {
     const { auth } = usePage<SharedData>().props;
-    const Layout = auth?.guard === 'client' ? ClientLayout : AppLayout;
+    const Layout = auth?.guard === 'organization' ? ClientLayout : AppLayout;
 
     return (
         <Layout breadcrumbs={breadcrumbs}>
@@ -146,3 +146,4 @@ export default function Profile({
         </Layout>
     );
 }
+

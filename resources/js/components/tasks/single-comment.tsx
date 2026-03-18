@@ -7,6 +7,7 @@ import { Check, Edit2, Loader2, Paperclip, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface SingleCommentProps {
+    basePath?: string;
     comment: TicketComment | TaskComment;
     ticketId?: number;
     taskId?: number;
@@ -18,6 +19,7 @@ interface SingleCommentProps {
 }
 
 export default function SingleComment({
+    basePath,
     comment,
     ticketId,
     taskId,
@@ -59,7 +61,7 @@ export default function SingleComment({
         try {
             setSubmitting(true);
             const endpoint = ticketId
-                ? `/admin/tickets/${ticketId}/comments/${comment.id}`
+                ? `${basePath ?? '/admin'}/tickets/${ticketId}/comments/${comment.id}`
                 : `/data/tasks/${taskId}/comments/${comment.id}`;
 
             const response = await axios.patch(endpoint, {
@@ -83,7 +85,7 @@ export default function SingleComment({
         try {
             setSubmitting(true);
             const endpoint = ticketId
-                ? `/admin/tickets/${ticketId}/comments/${comment.id}`
+                ? `${basePath ?? '/admin'}/tickets/${ticketId}/comments/${comment.id}`
                 : `/data/tasks/${taskId}/comments/${comment.id}`;
 
             const response = await axios.delete(endpoint);
@@ -104,7 +106,7 @@ export default function SingleComment({
         try {
             setSubmitting(true);
             const endpoint = ticketId
-                ? `/admin/tickets/${ticketId}/comments/${comment.id}/attachments/${attachmentId}`
+                ? `${basePath ?? '/admin'}/tickets/${ticketId}/comments/${comment.id}/attachments/${attachmentId}`
                 : `/data/tasks/${taskId}/comments/${comment.id}/attachments/${attachmentId}`;
 
             const response = await axios.delete(endpoint);
@@ -192,7 +194,7 @@ export default function SingleComment({
                             Edited
                         </span>
                     )}
-                    {comment.commented_by_type === 'client' && (
+                    {comment.commented_by_type === 'organization_user' && (
                         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">
                             Client
                         </span>

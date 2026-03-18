@@ -44,13 +44,18 @@ class HandleInertiaRequests extends Middleware
         $guardType = null;
         $user = null;
 
+        if (auth('organization')->check()) {
+            $guardType = 'organization';
+            $user = auth('organization')->user()->load('client');
+        }
+
         // Check if we're on an admin route
-        if ($request->is('admin/*') || $request->is('admin')) {
+        if (! $guardType && ($request->is('admin/*') || $request->is('admin'))) {
             if (auth('web')->check()) {
                 $guardType = 'admin';
                 $user = auth('web')->user()->load('roles');
             }
-        } else {
+        } elseif (! $guardType) {
             // Admins can access settings without admin/ prefix
             if (auth('web')->check()) {
                 $guardType = 'admin';

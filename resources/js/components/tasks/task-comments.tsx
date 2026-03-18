@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+﻿import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,7 +38,7 @@ export default function TaskComments({ taskId }: TaskCommentsProps) {
 
     const currentUserId = auth?.user?.id;
     const isAdmin = auth?.guard === 'admin';
-    const isClient = auth?.guard === 'client';
+    const isClient = auth?.guard === 'organization';
     // const isSuperAdmin = isAdmin && auth?.user?.role?.slug === 'superadmin';
 
     // Base path for task comments is consistent with API routes found
@@ -267,7 +267,7 @@ export default function TaskComments({ taskId }: TaskCommentsProps) {
         if (comment.commented_by_type === 'user' && isAdmin) {
             return comment.commented_by === currentUserId;
         }
-        if (comment.commented_by_type === 'client' && isClient) {
+        if (comment.commented_by_type === 'organization_user' && isClient) {
             return comment.commented_by === currentUserId;
         }
         // Fallback for simple check if types match context
@@ -510,3 +510,4 @@ export default function TaskComments({ taskId }: TaskCommentsProps) {
         </Card>
     );
 }
+

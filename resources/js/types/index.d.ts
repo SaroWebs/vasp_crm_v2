@@ -2,8 +2,8 @@ import { InertiaLinkProps } from '@inertiajs/react';
 import { LucideIcon } from 'lucide-react';
 
 export interface Auth {
-    user: User;
-    guard?: 'admin' | null;
+    user: User | OrganizationUser;
+    guard?: 'admin' | 'organization' | null;
     menu_access?: Record<string, boolean>;
     menu_access_configured?: boolean;
 }

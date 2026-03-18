@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class ClientController extends Controller
@@ -130,6 +131,28 @@ class ClientController extends Controller
             'address'  => 'nullable|string',
             'status'   => 'required|in:active,inactive',
             'product_id' => 'nullable|exists:products,id',
+            'sso_enabled' => ['sometimes', 'boolean'],
+            'sso_secret' => [
+                Rule::requiredIf(fn (): bool => $request->boolean('sso_enabled')),
+                'nullable',
+                'string',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    if (! is_string($value)) {
+                        $fail('The SSO secret must be a string.');
+
+                        return;
+                    }
+
+                    $decoded = base64_decode($value, true);
+                    if ($decoded === false || strlen($decoded) !== 32) {
+                        $fail('The SSO secret must be a base64-encoded 32-byte key.');
+                    }
+                },
+            ],
         ]);
 
         try {
@@ -141,6 +164,8 @@ class ClientController extends Controller
                 'address'  => $validated['address'] ?? null,
                 'status'   => $validated['status'],
                 'product_id' => $validated['product_id'] ?? null,
+                'sso_enabled' => $request->boolean('sso_enabled'),
+                'sso_secret' => $validated['sso_secret'] ?? null,
             ]);
 
             return redirect('/admin/clients')
@@ -207,7 +232,22 @@ class ClientController extends Controller
         }
 
         return Inertia::render('admin/clients/Edit', [
-            'client' => $client,
+            'client' => [
+                ...$client->only([
+                    'id',
+                    'name',
+                    'email',
+                    'phone',
+                    'code',
+                    'address',
+                    'status',
+                    'product_id',
+                    'created_at',
+                    'updated_at',
+                ]),
+                'sso_enabled' => (bool) $client->sso_enabled,
+                'has_sso_secret' => ! empty($client->sso_secret),
+            ],
             'products' => Product::orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -223,6 +263,9 @@ class ClientController extends Controller
             abort(404, 'Client not found');
         }
 
+        $ssoEnabled = $request->boolean('sso_enabled');
+        $secretRequired = $ssoEnabled && empty($client->sso_secret);
+
         $validated = $request->validate([
             'name'     => 'required|string',
             'email'    => 'nullable|email',
@@ -231,9 +274,31 @@ class ClientController extends Controller
             'address'  => 'required|string',
             'status'   => 'required|string',
             'product_id' => 'nullable|exists:products,id',
+            'sso_enabled' => ['sometimes', 'boolean'],
+            'sso_secret' => [
+                Rule::requiredIf(fn (): bool => $secretRequired),
+                'nullable',
+                'string',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    if (! is_string($value)) {
+                        $fail('The SSO secret must be a string.');
+
+                        return;
+                    }
+
+                    $decoded = base64_decode($value, true);
+                    if ($decoded === false || strlen($decoded) !== 32) {
+                        $fail('The SSO secret must be a base64-encoded 32-byte key.');
+                    }
+                },
+            ],
         ]);
 
-        $client->update([
+        $updatePayload = [
             'name'     => $validated['name'],
             'email'    => $validated['email'] ?? null,
             'phone'    => $validated['phone'],
@@ -241,7 +306,14 @@ class ClientController extends Controller
             'address'  => $validated['address'],
             'status'   => $validated['status'],
             'product_id' => $validated['product_id'] ?? null,
-        ]);
+            'sso_enabled' => $ssoEnabled,
+        ];
+
+        if (! empty($validated['sso_secret'])) {
+            $updatePayload['sso_secret'] = $validated['sso_secret'];
+        }
+
+        $client->update($updatePayload);
 
         return redirect('/admin/clients/' . $client_id)->with('success', 'Client updated successfully');
     }

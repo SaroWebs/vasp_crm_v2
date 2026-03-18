@@ -9,6 +9,7 @@ class CommentAttachment extends Model
 {
     protected $fillable = [
         'comment_id',
+        'comment_type',
         'file_path',
         'file_type',
         'original_filename',
@@ -17,7 +18,7 @@ class CommentAttachment extends Model
         'uploaded_by',
     ];
 
-    public function comment(): BelongsTo
+    public function comment(): MorphTo
     {
         return $this->belongsTo(TicketComment::class);
     }

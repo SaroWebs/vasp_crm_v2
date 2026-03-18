@@ -1,4 +1,4 @@
-import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
+﻿import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import InputError from '@/components/input-error';
 import AppLayout from '@/layouts/app-layout';
 import ClientLayout from '@/layouts/client/client-layout';
@@ -24,7 +24,7 @@ export default function Password() {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
     const { auth } = usePage<SharedData>().props;
-    const Layout = auth?.guard === 'client' ? ClientLayout : AppLayout;
+    const Layout = auth?.guard === 'organization' ? ClientLayout : AppLayout;
 
     return (
         <Layout breadcrumbs={breadcrumbs}>
@@ -146,3 +146,4 @@ export default function Password() {
         </Layout>
     );
 }
+

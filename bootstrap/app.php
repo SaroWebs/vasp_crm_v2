@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AdminMiddleware;
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnsureOrganizationUserMatchesClient;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'admin' => AdminMiddleware::class,
+            'organization.client' => EnsureOrganizationUserMatchesClient::class,
             'permission' => CheckPermission::class,
         ]);
     })
