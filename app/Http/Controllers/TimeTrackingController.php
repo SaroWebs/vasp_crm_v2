@@ -1,0 +1,441 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Task;
+use App\Models\TaskTimeEntry;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class TimeTrackingController extends Controller
+{
+    /**
+     * Start a task time entry.
+     */
+    public function startTask(Request $request, Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Check if user explicitly wants to skip the overdue warning
+        $skipOverdueWarning = $request->input('skip_overdue_warning', false);
+
+        // Check if task is in any non-terminal state and due date is overdue
+        // Terminal states: Done, Cancelled, Rejected
+        $terminalStates = ['Done', 'Cancelled', 'Rejected'];
+        $isActiveTask = !in_array($task->state, $terminalStates);
+        $isOverdue = $task->due_at && $task->due_at->isPast();
+
+        // If task is active and overdue, and user hasn't skipped warning, return warning
+        if ($isActiveTask && $isOverdue && !$skipOverdueWarning) {
+            return response()->json([
+                'overdue_warning' => true,
+                'message' => 'The due date for this task has passed. Do you want to start anyway or extend the due date?',
+                'task' => $task,
+                'current_due_date' => $task->due_at->format('Y-m-d H:i:s'),
+                'overdue_days' => now()->diffInDays($task->due_at),
+            ], 422);
+        }
+
+        // Check if current time is working time
+        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $now = now();
+        if (!$workingHoursService->isWorkingTime($now)) {
+            return response()->json([
+                'error' => 'Task actions are not available outside working hours',
+                'message' => 'Please resume your work during working hours'
+            ], 403);
+        }
+
+        // Check if user already has an active time entry for this task
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+        if ($activeEntry) {
+            return response()->json(['message' => 'Task is already being tracked by this user'], 422);
+        }
+
+        // Pause other active tasks for this user before starting the new task
+        $this->pauseUserActiveTasks($user->id, $task->id);
+
+        // Create new time entry with current time
+        $timeEntry = TaskTimeEntry::create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'start_time' => $now,
+            'end_time' => null,
+            'description' => null,
+            'is_active' => true,
+        ]);
+
+        $task->update(['state' => 'InProgress']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Task time tracking started successfully',
+            'data' => $task->load(['timeEntries:id,task_id,user_id,start_time,end_time,is_active'])
+        ]);
+    }
+
+    /**
+     * Pause a task time entry (ends the current time entry but keeps task active).
+     */
+    public function pauseTask(Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Find the active time entry and pause it
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+
+        if (!$activeEntry) {
+            return response()->json(['message' => 'No active time tracking for this task'], 422);
+        }
+
+        $activeEntry->end();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Task time tracking paused successfully',
+            'data' => $task->load(['timeEntries:id,task_id,user_id,start_time,end_time,is_active'])
+        ]);
+    }
+
+    /**
+     * Resume a task time entry (same as start for existing tasks).
+     */
+    public function resumeTask(Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Check if current time is working time
+        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $now = now();
+        if (!$workingHoursService->isWorkingTime($now)) {
+            return response()->json([
+                'error' => 'Task actions are not available outside working hours',
+                'message' => 'Please resume your work during working hours'
+            ], 403);
+        }
+
+        // Check if user already has an active time entry for this task
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+        if ($activeEntry) {
+            return response()->json(['message' => 'Task is already being tracked by this user'], 422);
+        }
+
+        // Pause other active tasks for this user before resuming this task
+        $this->pauseUserActiveTasks($user->id, $task->id);
+
+        // Create new time entry with current time
+        $timeEntry = TaskTimeEntry::create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'start_time' => $now,
+            'end_time' => null,
+            'description' => null,
+            'is_active' => true,
+        ]);
+
+        $task->update(['state' => 'InProgress']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Task time tracking resumed successfully',
+            'data' => $task->load(['timeEntries:id,task_id,user_id,start_time,end_time,is_active'])
+        ]);
+    }
+
+    /**
+     * End a task time entry (ends the current time entry and completes the task).
+     */
+    public function endTask(Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Find the active time entry and end it
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+
+        if (!$activeEntry) {
+            return response()->json(['message' => 'No active time tracking for this task'], 422);
+        }
+
+        $activeEntry->end();
+
+        // Update task status to completed and set completed_at
+        $task->update([
+            'state' => 'Done',
+            'completed_at' => now()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Task time tracking ended successfully',
+            'data' => $task->load(['timeEntries:id,task_id,user_id,start_time,end_time,is_active'])
+        ]);
+    }
+
+    /**
+     * Calculate time spent on a task.
+     */
+    public function calculateTimeSpent(Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Get total time from completed entries (working duration)
+        $totalTimeSpent = TaskTimeEntry::getTotalTimeForTask($task); // Returns seconds
+
+        // Get current active time entry duration (working duration)
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+        $timeSpent = 0;
+
+        if ($activeEntry) {
+            $timeSpent = $activeEntry->calculateDuration(); // Returns seconds (working duration)
+        }
+
+        $totalTimeSpent += $timeSpent;
+
+        $estimateHours = $task->estimate_hours ?? 0;
+        $estimateSeconds = $estimateHours * 3600;
+        $remainingTime = $estimateSeconds - $totalTimeSpent;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'time_spent' => $timeSpent, // Seconds (working duration)
+                'total_time_spent' => $totalTimeSpent, // Seconds (working duration)
+                'remaining_time' => $remainingTime, // Seconds (working duration)
+                'remaining_hours' => $remainingTime / 3600 // For backward compatibility
+            ]
+        ]);
+    }
+
+    /**
+     * Calculate remaining time for a task.
+     */
+    public function calculateRemainingTime(Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $remainingTime = $task->getTimeRemaining();
+        $daysRequired = $task->calculateDaysRequired();
+
+        // Get working hours configuration for response
+        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $config = $workingHoursService->getWorkingHoursConfig();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'remaining_time' => $remainingTime, // In hours
+                'days_required' => $daysRequired,
+                'working_hours_config' => $config
+            ]
+        ]);
+    }
+
+    /**
+     * Get working time spent on a task (working duration).
+     */
+    public function getWorkingTimeSpent(Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $totalWorkingTime = $task->getTimeRemaining();
+        $daysRequired = $task->calculateDaysRequired();
+
+        // Get working time spent from time entries
+        $totalTimeSpent = TaskTimeEntry::getTotalTimeForTask($task); // Returns seconds (working duration)
+
+        // Get current active time entry duration (working duration)
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+        if ($activeEntry) {
+            $totalTimeSpent += $activeEntry->calculateDuration();
+        }
+
+        $totalTimeSpentHours = $totalTimeSpent / 3600;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_working_time_spent' => $totalTimeSpent, // Seconds
+                'total_working_time_spent_hours' => $totalTimeSpentHours, // Hours
+                'remaining_working_time' => $totalWorkingTime, // Hours
+                'days_required' => $daysRequired
+            ]
+        ]);
+    }
+
+    /**
+     * Get time entries for a task on the current date.
+     */
+    public function getTaskTimeEntriesForDate(Task $task, $date = null)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Use current date if not provided
+        $date = $date ?? now()->toDateString();
+
+        // Get time entries for the task on the specified date
+        $timeEntries = TaskTimeEntry::where('task_id', $task->id)
+            ->where('user_id', $user->id)
+            ->whereDate('start_time', $date)
+            ->where('is_active', false)
+            ->get();
+
+        // Calculate total time spent for the date
+        $totalTimeSpent = 0;
+        foreach ($timeEntries as $entry) {
+            $totalTimeSpent += $entry->calculateDuration();
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'date' => $date,
+                'time_entries' => $timeEntries,
+                'total_time_spent' => $totalTimeSpent
+            ]
+        ]);
+    }
+
+    /**
+     * Get working hours configuration.
+     */
+    public function getWorkingHoursConfig()
+    {
+        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'working_hours' => $workingHoursService->getWorkingHoursConfig(),
+                'holidays' => $workingHoursService->getHolidaysConfig()
+            ]
+        ]);
+    }
+
+    /**
+     * Extend due date and start task.
+     */
+    public function extendDueDateAndStart(Request $request, Task $task)
+    {
+        $user = Auth::user();
+
+        // Check if user is assigned to this task via task_assignments
+        $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
+        if (!$isAssigned) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Validate the new due date
+        $validatedData = $request->validate([
+            'due_at' => 'required|date|after:now',
+        ]);
+
+        // Extend the due date
+        $task->update(['due_at' => $validatedData['due_at']]);
+
+        // Now start the task
+        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $now = now();
+
+        if (!$workingHoursService->isWorkingTime($now)) {
+            return response()->json([
+                'error' => 'Task actions are not available outside working hours',
+                'message' => 'Please resume your work during working hours'
+            ], 403);
+        }
+
+        // Check if user already has an active time entry for this task
+        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
+        if ($activeEntry) {
+            return response()->json(['message' => 'Task is already being tracked by this user'], 422);
+        }
+
+        // Pause other active tasks for this user before starting the new task
+        $this->pauseUserActiveTasks($user->id, $task->id);
+
+        // Create new time entry
+        $timeEntry = TaskTimeEntry::create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'start_time' => $now,
+            'end_time' => null,
+            'description' => null,
+            'is_active' => true,
+        ]);
+
+        $task->update(['state' => 'InProgress']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Due date extended and task started successfully',
+            'data' => $task->load(['timeEntries:id,task_id,user_id,start_time,end_time,is_active'])
+        ]);
+    }
+
+    /**
+     * Pause all active tasks for a user except the specified task.
+     *
+     * @param int $userId
+     * @param int $excludeTaskId
+     * @return void
+     */
+    protected function pauseUserActiveTasks(int $userId, int $excludeTaskId): void
+    {
+        $activeEntries = TaskTimeEntry::where('user_id', $userId)
+            ->where('is_active', true)
+            ->whereHas('task', function ($query) use ($excludeTaskId) {
+                $query->where('id', '!=', $excludeTaskId);
+            })
+            ->get();
+
+        foreach ($activeEntries as $entry) {
+            $entry->end();
+        }
+    }
+}

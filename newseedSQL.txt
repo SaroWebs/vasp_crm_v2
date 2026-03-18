@@ -1,0 +1,20 @@
+
+INSERT INTO `users` (`id`, `name`, `email`, `email_verified_at`, `password`, `two_factor_secret`, `two_factor_recovery_codes`, `two_factor_confirmed_at`, `phone`, `avatar`, `status`, `last_login_at`, `remember_token`, `created_at`, `updated_at`, `deleted_at`) VALUES
+(5, 'Sarowar Alam', 'sarowar@vasp.com', NULL, '$2y$12$uaZu61dpo8t648hAd6HuGOupsiKYfllWwMa/y47vZQ1O9bciq322i', NULL, NULL, NULL, NULL, NULL, 'active', NULL, NULL, '2026-01-09 00:41:33', '2026-01-09 00:41:33', NULL),
+(7, 'Ritupan Deka', 'ritupan@vasp.com', NULL, '$2y$12$PXX5zVRZOobI/ScyXgddt.LoCrEUCd34nGkJyfb021gFNFl45K/.u', NULL, NULL, NULL, NULL, NULL, 'active', NULL, NULL, '2026-01-09 18:18:21', '2026-01-09 18:18:21', NULL),
+(8, 'Md. Shad Alam', 'shad@vasp.com', NULL, '$2y$12$TvQw2MTcG1ugBHSl8tWzKu16K7YX2zCIbBuq3JHvU8uF.9.Q7Q11O', NULL, NULL, NULL, NULL, NULL, 'active', NULL, NULL, '2026-01-09 20:29:09', '2026-01-09 20:29:09', NULL),
+(9, 'Meraj Alam', 'meraj@vasp.com', NULL, '$2y$12$CLpg68m91OfxBUu.lIuuo.opE6TG8T4R/4q5RrYnwGFxEE/b9KmKW', NULL, NULL, NULL, NULL, NULL, 'active', NULL, '4KEl4nd2jOVyXOc0arOueo0JYzugNAHDG6ylLiVL74qcz21oD2xWo01H4inT', '2026-01-11 18:02:54', '2026-01-11 18:02:54', NULL),
+(10, 'Aditya Kumar', 'aditya@vasp.com', NULL, '$2y$12$K91j6mEpzcgn9K.uhy3VFe60Vb.JFDeh16E9LngtXEZO8es9KokUq', NULL, NULL, NULL, NULL, NULL, 'active', NULL, '04DDoyGrGKG9JLSP9Pw39yooZ5XKIiGJmNnBe21FJvKFCxCIzvk6Jg63OwBz', '2026-01-11 18:14:29', '2026-01-11 18:14:29', NULL),
+(11, 'Gautam Das', 'gautamdas@vasp.com', NULL, '$2y$12$lCSdXXm09G0FrtNDOfo5SupG7uZ6PxS6u1a.j3ZpOGSGQD9F2Fx76', NULL, NULL, NULL, NULL, NULL, 'active', NULL, 'i6nbQECU8cf1nCY7H1raiqsOqWL7HHQgTCQ07twiUyjpMckVtQAyHd18rxD9', '2026-01-11 18:27:36', '2026-01-19 04:05:20', NULL);
+
+
+
+
+
+INSERT INTO `employees` (`id`, `name`, `email`, `phone`, `user_id`, `department_id`, `designation`, `code`, `address`, `date_of_birth`, `status`, `created_at`, `updated_at`, `deleted_at`) VALUES
+(5, 'Sarowar Alam', 'sarowar@vasp.com', NULL, 5, 2, NULL, NULL, NULL, NULL, 'active', '2026-01-09 00:41:33', '2026-01-09 00:41:33', NULL),
+(7, 'Ritupan Deka', 'ritupan@vasp.com', NULL, 7, 2, NULL, NULL, NULL, NULL, 'active', '2026-01-09 18:18:21', '2026-01-09 18:18:21', NULL),
+(8, 'Md. Shad Alam', 'shad@vasp.com', NULL, 8, 2, NULL, NULL, NULL, NULL, 'active', '2026-01-09 20:29:09', '2026-01-09 20:29:09', NULL),
+(9, 'Meraj Alam', 'meraj@vasp.com', '9101200063', 9, 2, NULL, NULL, NULL, NULL, 'active', '2026-01-11 18:02:54', '2026-01-11 18:02:54', NULL),
+(10, 'Aditya Kumar', 'aditya@vasp.com', NULL, 10, 2, NULL, NULL, NULL, NULL, 'active', '2026-01-11 18:14:29', '2026-01-11 18:14:29', NULL),
+(11, 'Gautam Das', 'gautamdas@vasp.com', NULL, 11, 2, NULL, NULL, NULL, NULL, 'active', '2026-01-11 18:27:36', '2026-01-11 18:27:36', NULL);

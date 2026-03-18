@@ -1,0 +1,12 @@
+{
+  "workdays": [
+    { "day": "monday", "start": "09:00", "end": "19:00", "break_start": "", "break_end": "" },
+    { "day": "tuesday", "start": "09:00", "end": "19:00", "break_start": "", "break_end": "" },
+    { "day": "wednesday", "start": "09:00", "end": "19:00", "break_start": "", "break_end": "" },
+    { "day": "thursday", "start": "09:00", "end": "19:00", "break_start": "", "break_end": "" },
+    { "day": "friday", "start": "09:00", "end": "19:00", "break_start": "", "break_end": "" },
+    { "day": "saturday", "start": "09:00", "end": "14:30", "break_start": "", "break_end": "" },
+    { "day": "sunday", "start": "", "end": "", "break_start": "", "break_end": "" }
+  ],
+  "timezone": "Asia/Calcutta"
+}
