@@ -26,8 +26,9 @@ class ClientSsoTest extends TestCase
         ]);
 
         $payload = [
-            'email' => 'person@example.com',
-            'name' => 'Person One',
+            'ClientCode' => $client->code,
+            'UserEmail' => 'person@example.com',
+            'UserName' => 'Person One',
             'iat' => now()->timestamp,
             'exp' => now()->addMinutes(5)->timestamp,
             'jti' => (string) Str::uuid(),
@@ -67,7 +68,9 @@ class ClientSsoTest extends TestCase
         ]);
 
         $payload = [
-            'email' => 'person@example.com',
+            'ClientCode' => $client->code,
+            'UserEmail' => 'person@example.com',
+            'UserName' => 'Person One',
             'iat' => now()->subMinutes(10)->timestamp,
             'exp' => now()->subMinutes(5)->timestamp,
             'jti' => (string) Str::uuid(),
@@ -94,7 +97,9 @@ class ClientSsoTest extends TestCase
         ]);
 
         $payload = [
-            'email' => 'person@example.com',
+            'ClientCode' => $client->code,
+            'UserEmail' => 'person@example.com',
+            'UserName' => 'Person One',
             'iat' => now()->timestamp,
             'exp' => now()->addMinutes(5)->timestamp,
             'jti' => (string) Str::uuid(),
@@ -124,7 +129,9 @@ class ClientSsoTest extends TestCase
         ]);
 
         $payload = [
-            'email' => 'person@example.com',
+            'ClientCode' => $client->code,
+            'UserEmail' => 'person@example.com',
+            'UserName' => 'Person One',
             'iat' => now()->timestamp,
             'exp' => now()->addMinutes(5)->timestamp,
             'jti' => (string) Str::uuid(),
@@ -158,9 +165,10 @@ class ClientSsoTest extends TestCase
         ]);
 
         $payload = [
-            'email' => 'person@example.com',
-            'name' => 'New Name',
-            'phone' => '9999999999',
+            'ClientCode' => $client->code,
+            'UserEmail' => 'person@example.com',
+            'UserName' => 'New Name',
+            'UserPhone' => '9999999999',
             'iat' => now()->timestamp,
             'exp' => now()->addMinutes(5)->timestamp,
             'jti' => (string) Str::uuid(),

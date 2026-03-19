@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Events\TicketCommentCreated;
 use App\Models\Client;
 use App\Models\CommentAttachment;
 use App\Models\OrganizationUser;
 use App\Models\Ticket;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -45,6 +47,8 @@ class ClientPortalTicketCommentTest extends TestCase
             'status' => 'open',
         ]);
 
+        Event::fake([TicketCommentCreated::class]);
+
         $file = UploadedFile::fake()->image('a.png');
 
         $response = $this->actingAs($orgUser, 'organization')->post(
@@ -57,6 +61,8 @@ class ClientPortalTicketCommentTest extends TestCase
         );
 
         $response->assertStatus(201);
+
+        Event::assertDispatched(TicketCommentCreated::class);
 
         $commentId = (int) $response->json('data.id');
         $this->assertGreaterThan(0, $commentId);

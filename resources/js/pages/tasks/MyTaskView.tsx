@@ -2,6 +2,8 @@ import TaskComments from '@/components/tasks/task-comments';
 import TaskTimeTracker from '@/components/tasks/TaskTimeTracker';
 import { TaskMilestones } from '@/components/tasks/TaskMilestones';
 import TaskAssignmentModal from '@/components/TaskAssignmentModal';
+import { TaskFileAttachment } from '@/components/tasks/TaskFileAttachment';
+import { TaskMetrics } from '@/components/tasks/TaskMetrics';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,21 +21,37 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { Task, type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import {
     AlertCircle,
+    ArrowLeft,
     Calendar,
     CheckCircle,
     Clock,
+    Edit,
+    FileText,
     Pause,
     Play,
+    RotateCcw,
+    Target,
+    Trash,
     User,
     UserPlus,
     XCircle,
+    Clock3,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -123,6 +141,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
     const [timeEntries, setTimeEntries] = useState<any[]>([]);
     const [authUser, setAuthUser] = useState<{id: number; is_super_admin: boolean} | null>(null);
     const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         loadTaskData();
@@ -171,7 +190,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                     break;
             }
 
-            if (response.data.data) {
+            if (response?.data?.data) {
                 console.log(`${action} action applied.`);
                 console.log(response.data);
 
@@ -183,6 +202,62 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
             console.error('Error performing task action:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Handle delete task
+    const handleDeleteTask = () => {
+        if (confirm('Are you sure you want to delete this task?')) {
+            setIsDeleting(true);
+            axios
+                .delete(`/admin/tasks/${taskId}`)
+                .then(() => {
+                    router.visit('/my/tasks');
+                })
+                .catch((err) => {
+                    console.error('Error deleting task:', err);
+                    alert('Failed to delete task');
+                })
+                .finally(() => {
+                    setIsDeleting(false);
+                });
+        }
+    };
+
+    // Handle status change
+    const handleStatusChange = (newStatus: string) => {
+        axios
+            .patch(`/admin/tasks/${taskId}/status`, { state: newStatus })
+            .then(() => {
+                loadTaskData();
+            })
+            .catch((err) => {
+                console.error('Error changing status:', err);
+                alert('Failed to change task status');
+            });
+    };
+
+    // Get valid state transitions
+    const getValidStateTransitions = (currentState: string): string[] => {
+        switch (currentState) {
+            case 'Draft':
+                return ['Assigned', 'Blocked', 'Cancelled', 'Rejected'];
+            case 'Assigned':
+                return ['InProgress', 'Blocked', 'Cancelled', 'Rejected', 'Draft'];
+            case 'InProgress':
+                return ['InReview', 'Blocked', 'Cancelled', 'Rejected', 'Assigned'];
+            case 'InReview':
+                return ['Done', 'Blocked', 'Cancelled', 'Rejected', 'InProgress'];
+            case 'Done':
+                return ['InReview', 'Cancelled', 'Rejected'];
+            case 'Blocked':
+                return ['Assigned', 'InProgress', 'Cancelled', 'Rejected', 'Draft'];
+            case 'Cancelled':
+                return ['Draft', 'Assigned'];
+            case 'Rejected':
+                return ['Draft', 'Assigned'];
+            default:
+                return [];
         }
     };
 
@@ -202,6 +277,10 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
     // Determine if current user is the task creator (own task) or super admin
     const isOwnTask = taskData.created_by?.id === authUser?.id || taskData.createdBy?.id === authUser?.id;
     const isSuperAdmin = authUser?.is_super_admin ?? false;
+    
+    // Permission check: can edit/delete only own tasks or super admin
+    const canEdit = isOwnTask || isSuperAdmin;
+    const canDelete = isOwnTask || isSuperAdmin;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -209,143 +288,334 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
                 {/* Header */}
+                <Link href="/my/tasks">
+                    <Button variant="outline" size="sm">
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Back to My Tasks
+                    </Button>
+                </Link>
+                
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">
                             {taskData.title}
                         </h1>
                         <p className="text-muted-foreground">
-                            Task Code: {taskData.task_code} | Assigned to:{' '}
-                            {taskData.assigned_to?.name || 'You'}
+                            Task {taskData.task_code && `• ${taskData.task_code}`} • 
+                            Created {format(new Date(taskData.created_at), 'MMM dd, yyyy')}
                         </p>
                     </div>
-                    <div className="flex gap-2">
-                        <Link href="/my/tasks">
-                            <Button variant="outline">Back to My Tasks</Button>
-                        </Link>
+                    
+                    {/* State Change Dropdown */}
+                    <div className="flex items-center gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                    <Target className="mr-2 h-4 w-4" />
+                                    Change State
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>
+                                    Update State
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {getValidStateTransitions(taskData.state).map((newState) => (
+                                    <DropdownMenuItem
+                                        key={newState}
+                                        onClick={() => handleStatusChange(newState)}
+                                    >
+                                        {getStatusIcon(newState)}
+                                        <span className="ml-2 capitalize">
+                                            {newState === 'InProgress'
+                                                ? 'Mark as In Progress'
+                                                : newState === 'InReview'
+                                                    ? 'Mark as In Review'
+                                                    : `Mark as ${newState}`}
+                                        </span>
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* More Actions Dropdown */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="24"
+                                        height="24"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="h-4 w-4"
+                                    >
+                                        <circle cx="12" cy="12" r="1" />
+                                        <circle cx="12" cy="5" r="1" />
+                                        <circle cx="12" cy="19" r="1" />
+                                    </svg>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>
+                                    Task Actions
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {canEdit && (
+                                    <DropdownMenuItem asChild>
+                                        <Link href={`/admin/tasks/${taskId}/edit`}>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            Edit Task
+                                        </Link>
+                                    </DropdownMenuItem>
+                                )}
+                                {canDelete && (
+                                    <DropdownMenuItem
+                                        className="text-red-600"
+                                        onClick={handleDeleteTask}
+                                        disabled={isDeleting}
+                                    >
+                                        <Trash className="mr-2 h-4 w-4" />
+                                        {isDeleting ? 'Deleting...' : 'Delete Task'}
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    {/* Main Task Details */}
+                <div className="grid gap-6 lg:grid-cols-3">
+                    {/* Main Content - Task Details */}
                     <div className="space-y-6 lg:col-span-2">
-                        {/* Task Overview */}
+                        {/* Task Overview Card */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Task Overview</CardTitle>
-                                <CardDescription>
-                                    Basic information and current status
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-600">
-                                            Status
-                                        </label>
-                                        <div className="mt-1">
-                                            <Badge
-                                                className={getStatusColor(
-                                                    taskData.state,
-                                                )}
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    {getStatusIcon(
-                                                        taskData.state,
-                                                    )}
-                                                    <span className="capitalize">
-                                                        {taskData.state.replace(
-                                                            '-',
-                                                            ' ',
-                                                        )}
-                                                    </span>
-                                                </div>
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-600">
-                                            Priority
-                                        </label>
-                                        <div className="mt-1">
-                                            <Badge
-                                                className={getPriorityColor(
-                                                    taskData.sla_policy
-                                                        ?.priority || 'P4',
-                                                )}
-                                            >
-                                                <AlertCircle className="mr-1 h-3 w-3" />
+                                <CardTitle className="flex items-center justify-between">
+                                    <span>Task Overview</span>
+                                    <div className="flex items-center space-x-2">
+                                        <Badge
+                                            className={getStatusColor(taskData.state)}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                {getStatusIcon(taskData.state)}
                                                 <span className="capitalize">
-                                                    {taskData.sla_policy
-                                                        ?.priority || 'P4'}
+                                                    {taskData.state.replace('-', ' ')}
                                                 </span>
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-600">
-                                            Task Type
-                                        </label>
-                                        <p className="mt-1 text-sm">
-                                            {taskData.task_type?.name ||
-                                                'No Type'}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-600">
-                                            Assigned By
-                                        </label>
-                                        <p className="mt-1 text-sm">
-                                            {taskData.created_by?.name ||
-                                                'System'}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-600">
-                                            Due Date
-                                        </label>
-                                        <div className="mt-1 flex items-center gap-2">
-                                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                                            <span className="text-sm">
-                                                {taskData.due_at
-                                                    ? format(
-                                                          new Date(
-                                                              taskData.due_at,
-                                                          ),
-                                                          'MMM dd, yyyy',
-                                                      )
-                                                    : 'No due date'}
+                                            </div>
+                                        </Badge>
+                                        <Badge
+                                            className={getPriorityColor(
+                                                taskData.sla_policy?.priority || 'P4',
+                                            )}
+                                        >
+                                            <AlertCircle className="mr-1 h-3 w-3" />
+                                            <span className="capitalize">
+                                                {taskData.sla_policy?.priority || 'P4'}
                                             </span>
+                                        </Badge>
+                                    </div>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Basic Information */}
+                                <div>
+                                    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                                        <FileText className="h-4 w-4 text-muted-foreground" />
+                                        Basic Information
+                                    </h4>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <span>Task Code</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {taskData.task_code || (
+                                                    <span className="text-muted-foreground">
+                                                        Not assigned
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <span>Task Type</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {taskData.task_type?.name || 'No Type'}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-600">
-                                            Estimated Hours
-                                        </label>
-                                        <p className="mt-1 text-sm">
-                                            {taskData.estimate_hours ||
-                                                'Not estimated'}
-                                        </p>
+                                    
+                                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Calendar className="h-4 w-4" />
+                                                <span>Created Date</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {format(new Date(taskData.created_at), 'MMM dd, yyyy h:mm a')}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Calendar className="h-4 w-4" />
+                                                <span>Due Date</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {taskData.due_at ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span>
+                                                            {format(new Date(taskData.due_at), 'MMM dd, yyyy')}
+                                                        </span>
+                                                        {taskData.is_overdue && taskData.state !== 'Done' && (
+                                                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                                                Overdue
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground">No due date</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
+                                <Separator />
+
+                                {/* People & Assignment */}
                                 <div>
-                                    <label className="text-sm font-medium text-gray-600">
+                                    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                                        <User className="h-4 w-4 text-muted-foreground" />
+                                        People & Assignment
+                                    </h4>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <User className="h-4 w-4" />
+                                                <span>Created By</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {taskData.created_by?.name || 'Unknown'}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <User className="h-4 w-4" />
+                                                <span>Assigned To</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {taskData.assigned_users && taskData.assigned_users.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {taskData.assigned_users.map((user: any, index: number) => (
+                                                            <span key={user.id}>
+                                                                {user.name}
+                                                                {index < (taskData.assigned_users?.length || 0) - 1 ? ', ' : ''}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground">Unassigned</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {taskData.assigned_department && (
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <span>Department</span>
+                                                </div>
+                                                <div className="text-sm font-medium">
+                                                    {taskData.assigned_department.name}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Metrics */}
+                                <TaskMetrics taskId={taskData.id} />
+
+                                {/* Milestones */}
+                                <TaskMilestones
+                                    taskId={taskData.id}
+                                    taskStartAt={taskData.start_at}
+                                    taskDueAt={taskData.due_at}
+                                    initialMilestones={taskData.timeline_events?.filter((e: any) => e.is_milestone) || []}
+                                    isOwnTask={isOwnTask}
+                                    isSuperAdmin={isSuperAdmin}
+                                    taskState={taskData.state}
+                                />
+
+                                <Separator />
+
+                                {/* Task Audit Events */}
+                                {taskData.audit_events && taskData.audit_events.length > 0 && (
+                                    <>
+                                        <Separator />
+                                        <div>
+                                            <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                                                <Clock3 className="h-4 w-4 text-muted-foreground" />
+                                                Task Audit Events
+                                            </h4>
+                                            <div className="space-y-4 max-h-[300px] overflow-y-auto">
+                                                {taskData.audit_events.map((event: any) => (
+                                                    <div
+                                                        key={event.id}
+                                                        className="rounded-lg border p-4"
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center space-x-2">
+                                                                <div className="text-sm">
+                                                                    Task {event.action?.toLowerCase()} by{' '}
+                                                                    <span className="font-semibold italic">
+                                                                        {event.actor_user?.name || 'Unknown User'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-xs text-gray-500">
+                                                                {new Date(event.occurred_at).toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                        {event.reason && (
+                                                            <div className="mt-2 text-xs text-gray-600">
+                                                                Reason: {event.reason}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                <Separator />
+
+                                {/* Description */}
+                                <div>
+                                    <h4 className="mb-2 text-sm font-medium">
                                         Description
-                                    </label>
-                                    <p className="mt-1 text-sm text-gray-700">
-                                        {taskData.description ||
-                                            'No description provided.'}
-                                    </p>
+                                    </h4>
+                                    <div className="text-sm text-muted-foreground">
+                                        {taskData.description ? (
+                                            <div className="whitespace-pre-wrap">
+                                                {taskData.description}
+                                            </div>
+                                        ) : (
+                                            <span>No description provided</span>
+                                        )}
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
+
+                        {/* File Attachments */}
+                        <TaskFileAttachment task={taskData} />
 
                         {/* Time Tracking */}
                         <Card>
@@ -366,17 +636,6 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                             </CardContent>
                         </Card>
 
-                        {/* Milestones */}
-                        <TaskMilestones
-                            taskId={taskData.id}
-                            taskStartAt={taskData.start_at}
-                            taskDueAt={taskData.due_at}
-                            initialMilestones={taskData.timeline_events?.filter((e: any) => e.is_milestone) || []}
-                            isOwnTask={isOwnTask}
-                            isSuperAdmin={isSuperAdmin}
-                            taskState={taskData.state}
-                        />
-
                         {/* Time Entries History */}
                         <Card>
                             <CardHeader>
@@ -390,9 +649,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>
-                                                    Start Time
-                                                </TableHead>
+                                                <TableHead>Start Time</TableHead>
                                                 <TableHead>End Time</TableHead>
                                                 <TableHead>Duration</TableHead>
                                                 <TableHead>Status</TableHead>
@@ -403,18 +660,14 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                                 <TableRow key={entry.id}>
                                                     <TableCell>
                                                         {format(
-                                                            new Date(
-                                                                entry.start_time,
-                                                            ),
+                                                            new Date(entry.start_time),
                                                             'MMM dd, yyyy HH:mm',
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
                                                         {entry.end_time
                                                             ? format(
-                                                                  new Date(
-                                                                      entry.end_time,
-                                                                  ),
+                                                                  new Date(entry.end_time),
                                                                   'MMM dd, yyyy HH:mm',
                                                               )
                                                             : 'Active'}
@@ -448,19 +701,42 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                 )}
                             </CardContent>
                         </Card>
+
+                        {/* Task Comments */}
+                        <TaskComments taskId={taskId} />
                     </div>
 
-                    {/* Sidebar */}
+                    {/* Sidebar - Quick Actions & Task Info */}
                     <div className="space-y-6">
-                        {/* Task Actions */}
+                        {/* Quick Actions */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Task Actions</CardTitle>
-                                <CardDescription>
-                                    Manage your task status and time tracking
-                                </CardDescription>
+                                <CardTitle>Quick Actions</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-3">
+                            <CardContent className="space-y-2">
+                                {canEdit && (
+                                    <Button
+                                        asChild
+                                        className="w-full"
+                                    >
+                                        <Link href={`/admin/tasks/${taskId}/edit`}>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            Edit Task
+                                        </Link>
+                                    </Button>
+                                )}
+                                
+                                {canEdit && (
+                                    <Button 
+                                        variant="outline" 
+                                        className="w-full"
+                                        onClick={() => setIsAssignmentModalOpen(true)}
+                                    >
+                                        <UserPlus className="mr-2 h-4 w-4" />
+                                        Manage Assignments
+                                    </Button>
+                                )}
+
                                 <Button
                                     className="w-full"
                                     onClick={() => handleTaskAction('start')}
@@ -507,20 +783,92 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                     <CheckCircle className="mr-2 h-4 w-4" />
                                     Complete Task
                                 </Button>
-                                {(isOwnTask || isSuperAdmin) && (
-                                    <Button
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={() => setIsAssignmentModalOpen(true)}
-                                    >
-                                        <UserPlus className="mr-2 h-4 w-4" />
-                                        Manage Assignments
-                                    </Button>
+
+                                {canDelete && (
+                                    <>
+                                        <Separator />
+                                        <Button
+                                            variant="destructive"
+                                            className="w-full"
+                                            onClick={handleDeleteTask}
+                                            disabled={isDeleting}
+                                        >
+                                            <Trash className="mr-2 h-4 w-4" />
+                                            {isDeleting ? 'Deleting...' : 'Delete Task'}
+                                        </Button>
+                                    </>
                                 )}
                             </CardContent>
                         </Card>
 
-                        <TaskComments taskId={taskId} />
+                        {/* Task Information Card */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Task Information</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Task ID
+                                    </span>
+                                    <span className="text-sm font-medium">
+                                        #{taskData.id}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Status
+                                    </span>
+                                    <Badge
+                                        className={getStatusColor(taskData.state)}
+                                    >
+                                        {taskData.state.replace('-', ' ')}
+                                    </Badge>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Priority
+                                    </span>
+                                    <Badge
+                                        className={getPriorityColor(
+                                            taskData.sla_policy?.priority || 'P4',
+                                        )}
+                                    >
+                                        {taskData.sla_policy?.priority || 'P4'}
+                                    </Badge>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Created
+                                    </span>
+                                    <span className="text-sm">
+                                        {format(
+                                            new Date(taskData.created_at),
+                                            'MMM dd, yyyy',
+                                        )}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Updated
+                                    </span>
+                                    <span className="text-sm">
+                                        {format(
+                                            new Date(taskData.updated_at),
+                                            'MMM dd, yyyy',
+                                        )}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Estimated Hours
+                                    </span>
+                                    <span className="text-sm">
+                                        {taskData.estimate_hours || 'N/A'}
+                                    </span>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
 

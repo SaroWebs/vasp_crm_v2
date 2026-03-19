@@ -11,9 +11,7 @@ class WorkloadMatrixService
 {
     private const TERMINAL_TASK_STATES = ['Done', 'Cancelled', 'Rejected'];
 
-    public function __construct(private readonly WorkingHoursService $workingHoursService)
-    {
-    }
+    public function __construct(private readonly WorkingHoursService $workingHoursService) {}
 
     public function build(array $filters = []): array
     {
@@ -28,11 +26,11 @@ class WorkloadMatrixService
                 $query->where('status', 'active');
             });
 
-        if (!empty($departmentId)) {
+        if (! empty($departmentId)) {
             $employeesQuery->where('department_id', $departmentId);
         }
 
-        if (!empty($userId)) {
+        if (! empty($userId)) {
             $employeesQuery->where('user_id', $userId);
         }
 
@@ -62,13 +60,25 @@ class WorkloadMatrixService
         $userIds = $employees->pluck('user_id')->map(fn ($id) => (int) $id)->all();
         $now = now();
 
+        $taskDateRange = [
+            $periodStart->copy()->startOfDay(),
+            $periodEnd->copy()->endOfDay(),
+        ];
+
         $assignments = TaskAssignment::query()
             ->whereIn('user_id', $userIds)
             ->where('is_active', true)
-            ->whereHas('task', function ($query) {
-                $query->whereNull('deleted_at');
+            ->whereHas('task', function ($query) use ($taskDateRange) {
+                $query->whereNull('deleted_at')
+                    ->where(function ($query) use ($taskDateRange) {
+                        $query->whereBetween('due_at', $taskDateRange)
+                            ->orWhere(function ($query) use ($taskDateRange) {
+                                $query->whereNull('due_at')
+                                    ->whereBetween('created_at', $taskDateRange);
+                            });
+                    });
             })
-            ->with(['task:id,state,due_at,estimate_hours'])
+            ->with(['task:id,state,due_at,estimate_hours,created_at'])
             ->get();
 
         $taskIds = $assignments->pluck('task_id')->unique()->values();
@@ -88,7 +98,7 @@ class WorkloadMatrixService
         $assignmentStatsByUser = [];
         foreach ($assignments as $assignment) {
             $task = $assignment->task;
-            if (!$task) {
+            if (! $task) {
                 continue;
             }
 
@@ -101,7 +111,7 @@ class WorkloadMatrixService
             $stats['task_ids'][$taskId] = true;
             $stats['assignment_state_counts'][$assignmentState] = ($stats['assignment_state_counts'][$assignmentState] ?? 0) + 1;
 
-            if (!in_array($taskState, self::TERMINAL_TASK_STATES, true)) {
+            if (! in_array($taskState, self::TERMINAL_TASK_STATES, true)) {
                 $stats['active_task_ids'][$taskId] = true;
 
                 if ($taskState === 'InProgress' || $assignmentState === 'in_progress') {
@@ -110,7 +120,7 @@ class WorkloadMatrixService
                     $stats['pending_task_ids'][$taskId] = true;
                 }
 
-                if (!empty($task->due_at) && Carbon::parse($task->due_at)->lt($now)) {
+                if (! empty($task->due_at) && Carbon::parse($task->due_at)->lt($now)) {
                     $stats['overdue_task_ids'][$taskId] = true;
                 }
 
@@ -119,6 +129,14 @@ class WorkloadMatrixService
                 $stats['open_estimated_hours'] += $assignment->estimated_time !== null
                     ? (float) $assignment->estimated_time
                     : $this->splitTaskEstimateAcrossAssignees($taskEstimateHours, $assigneeCount);
+            }
+
+            if ($taskState === 'Done') {
+                $stats['completed_task_ids'][$taskId] = true;
+            }
+
+            if (in_array($taskState, ['Cancelled', 'Rejected'], true)) {
+                $stats['other_task_ids'][$taskId] = true;
             }
 
             $assignmentStatsByUser[$uid] = $stats;
@@ -184,6 +202,8 @@ class WorkloadMatrixService
                 'in_progress_task_count' => count($stats['in_progress_task_ids']),
                 'pending_task_count' => count($stats['pending_task_ids']),
                 'overdue_task_count' => count($stats['overdue_task_ids']),
+                'completed_task_count' => count($stats['completed_task_ids']),
+                'other_task_count' => count($stats['other_task_ids']),
                 'assignment_state_counts' => [
                     'pending' => (int) ($stats['assignment_state_counts']['pending'] ?? 0),
                     'accepted' => (int) ($stats['assignment_state_counts']['accepted'] ?? 0),
@@ -234,28 +254,28 @@ class WorkloadMatrixService
         $totalPending = 0;
         $totalInProgress = 0;
         $totalCompleted = 0;
-        $totalCancelled = 0;
+        $totalOther = 0;
 
         foreach ($rows as $row) {
             $stateCounts = $row['assignment_state_counts'] ?? [];
-            
+
             // Pending: pending + accepted assignments (Draft, Assigned, Blocked tasks that are not terminal)
             $totalPending += ($stateCounts['pending'] ?? 0) + ($stateCounts['accepted'] ?? 0);
-            
+
             // In Progress: in_progress assignments (InProgress, InReview)
             $totalInProgress += ($stateCounts['in_progress'] ?? 0);
-            
-            // Completed: completed assignments (Done)
-            $totalCompleted += ($stateCounts['completed'] ?? 0);
-            
-            // Cancelled: rejected assignments (Cancelled, Rejected)
-            $totalCancelled += ($stateCounts['rejected'] ?? 0);
+
+            // Completed: task state Done
+            $totalCompleted += (int) ($row['completed_task_count'] ?? 0);
+
+            // Other: task state Cancelled + Rejected
+            $totalOther += (int) ($row['other_task_count'] ?? 0);
         }
 
         // Add non-terminal pending/in-progress tasks from the row counts
         $activePending = (int) $rows->sum('pending_task_count');
         $activeInProgress = (int) $rows->sum('in_progress_task_count');
-        
+
         // Use the larger value between calculated and row-based counts
         $pending = max($totalPending, $activePending);
         $inProgress = max($totalInProgress, $activeInProgress);
@@ -267,6 +287,7 @@ class WorkloadMatrixService
                 'fullName' => $row['name'],
                 'pending' => $row['pending_task_count'],
                 'inProgress' => $row['in_progress_task_count'],
+                'completed' => $row['completed_task_count'],
                 'estimatedHours' => $row['open_estimated_hours'],
                 'loggedHours' => $row['logged_hours'],
                 'capacityHours' => $row['capacity_hours'],
@@ -277,12 +298,12 @@ class WorkloadMatrixService
         // 1. Draft, Assigned, Blocked -> Pending
         // 2. InProgress, InReview -> InProgress
         // 3. Done -> Completed
-        // 4. Cancelled, Rejected -> Cancelled
+        // 4. Cancelled, Rejected -> Other
         $taskStatusDistribution = [
             ['name' => 'Pending', 'value' => $pending, 'color' => '#f59e0b'],
             ['name' => 'In Progress', 'value' => $inProgress, 'color' => '#3b82f6'],
             ['name' => 'Completed', 'value' => $totalCompleted, 'color' => '#10b981'],
-            ['name' => 'Cancelled', 'value' => $totalCancelled, 'color' => '#6b7280'],
+            ['name' => 'Other', 'value' => $totalOther, 'color' => '#6b7280'],
         ];
 
         // Utilization gauge data
@@ -301,8 +322,8 @@ class WorkloadMatrixService
                 'totalTasks' => (int) $deptRows->sum('active_task_count'),
                 'totalEstimatedHours' => round((float) $deptRows->sum('open_estimated_hours'), 2),
                 'totalLoggedHours' => round((float) $deptRows->sum('logged_hours'), 2),
-                'avgUtilization' => $deptRows->count() > 0 
-                    ? round((float) $deptRows->avg('planned_utilization_percent'), 1) 
+                'avgUtilization' => $deptRows->count() > 0
+                    ? round((float) $deptRows->avg('planned_utilization_percent'), 1)
                     : 0,
             ];
         }
@@ -320,14 +341,14 @@ class WorkloadMatrixService
             'workloadTrend' => $workloadTrend,
         ];
     }
-    
+
     private function resolveDateRange(array $filters): array
     {
         $period = $filters['period'] ?? 'weekly';
         $fromDate = $filters['from_date'] ?? null;
         $toDate = $filters['to_date'] ?? null;
 
-        if (!empty($fromDate) && !empty($toDate)) {
+        if (! empty($fromDate) && ! empty($toDate)) {
             $start = Carbon::parse($fromDate)->startOfDay();
             $end = Carbon::parse($toDate)->endOfDay();
         } else {
@@ -382,6 +403,8 @@ class WorkloadMatrixService
             'in_progress_task_ids' => [],
             'pending_task_ids' => [],
             'overdue_task_ids' => [],
+            'completed_task_ids' => [],
+            'other_task_ids' => [],
             'assignment_state_counts' => [],
             'open_estimated_hours' => 0.0,
         ];

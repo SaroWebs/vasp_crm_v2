@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -16,14 +15,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -86,6 +77,7 @@ interface ChartData {
         fullName: string;
         pending: number;
         inProgress: number;
+        completed: number;
         estimatedHours: number;
         loggedHours: number;
         capacityHours: number;
@@ -269,16 +261,6 @@ export default function WorkloadMatrixIndex({
     const exportCsv = () => {
         const params = new URLSearchParams(buildQuery());
         window.location.href = `/admin/api/workload-matrix/export?${params.toString()}`;
-    };
-
-    const getUtilizationBadge = (status: MatrixRow['availability_status']) => {
-        if (status === 'overloaded') {
-            return <Badge variant="destructive">Overloaded</Badge>;
-        }
-        if (status === 'balanced') {
-            return <Badge variant="default">Balanced</Badge>;
-        }
-        return <Badge variant="secondary">Available</Badge>;
     };
 
     return (
@@ -503,11 +485,11 @@ export default function WorkloadMatrixIndex({
                                     Workload Overview
                                 </CardTitle>
                                 <CardDescription>
-                                    Pending, In Progress, Completed, and Cancelled tasks distribution
+                                    Pending, In Progress, Completed, and Other tasks distribution
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
+                                <ResponsiveContainer width="100%" height={500}>
                                     <BarChart
                                         data={matrix.charts.workloadByEmployee.slice(
                                             0,
@@ -549,6 +531,9 @@ export default function WorkloadMatrixIndex({
                                                 position="center"
                                                 fill="#fff"
                                                 fontSize={11}
+                                                formatter={(value) =>
+                                                    value === 0 ? '' : value
+                                                }
                                             />
                                         </Bar>
                                         <Bar
@@ -563,6 +548,25 @@ export default function WorkloadMatrixIndex({
                                                 position="center"
                                                 fill="#fff"
                                                 fontSize={11}
+                                                formatter={(value) =>
+                                                    value === 0 ? '' : value
+                                                }
+                                            />
+                                        </Bar>
+                                        <Bar
+                                            dataKey="completed"
+                                            name="Completed"
+                                            fill="#10b981"
+                                            radius={[0, 4, 4, 0]}
+                                        >
+                                            <LabelList
+                                                dataKey="completed"
+                                                position="center"
+                                                fill="#fff"
+                                                fontSize={11}
+                                                formatter={(value) =>
+                                                    value === 0 ? '' : value
+                                                }
                                             />
                                         </Bar>
                                     </BarChart>
@@ -578,7 +582,7 @@ export default function WorkloadMatrixIndex({
                                     Task Status Distribution
                                 </CardTitle>
                                 <CardDescription>
-                                    Pending, In Progress, Completed, and Cancelled tasks
+                                    Pending, In Progress, Completed, and Other tasks
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -782,4 +786,3 @@ export default function WorkloadMatrixIndex({
         </AppLayout>
     );
 }
-

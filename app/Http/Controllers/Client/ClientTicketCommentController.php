@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Client;
 
+use App\Events\TicketCommentCreated;
+use App\Events\TicketCommentDeleted;
+use App\Events\TicketCommentUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreClientTicketCommentRequest;
 use App\Http\Requests\UpdateClientTicketCommentRequest;
@@ -86,30 +89,34 @@ class ClientTicketCommentController extends Controller
 
         $comment->load(['organizationUser:id,name,email', 'attachments']);
 
+        $commentData = [
+            'id' => $comment->id,
+            'ticket_id' => $comment->ticket_id,
+            'comment_text' => $comment->comment_text,
+            'commented_by_type' => $comment->commented_by_type,
+            'commented_by' => $comment->commented_by,
+            'is_internal' => false,
+            'created_at' => $comment->created_at,
+            'updated_at' => $comment->updated_at,
+            'commenter' => $comment->organizationUser,
+            'attachments' => $comment->attachments->map(function (CommentAttachment $attachment): array {
+                return [
+                    'id' => $attachment->id,
+                    'file_url' => $attachment->file_url,
+                    'file_type' => $attachment->file_type,
+                    'original_filename' => $attachment->original_filename,
+                    'file_size' => $attachment->file_size,
+                    'is_image' => $attachment->isImage(),
+                    'created_at' => $attachment->created_at,
+                ];
+            }),
+        ];
+
+        broadcast(new TicketCommentCreated($commentData))->toOthers();
+
         return response()->json([
             'success' => true,
-            'data' => [
-                'id' => $comment->id,
-                'ticket_id' => $comment->ticket_id,
-                'comment_text' => $comment->comment_text,
-                'commented_by_type' => $comment->commented_by_type,
-                'commented_by' => $comment->commented_by,
-                'is_internal' => false,
-                'created_at' => $comment->created_at,
-                'updated_at' => $comment->updated_at,
-                'commenter' => $comment->organizationUser,
-                'attachments' => $comment->attachments->map(function (CommentAttachment $attachment): array {
-                    return [
-                        'id' => $attachment->id,
-                        'file_url' => $attachment->file_url,
-                        'file_type' => $attachment->file_type,
-                        'original_filename' => $attachment->original_filename,
-                        'file_size' => $attachment->file_size,
-                        'is_image' => $attachment->isImage(),
-                        'created_at' => $attachment->created_at,
-                    ];
-                }),
-            ],
+            'data' => $commentData,
         ], 201);
     }
 
@@ -124,30 +131,34 @@ class ClientTicketCommentController extends Controller
 
         $comment->load(['organizationUser:id,name,email', 'attachments']);
 
+        $commentData = [
+            'id' => $comment->id,
+            'ticket_id' => $comment->ticket_id,
+            'comment_text' => $comment->comment_text,
+            'commented_by_type' => $comment->commented_by_type,
+            'commented_by' => $comment->commented_by,
+            'is_internal' => false,
+            'created_at' => $comment->created_at,
+            'updated_at' => $comment->updated_at,
+            'commenter' => $comment->organizationUser,
+            'attachments' => $comment->attachments->map(function (CommentAttachment $attachment): array {
+                return [
+                    'id' => $attachment->id,
+                    'file_url' => $attachment->file_url,
+                    'file_type' => $attachment->file_type,
+                    'original_filename' => $attachment->original_filename,
+                    'file_size' => $attachment->file_size,
+                    'is_image' => $attachment->isImage(),
+                    'created_at' => $attachment->created_at,
+                ];
+            }),
+        ];
+
+        broadcast(new TicketCommentUpdated($commentData))->toOthers();
+
         return response()->json([
             'success' => true,
-            'data' => [
-                'id' => $comment->id,
-                'ticket_id' => $comment->ticket_id,
-                'comment_text' => $comment->comment_text,
-                'commented_by_type' => $comment->commented_by_type,
-                'commented_by' => $comment->commented_by,
-                'is_internal' => false,
-                'created_at' => $comment->created_at,
-                'updated_at' => $comment->updated_at,
-                'commenter' => $comment->organizationUser,
-                'attachments' => $comment->attachments->map(function (CommentAttachment $attachment): array {
-                    return [
-                        'id' => $attachment->id,
-                        'file_url' => $attachment->file_url,
-                        'file_type' => $attachment->file_type,
-                        'original_filename' => $attachment->original_filename,
-                        'file_size' => $attachment->file_size,
-                        'is_image' => $attachment->isImage(),
-                        'created_at' => $attachment->created_at,
-                    ];
-                }),
-            ],
+            'data' => $commentData,
         ]);
     }
 
@@ -157,6 +168,8 @@ class ClientTicketCommentController extends Controller
         $this->ensureCanMutateComment($ticket, $comment);
 
         $comment->delete();
+
+        broadcast(new TicketCommentDeleted($ticket->id, $comment->id))->toOthers();
 
         return response()->json([
             'success' => true,

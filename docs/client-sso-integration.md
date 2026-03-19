@@ -1,14 +1,17 @@
 # Client SSO Authentication Integration Guide
-**Example URL:**
+
+This application uses a custom AES-256-GCM encrypted token (not a standard JWT) for SSO.
+
+**SSO URL Format:**
 ```
 https://domain.com/s/{CLIENT_CODE}?token={SSO_TOKEN}
 
-example: https://domain.com/s/2325?token=v1.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Example: https://domain.com/s/2325?token=v1.7Q8...g4vA
 ```
 
-### Token Generation
+## Token Payload (JSON)
 
-Third-party applications must generate an encrypted token with the following payload:
+The client app must encrypt this JSON payload into a token:
 
 ```json
 {
@@ -30,32 +33,41 @@ Third-party applications must generate an encrypted token with the following pay
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `ClientCode` | string | Yes | Unique client identifier (must match the `client_code` query parameter) |
+| `ClientCode` | string | Yes | Must match the `{CLIENT_CODE}` path param |
 | `ClientName` | string | No | Client organization name (used for updates) |
 | `ClientEmail` | string | No | Client email (used for updates) |
 | `ClientPhone` | string | No | Client phone number (used for updates) |
-| `UserLogin` | string | No | Username for login |
+| `UserLogin` | string | No | Accepted but not used for authentication |
 | `UserName` | string | Yes | User's full name |
 | `UserPhone` | string | No | User's phone number |
 | `UserEmail` | string | Yes | User's email address (used for user lookup/creation) |
-| `iat` | integer | Yes | Issued at timestamp - Unix epoch |
-| `exp` | integer | Yes | Expiration timestamp - Unix epoch, recommended: 5 minutes from iat |
-| `jti` | string | Yes | Unique token identifier - UUID v4 |
+| `iat` | integer | Yes | Issued-at timestamp (Unix epoch seconds) |
+| `exp` | integer | Yes | Expiration timestamp (Unix epoch seconds) |
+| `jti` | string | Yes | Unique token ID (UUID v4 recommended) |
 
-### Token Encryption
+**Validation Rules & Behavior:**
 
-The token must be encrypted using **AES-256-GCM** with the client's SSO secret key.
+- `ClientCode` must exactly match the `{CLIENT_CODE}` in the URL.
+- `iat` cannot be more than 60 seconds in the future.
+- `exp` cannot be more than 60 seconds in the past.
+- `jti` is single-use per client. Reuse is rejected.
+- Users are matched by `UserEmail` (case-insensitive); if missing, login fails.
+- If the user is inactive, the login is blocked.
+
+## Token Encryption
+
+The payload must be encrypted using **AES-256-GCM** with the client's SSO secret key.
 
 **Token Format:** `v1.{iv}.{ciphertext}.{tag}`
 
 Where:
 
 - `v1` - Version identifier
-- `iv` - 12-byte initialization vector (base64url encoded)
-- `ciphertext` - Encrypted payload (base64url encoded)
-- `tag` - Authentication tag (base64url encoded)
+- `iv` - 12-byte initialization vector (base64url encoded, no padding)
+- `ciphertext` - Encrypted payload (base64url encoded, no padding)
+- `tag` - Authentication tag (base64url encoded, no padding)
 
-### Client Configuration
+## Client Configuration
 
 Each client must be configured with:
 
@@ -64,41 +76,37 @@ Each client must be configured with:
 
 Contact your administrator to obtain the client code and SSO secret.
 
----
+## Typical Flow
 
----
-[Frontend Button]
-        ↓
-[Call Backend API]
-        ↓
-[Backend generates token]
-        ↓
-[Backend returns SSO URL]
-        ↓
-[Frontend opens URL]
+1. Client app builds the payload.
+2. Client app encrypts the payload to create `{SSO_TOKEN}`.
+3. Client app redirects the user to `https://domain.com/s/{CLIENT_CODE}?token={SSO_TOKEN}`.
 
 ## Integration Checklist
 
 - [ ] Obtain client code from administrator
 - [ ] Obtain SSO secret key from administrator
 - [ ] Implement token encryption (AES-256-GCM)
-- [ ] Generate unique JTI for each login attempt
-- [ ] Set appropriate token expiration (recommended: 5 minutes)
-- [ ] Handle redirect to SSO endpoint
-
----
+- [ ] Generate a unique `jti` for each login attempt
+- [ ] Set `exp` to a short window (recommended: 5 minutes)
+- [ ] Redirect to the SSO endpoint URL
 
 ## Error Handling
 
 The SSO endpoint returns the following HTTP status codes:
 
-| Status Code | Description                              |
-| ----------- | ---------------------------------------- |
-| 403         | SSO is disabled or secret not configured |
-| 422         | Invalid or expired token                 |
-| 404         | Client not found                         |
-
-
+| Status Code | Description |
+| ----------- | ----------- |
+| 403 | SSO is disabled or secret not configured |
+| 403 | This link has already been used |
+| 403 | This user is inactive |
+| 404 | Client not found |
+| 422 | Missing token |
+| 422 | Invalid token format or base64url |
+| 422 | Invalid token payload |
+| 422 | Client code mismatch |
+| 422 | Token not valid yet |
+| 422 | Token has expired |
 
 **PHP Example:**
 
@@ -255,10 +263,10 @@ def base64url_encode(data):
 def generate_sso_token(payload, sso_secret):
     key = base64.b64decode(sso_secret)
     iv = os.urandom(12)
-    
+
     cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
     ciphertext, tag = cipher.encrypt_and_digest(json.dumps(payload).encode('utf-8'))
-    
+
     return f"v1.{base64url_encode(iv)}.{base64url_encode(ciphertext)}.{base64url_encode(tag)}"
 
 # Usage - New Payload Format

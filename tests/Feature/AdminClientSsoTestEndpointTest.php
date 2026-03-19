@@ -24,7 +24,7 @@ class AdminClientSsoTestEndpointTest extends TestCase
         ]);
 
         $response = $this->actingAs($admin, 'web')->get(
-            "/admin/clients/{$client->code}/sso/test?email=person@example.com"
+            "/clients/{$client->code}/sso/test?email=person@example.com"
         );
 
         $response->assertRedirect();

@@ -20,11 +20,11 @@ class AdminClientSsoTestController extends Controller
             ->where('code', $clientCode)
             ->first();
 
-        if (!$client && ctype_digit($clientCode)) {
+        if (! $client && ctype_digit($clientCode)) {
             $client = Client::find((int) $clientCode);
         }
 
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found.');
         }
 
@@ -39,18 +39,23 @@ class AdminClientSsoTestController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'string', 'email', 'max:255'],
             'name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'designation' => ['sometimes', 'nullable', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
 
+        $userName = $validated['name'] ?? $validated['email'];
+
         $payload = [
-            'email' => $validated['email'],
+            'ClientCode' => $client->code,
+            'ClientName' => $client->name,
+            'ClientEmail' => $client->email,
+            'ClientPhone' => $client->phone,
+            'UserLogin' => $validated['email'],
+            'UserName' => $userName,
+            'UserEmail' => $validated['email'],
+            'UserPhone' => $validated['phone'] ?? null,
             'iat' => now()->timestamp,
             'exp' => now()->addMinutes(5)->timestamp,
             'jti' => (string) Str::uuid(),
-            'name' => $validated['name'] ?? null,
-            'designation' => $validated['designation'] ?? null,
-            'phone' => $validated['phone'] ?? null,
         ];
 
         $payload = array_filter($payload, fn ($value): bool => $value !== null && $value !== '');

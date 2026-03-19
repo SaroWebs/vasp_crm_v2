@@ -145,6 +145,7 @@ class TaskController extends Controller
 
         $task->load([
             'createdBy:id,name',
+            'assignedUsers:id,name',
             'assignedDepartment:id,name',
             'taskType:id,name,code',
             'slaPolicy:id,name,priority',
@@ -160,7 +161,8 @@ class TaskController extends Controller
             'forwardings.toUser:id,name',
             'forwardings.toDepartment:id,name',
             'history:id,old_status,new_status,changed_by,created_at',
-            'auditEvents:id,task_id,action,actor_user_id,occurred_at',
+            'auditEvents:id,task_id,action,actor_user_id,occurred_at,reason',
+            'auditEvents.actorUser:id,name',
             'workloadMetrics',
             'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
             'timelineEvents',
@@ -256,6 +258,14 @@ class TaskController extends Controller
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
+        // Check if user is the task creator or super admin
+        $isSuperAdmin = $user->roles->contains('slug', 'super-admin');
+        $isTaskOwner = $task->created_by === Auth::id() || $task->createdBy?->id === Auth::id();
+
+        if (! $isTaskOwner && ! $isSuperAdmin) {
+            return response()->json(['message' => 'You can only edit your own tasks'], 403);
+        }
+
         $validatedData = $request->validate([
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
@@ -334,6 +344,14 @@ class TaskController extends Controller
 
         if (! $user->hasPermission('task.delete')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
+        }
+
+        // Check if user is the task creator or super admin
+        $isSuperAdmin = $user->roles->contains('slug', 'super-admin');
+        $isTaskOwner = $task->created_by === Auth::id() || $task->createdBy?->id === Auth::id();
+
+        if (! $isTaskOwner && ! $isSuperAdmin) {
+            return response()->json(['message' => 'You can only delete your own tasks'], 403);
         }
 
         // Check if task has child tasks
@@ -534,6 +552,15 @@ class TaskController extends Controller
 
         if (! $user->hasPermission('task.update')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
+        }
+
+        // Check if user is the task creator or super admin or assigned user
+        $isSuperAdmin = $user->roles->contains('slug', 'super-admin');
+        $isTaskOwner = $task->created_by === Auth::id() || $task->createdBy?->id === Auth::id();
+        $isAssignedUser = $task->assignedUsers()->where('user_id', Auth::id())->exists();
+
+        if (! $isTaskOwner && ! $isSuperAdmin && ! $isAssignedUser) {
+            return response()->json(['message' => 'You can only update your own tasks or tasks assigned to you'], 403);
         }
 
         $validatedData = $request->validate([

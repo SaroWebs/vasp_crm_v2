@@ -59,7 +59,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function TasksCreate({ tickets, parentTasks, taskTypes, slaPolicies, projects, departments, managers }: TasksCreateProps) {
-    let today = new Date().toLocaleString("sv-SE", {
+    const today = new Date().toLocaleString("sv-SE", {
         timeZone: "Asia/Kolkata",
         hour12: false
     }).slice(0, 16);
