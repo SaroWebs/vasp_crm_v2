@@ -1,57 +1,48 @@
 # Client SSO Authentication Integration Guide
-
-## Overview
-
-This document provides integration instructions for third-party applications to authenticate users via the VASP CRM Single Sign-On (SSO) system.
-
----
-
-## SSO Authentication Flow
-
-### 1. SSO Endpoint
-
-**URL:** `GET /s/{code}`
-
-The SSO endpoint consumes authentication tokens and logs users into the client portal.
-
-| Parameter | Type   | Required | Description                                   |
-| --------- | ------ | -------- | --------------------------------------------- |
-| `code`    | string | Yes      | Client code (e.g., `CODE1234`)                |
-| `token`   | string | Yes      | Encrypted JWT-like token containing user data |
-
 **Example URL:**
-
 ```
-https://domain.com/s/CODE1234?token=v1.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+https://domain.com/s/{CLIENT_CODE}?token={SSO_TOKEN}
+
+example: https://domain.com/s/2325?token=v1.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-### 2. Token Generation
+### Token Generation
 
 Third-party applications must generate an encrypted token with the following payload:
 
 ```json
 {
-    "email": "user@example.com",
+    "ClientCode": "2325",
+    "ClientName": "ABC Comp",
+    "ClientEmail": "abc@gmail.com",
+    "ClientPhone": "999999999",
+    "UserLogin": "usernameforlogin",
+    "UserName": "John Doe",
+    "UserPhone": "9556669999",
+    "UserEmail": "johndoe@abc.com",
     "iat": 1699876543,
     "exp": 1699876843,
-    "jti": "uuid-v4-string",
-    "name": "John Doe",
-    "designation": "operator",
-    "phone": "+1234567890"
+    "jti": "uuid-v4-string"
 }
 ```
 
-| Field         | Type    | Required | Description                       |
-| ------------- | ------- | -------- | --------------------------------- |
-| `email`       | string  | Yes      | User's email address              |
-| `iat`         | integer | Yes      | Issued at timestamp (Unix epoch)  |
-| `exp`         | integer | Yes      | Expiration timestamp (Unix epoch) |
-| `jti`         | string  | Yes      | Unique token identifier (UUID v4) |
-| `name`        | string  | No       | User's full name                  |
-| `designation` | string  | No       | User's job title                  |
-| `phone`       | string  | No       | User's phone number               |
+**Payload Fields:**
 
-### 3. Token Encryption
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ClientCode` | string | Yes | Unique client identifier (must match the `client_code` query parameter) |
+| `ClientName` | string | No | Client organization name (used for updates) |
+| `ClientEmail` | string | No | Client email (used for updates) |
+| `ClientPhone` | string | No | Client phone number (used for updates) |
+| `UserLogin` | string | No | Username for login |
+| `UserName` | string | Yes | User's full name |
+| `UserPhone` | string | No | User's phone number |
+| `UserEmail` | string | Yes | User's email address (used for user lookup/creation) |
+| `iat` | integer | Yes | Issued at timestamp - Unix epoch |
+| `exp` | integer | Yes | Expiration timestamp - Unix epoch, recommended: 5 minutes from iat |
+| `jti` | string | Yes | Unique token identifier - UUID v4 |
+
+### Token Encryption
 
 The token must be encrypted using **AES-256-GCM** with the client's SSO secret key.
 
@@ -63,6 +54,51 @@ Where:
 - `iv` - 12-byte initialization vector (base64url encoded)
 - `ciphertext` - Encrypted payload (base64url encoded)
 - `tag` - Authentication tag (base64url encoded)
+
+### Client Configuration
+
+Each client must be configured with:
+
+- **Client Code:** Unique identifier (e.g., `CODE1234`)
+- **SSO Secret:** Base64-encoded 32-byte AES-256 key
+
+Contact your administrator to obtain the client code and SSO secret.
+
+---
+
+---
+[Frontend Button]
+        ↓
+[Call Backend API]
+        ↓
+[Backend generates token]
+        ↓
+[Backend returns SSO URL]
+        ↓
+[Frontend opens URL]
+
+## Integration Checklist
+
+- [ ] Obtain client code from administrator
+- [ ] Obtain SSO secret key from administrator
+- [ ] Implement token encryption (AES-256-GCM)
+- [ ] Generate unique JTI for each login attempt
+- [ ] Set appropriate token expiration (recommended: 5 minutes)
+- [ ] Handle redirect to SSO endpoint
+
+---
+
+## Error Handling
+
+The SSO endpoint returns the following HTTP status codes:
+
+| Status Code | Description                              |
+| ----------- | ---------------------------------------- |
+| 403         | SSO is disabled or secret not configured |
+| 422         | Invalid or expired token                 |
+| 404         | Client not found                         |
+
+
 
 **PHP Example:**
 
@@ -125,15 +161,19 @@ function base64url(buffer) {
         .replace(/=/g, '');
 }
 
-// Usage
+// Usage - New Payload Format
 const payload = {
-    email: 'user@example.com',
+    ClientCode: '2325',
+    ClientName: 'ABC Comp',
+    ClientEmail: 'abc@gmail.com',
+    ClientPhone: '999999999',
+    UserLogin: 'usernameforlogin',
+    UserName: 'John Doe',
+    UserPhone: '9556669999',
+    UserEmail: 'johndoe@abc.com',
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 300,
-    jti: crypto.randomUUID(),
-    name: 'John Doe',
-    designation: 'operator',
-    phone: '+1234567890'
+    jti: crypto.randomUUID()
 };
 
 const token = generateSsoToken(payload, 'YOUR_BASE64_ENCODED_SECRET');
@@ -179,129 +219,63 @@ public class SsoTokenGenerator
     }
 }
 
-// Usage
+// Usage - New Payload Format
 var payload = new Dictionary<string, object>
 {
-    { "email", "user@example.com" },
+    { "ClientCode", "2325" },
+    { "ClientName", "ABC Comp" },
+    { "ClientEmail", "abc@gmail.com" },
+    { "ClientPhone", "999999999" },
+    { "UserLogin", "usernameforlogin" },
+    { "UserName", "John Doe" },
+    { "UserPhone", "9556669999" },
+    { "UserEmail", "johndoe@abc.com" },
     { "iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds() },
     { "exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() },
-    { "jti", Guid.NewGuid().ToString() },
-    { "name", "John Doe" },
-    { "designation", "operator" },
-    { "phone", "+1234567890" }
+    { "jti", Guid.NewGuid().ToString() }
 };
 
 string token = SsoTokenGenerator.GenerateSsoToken(payload, "YOUR_BASE64_ENCODED_SECRET");
 Console.WriteLine(token);
 ```
 
-### 4. Client Configuration
+**Python Example:**
 
-Each client must be configured with:
+```python
+import os
+import base64
+import json
+import time
+import uuid
+from Crypto.Cipher import AES
 
-- **Client Code:** Unique identifier (e.g., `CODE1234`)
-- **SSO Secret:** Base64-encoded 32-byte AES-256 key
+def base64url_encode(data):
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')
 
-Contact your administrator to obtain the client code and SSO secret.
+def generate_sso_token(payload, sso_secret):
+    key = base64.b64decode(sso_secret)
+    iv = os.urandom(12)
+    
+    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+    ciphertext, tag = cipher.encrypt_and_digest(json.dumps(payload).encode('utf-8'))
+    
+    return f"v1.{base64url_encode(iv)}.{base64url_encode(ciphertext)}.{base64url_encode(tag)}"
 
----
-
-## Adding Help/Support Links
-
-### Option 1: Add Support URL to Client Model
-
-To add a custom support URL for each client, add a new field to the Client model:
-
-**Migration:**
-
-```php
-Schema::table('clients', function (Blueprint $table) {
-    $table->string('support_url')->nullable()->after('sso_secret');
-});
-```
-
-**Model Update (app/Models/Client.php):**
-
-```php
-protected $fillable = [
-    // ... existing fields
-    'support_url',
-];
-```
-
-### Option 2: Pass Support URL in Token Payload
-
-Include the support URL directly in the SSO token payload:
-
-```json
-{
-    "email": "user@example.com",
-    "iat": 1699876543,
-    "exp": 1699876843,
-    "jti": "uuid-v4-string",
-    "support_url": "https://help.example.com"
+# Usage - New Payload Format
+payload = {
+    'ClientCode': '2325',
+    'ClientName': 'ABC Comp',
+    'ClientEmail': 'abc@gmail.com',
+    'ClientPhone': '999999999',
+    'UserLogin': 'usernameforlogin',
+    'UserName': 'John Doe',
+    'UserPhone': '9556669999',
+    'UserEmail': 'johndoe@abc.com',
+    'iat': int(time.time()),
+    'exp': int(time.time()) + 300,
+    'jti': str(uuid.uuid4())
 }
+
+token = generate_sso_token(payload, 'YOUR_BASE64_ENCODED_SECRET')
+print(token)
 ```
-
-**Controller Update (app/Http/Controllers/ClientSsoController.php):**
-
-```php
-// In consume() method, after successful authentication:
-$supportUrl = $validated['support_url'] ?? null;
-if ($supportUrl) {
-    session(['client_support_url' => $supportUrl]);
-}
-```
-
-### Option 3: Configure Global Support URL
-
-Add a global support URL in your application's configuration:
-
-**config/app.php:**
-
-```php
-return [
-    // ...
-    'support_url' => env('APP_SUPPORT_URL', 'https://help.yourdomain.com'),
-];
-```
-
----
-
-## Integration Checklist
-
-- [ ] Obtain client code from administrator
-- [ ] Obtain SSO secret key from administrator
-- [ ] Implement token encryption (AES-256-GCM)
-- [ ] Generate unique JTI for each login attempt
-- [ ] Set appropriate token expiration (recommended: 5 minutes)
-- [ ] Handle redirect to SSO endpoint
-- [ ] (Optional) Configure help/support URL
-
----
-
-## Error Handling
-
-The SSO endpoint returns the following HTTP status codes:
-
-| Status Code | Description                              |
-| ----------- | ---------------------------------------- |
-| 403         | SSO is disabled or secret not configured |
-| 422         | Invalid or expired token                 |
-| 404         | Client not found                         |
-
----
-
-## Security Considerations
-
-1. **Token Expiration:** Keep tokens short-lived (5 minutes recommended)
-2. **JTI Reuse Prevention:** Each JTI can only be used once
-3. **HTTPS Only:** Always use HTTPS in production
-4. **Secret Storage:** Store SSO secrets securely
-5. **Clock Skew:** Allow 60 seconds of clock skew tolerance
-
----
-
-## Support
-
-For integration assistance, contact your system administrator or email support@yourdomain.com.

@@ -3,10 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Employee;
-use App\Models\Report;
 use App\Models\TaskTimeEntry;
 use App\Models\TimelineEvent;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +23,7 @@ class EmployeeProgressController extends Controller
             'from_date' => 'nullable|date',
             'to_date' => 'nullable|date',
             'period' => 'nullable|string|in:daily,weekly,monthly',
+            'employee_id' => 'nullable|integer|exists:users,id',
         ]);
 
         // Get filter parameters
@@ -34,6 +33,7 @@ class EmployeeProgressController extends Controller
         $period = $request->input('period', 'daily');
         $weekStart = $request->input('week_start');
         $month = $request->input('month');
+        $employeeId = $request->input('employee_id');
 
         // Initialize query for task time entries
         // Only include time entries where the related user is an Employee
@@ -43,6 +43,11 @@ class EmployeeProgressController extends Controller
                 $query->whereIn('id', Employee::pluck('user_id'));
             })
             ->where('is_active', false);
+
+        // Filter by specific employee if provided
+        if ($employeeId) {
+            $timeEntryQuery->where('user_id', $employeeId);
+        }
 
         // Apply filters in priority order:
         // 1) exact date

@@ -13,16 +13,25 @@ use Illuminate\Support\Facades\Validator;
 
 class ClientSsoController extends Controller
 {
+    /**
+     * SSO consume endpoint.
+     * URL: /s/{CLIENT_CODE}?token={SSO_TOKEN}
+     */
     public function consume(Request $request, string $code, ClientSsoTokenCipher $cipher): RedirectResponse
     {
-         $client = Client::query()
+        $token = (string) $request->query('token', '');
+        if ($token === '') {
+            abort(422, 'Missing token.');
+        }
+
+        $client = Client::query()
             ->where('code', $code)
             ->first();
-        
+
         if (!$client) {
             abort(404, 'Client not found.');
         }
-        
+
         if (!$client->sso_enabled) {
             abort(403, 'SSO is disabled for this client.');
         }
@@ -31,21 +40,23 @@ class ClientSsoController extends Controller
             abort(403, 'SSO secret is not configured for this client.');
         }
 
-        $token = (string) $request->query('token', '');
-        if ($token === '') {
-            abort(422, 'Missing token.');
-        }
-
         $payload = $cipher->decryptV1($client, $token);
 
         $validator = Validator::make($payload, [
-            'email' => ['required', 'string', 'email', 'max:255'],
+            // Client info (for validation/updates)
+            'ClientCode' => ['required', 'string', 'max:255'],
+            'ClientName' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'ClientEmail' => ['sometimes', 'nullable', 'string', 'email', 'max:255'],
+            'ClientPhone' => ['sometimes', 'nullable', 'string', 'max:50'],
+            // User info
+            'UserLogin' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'UserName' => ['required', 'string', 'max:255'],
+            'UserPhone' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'UserEmail' => ['required', 'string', 'email', 'max:255'],
+            // Standard JWT claims
             'iat' => ['required', 'integer'],
             'exp' => ['required', 'integer'],
             'jti' => ['required', 'string', 'max:191'],
-            'name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'designation' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
 
         if ($validator->fails()) {
@@ -53,6 +64,11 @@ class ClientSsoController extends Controller
         }
 
         $validated = $validator->validated();
+
+        // Validate client code matches
+        if ($validated['ClientCode'] !== $code) {
+            abort(422, 'Client code mismatch.');
+        }
 
         $now = now()->timestamp;
         $clockSkew = 60;
@@ -75,17 +91,24 @@ class ClientSsoController extends Controller
             abort(403, 'This link has already been used.');
         }
 
-        $email = mb_strtolower(trim($validated['email']));
+        $email = mb_strtolower(trim($validated['UserEmail']));
 
         $organizationUser = OrganizationUser::withTrashed()->firstOrNew([
             'client_id' => $client->id,
             'email' => $email,
         ]);
 
-        $organizationUser->name = $validated['name'] ?? $organizationUser->name ?? $email;
-        $organizationUser->designation = $validated['designation'] ?? $organizationUser->designation;
-        $organizationUser->phone = $validated['phone'] ?? $organizationUser->phone;
+        $organizationUser->name = $validated['UserName'] ?? $organizationUser->name ?? $email;
+        $organizationUser->phone = $validated['UserPhone'] ?? $organizationUser->phone;
         $organizationUser->status = $organizationUser->status ?: 'active';
+
+        // Optionally update client info if provided
+        if (isset($validated['ClientName']) || isset($validated['ClientEmail']) || isset($validated['ClientPhone'])) {
+            $client->name = $validated['ClientName'] ?? $client->name;
+            $client->email = $validated['ClientEmail'] ?? $client->email;
+            $client->phone = $validated['ClientPhone'] ?? $client->phone;
+            $client->save();
+        }
 
         if ($organizationUser->trashed()) {
             $organizationUser->restore();

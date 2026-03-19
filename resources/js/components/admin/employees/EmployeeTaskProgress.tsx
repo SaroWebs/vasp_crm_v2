@@ -80,7 +80,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
             setIsProgressLoading(true);
             setProgressError(null);
             try {
-                const params = new URLSearchParams({ period });
+                const params = new URLSearchParams({ period, employee_id: employeeId.toString() });
                 if (period === 'daily') {
                     params.append('date', selectedDate);
                 } else if (period === 'weekly') {

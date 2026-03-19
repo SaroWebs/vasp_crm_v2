@@ -1,26 +1,19 @@
-// Reverb Notifications Integration
-// This file demonstrates how to listen to real-time notifications using Reverb
+// Pusher Notifications Integration
+// This file demonstrates how to listen to real-time notifications using Pusher
 
 import { createApp } from 'vue';
-import { createReverb } from '@reverb/client';
+import Echo from 'laravel-echo';
 
-// Initialize Reverb connection
-const reverb = createReverb({
-    host: window.location.hostname,
-    port: 8080, // Default Reverb port
-    secure: window.location.protocol === 'https:',
+// Initialize Pusher connection via Laravel Echo
+const echo = new Echo({
+    broadcaster: 'pusher',
+    key: import.meta.env.VITE_PUSHER_APP_KEY,
+    cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+    forceTLS: true,
 });
 
-// User authentication (you'll need to implement this based on your auth system)
+// User authentication
 const userId = document.querySelector('meta[name="user-id"]')?.content;
-const userToken = document.querySelector('meta[name="user-token"]')?.content;
-
-// Connect to Reverb
-reverb.connect({
-    headers: {
-        'Authorization': `Bearer ${userToken}`,
-    }
-});
 
 // Notification store (for Vue.js integration)
 const notificationStore = {
@@ -95,7 +88,7 @@ const notificationStore = {
 notificationStore.loadFromLocalStorage();
 
 // Listen to user-specific notifications channel
-const userChannel = reverb.private(`user.${userId}`);
+const userChannel = echo.private(`user.${userId}`);
 
 // Listen for general notifications
 userChannel.listen('notification.created', (event) => {
@@ -216,4 +209,4 @@ if (typeof Vue !== 'undefined') {
 }
 
 // Export for module usage
-export { notificationStore, reverb };
+export { notificationStore, echo };

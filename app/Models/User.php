@@ -81,7 +81,7 @@ class User extends Authenticatable
     /**
      * Check if user has role.
      *
-     * @param string|Role|array<int, Role> $role
+     * @param string|Role|array<int, string>|array<int, Role> $role
      * @return bool
      */
     public function hasRole($role): bool
@@ -90,7 +90,19 @@ class User extends Authenticatable
             return $this->roles->contains('slug', $role);
         }
 
-        return !! $this->roles->intersect($role)->count();
+        if (is_array($role)) {
+            // Check if all items are strings (role slugs)
+            if (empty($role) || is_string($role[0])) {
+                return $this->roles->contains(function (Role $userRole) use ($role) {
+                    return in_array($userRole->slug, $role);
+                });
+            }
+
+            // Otherwise, treat as array of Role models
+            return (bool) $this->roles->intersect($role)->count();
+        }
+
+        return $this->roles->contains($role->id);
     }
 
     /**

@@ -1,47 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createReverb } from '@reverb/client';
 import { Bell, X, Check, CheckCircle, AlertCircle, Clock, User, Users } from 'lucide-react';
 
 const Notifications = ({ userId, userToken }) => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [showDropdown, setShowDropdown] = useState(false);
-    const [reverb, setReverb] = useState(null);
     const dropdownRef = useRef(null);
 
-    // Initialize Reverb connection
+    // Initialize Pusher connection via Echo
     useEffect(() => {
         if (userId && userToken) {
-            const reverbInstance = createReverb({
-                host: window.location.hostname,
-                port: 8080,
-                secure: window.location.protocol === 'https:',
-            });
-
-            reverbInstance.connect({
-                headers: {
-                    'Authorization': `Bearer ${userToken}`,
-                }
-            });
-
-            setReverb(reverbInstance);
-
             // Load existing notifications
             loadNotifications();
-
-            return () => {
-                if (reverbInstance) {
-                    reverbInstance.disconnect();
-                }
-            };
         }
     }, [userId, userToken]);
 
-    // Setup Reverb listeners
+    // Setup Pusher/Echo listeners
     useEffect(() => {
-        if (!reverb || !userId) return;
+        if (!userId) return;
 
-        const userChannel = reverb.private(`user.${userId}`);
+        const userChannel = window.Echo.private(`user.${userId}`);
 
         // Listen for general notifications
         userChannel.listen('notification.created', (event) => {
@@ -71,7 +49,7 @@ const Notifications = ({ userId, userToken }) => {
             userChannel.stopListening('task.status.changed');
             userChannel.stopListening('task.forwarded');
         };
-    }, [reverb, userId]);
+    }, [userId]);
 
     // Close dropdown when clicking outside
     useEffect(() => {

@@ -21,14 +21,14 @@ class NotificationService
     {
         $notification = Notification::createWorkflowNotification($userId, $type, $title, $message, $data);
         
-        // Broadcast the notification using Reverb
+        // Broadcast the notification
         $this->broadcastNotification($notification, $userId);
         
         return $notification;
     }
 
     /**
-     * Broadcast notification using Reverb.
+     * Broadcast notification.
      */
     protected function broadcastNotification(Notification $notification, int $userId): void
     {
