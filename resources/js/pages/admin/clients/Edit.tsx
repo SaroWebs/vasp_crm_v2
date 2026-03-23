@@ -205,7 +205,7 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                         <div className="space-y-2">
                                             <Label htmlFor="phone">
-                                                Phone Number
+                                                Phone Number (optional)
                                             </Label>
                                             <div className="relative">
                                                 <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -221,7 +221,6 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                         )
                                                     }
                                                     className="pl-10"
-                                                    required
                                                 />
                                             </div>
                                             {errors.phone ? (

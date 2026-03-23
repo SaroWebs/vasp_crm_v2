@@ -417,9 +417,18 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                                     )}
                                                 </Button>
                                                 <div className="space-y-1">
-                                                    <p className="text-sm font-medium leading-none">
-                                                        {client.name}
-                                                    </p>
+                                                    <div className="flex items-center space-x-2">
+                                                        <p className="text-sm font-medium leading-none">
+                                                            {client.name}
+                                                        </p>
+                                                        <div className="bg-muted mx-2 border px-2 py-1 rounded">
+                                                            {client.code ? (
+                                                                <span className="text-sm text-muted-foreground">Code: {client.code}</span>
+                                                            ) : (
+                                                                <span className="text-sm text-muted-foreground">Code: Not Assigned</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                                                         <div className="flex items-center">
                                                             <Mail className="mr-1 h-3 w-3" />

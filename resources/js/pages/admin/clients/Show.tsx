@@ -237,15 +237,26 @@ export default function ClientShow(props: ClientShowProps) {
                                 )}
 
 
-                                {client.code && (
-                                    <div className="flex items-center space-x-3">
-                                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                                <div className="flex items-start space-x-3">
+                                    <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                                    <div className="flex w-full items-start justify-between gap-4">
                                         <div>
                                             <p className="text-sm font-medium">Client Code</p>
-                                            <p className="text-sm text-muted-foreground">{client.code}</p>
+                                            {client.code ? (
+                                                <p className="text-sm text-muted-foreground">{client.code}</p>
+                                            ) : (
+                                                <p className="text-sm text-muted-foreground">No code assigned yet</p>
+                                            )}
                                         </div>
+                                        {canEdit && (
+                                            <Button variant="outline" size="sm" asChild>
+                                                <Link href={`/admin/clients/${client.id}/edit`}>
+                                                    {client.code ? 'Change Code' : 'Add Code'}
+                                                </Link>
+                                            </Button>
+                                        )}
                                     </div>
-                                )}
+                                </div>
 
                                 {client.address && (
                                     <div className="flex items-center space-x-3">

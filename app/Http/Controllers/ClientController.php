@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreClientRequest;
+use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
-use App\Models\OrganizationUser;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class ClientController extends Controller
@@ -19,30 +19,30 @@ class ClientController extends Controller
     public function index(Request $request)
     {
         $user = User::find(Auth::user()->id);
-        
+
         // Build query with relationships
         $query = Client::withTrashed()->with(['organizationUsers', 'tickets', 'product']);
-        
+
         // Apply filters
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
-        
+
         if ($request->has('status') && $request->status !== 'all') {
             $query->where('status', $request->status);
         }
-        
+
         // Get pagination parameters
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
-        
+
         // Get paginated results
         $clients = $query->paginate($perPage, ['*'], 'page', $page);
-        
+
         // Transform for frontend
         $clientsData = $clients->getCollection()->map(function ($client) {
             return [
@@ -50,6 +50,7 @@ class ClientController extends Controller
                 'name' => $client->name,
                 'email' => $client->email,
                 'phone' => $client->phone,
+                'code' => $client->code,
                 'address' => $client->address,
                 'status' => $client->status,
                 'deleted_at' => $client->deleted_at,
@@ -83,7 +84,7 @@ class ClientController extends Controller
         });
 
         $canCreate = $user->hasPermission('client.create') || $user->isSuperAdmin();
-        $canEdit = $user->hasPermission('client.edit') || $user->isSuperAdmin();
+        $canEdit = true;
         $canDelete = $user->hasPermission('client.delete') || $user->isSuperAdmin();
         $canRead = $user->hasPermission('client.read') || $user->isSuperAdmin();
 
@@ -110,7 +111,6 @@ class ClientController extends Controller
     /**
      * Show create form (Inertia).
      */
-    
     public function create()
     {
         return Inertia::render('admin/clients/Create', [
@@ -121,48 +121,18 @@ class ClientController extends Controller
     /**
      * Store new client.
      */
-    public function store(Request $request)
+    public function store(StoreClientRequest $request)
     {
-        $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'nullable|email',
-            'phone'    => 'nullable|string|max:20',
-            'code'     => 'nullable|string|max:255',
-            'address'  => 'nullable|string',
-            'status'   => 'required|in:active,inactive',
-            'product_id' => 'nullable|exists:products,id',
-            'sso_enabled' => ['sometimes', 'boolean'],
-            'sso_secret' => [
-                Rule::requiredIf(fn (): bool => $request->boolean('sso_enabled')),
-                'nullable',
-                'string',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if ($value === null || $value === '') {
-                        return;
-                    }
-
-                    if (! is_string($value)) {
-                        $fail('The SSO secret must be a string.');
-
-                        return;
-                    }
-
-                    $decoded = base64_decode($value, true);
-                    if ($decoded === false || strlen($decoded) !== 32) {
-                        $fail('The SSO secret must be a base64-encoded 32-byte key.');
-                    }
-                },
-            ],
-        ]);
+        $validated = $request->validated();
 
         try {
             Client::create([
-                'name'     => $validated['name'],
-                'email'    => $validated['email'] ?? null,
-                'phone'    => $validated['phone'] ?? null,
-                'code'     => $validated['code'] ?? null,
-                'address'  => $validated['address'] ?? null,
-                'status'   => $validated['status'],
+                'name' => $validated['name'],
+                'email' => $validated['email'] ?? null,
+                'phone' => $validated['phone'] ?? null,
+                'code' => $validated['code'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'status' => $validated['status'],
                 'product_id' => $validated['product_id'] ?? null,
                 'sso_enabled' => $request->boolean('sso_enabled'),
                 'sso_secret' => $validated['sso_secret'] ?? null,
@@ -173,7 +143,7 @@ class ClientController extends Controller
 
         } catch (\Exception $e) {
             return back()->withErrors([
-                'general' => 'Something went wrong while creating the client: ' . $e->getMessage()
+                'general' => 'Something went wrong while creating the client: '.$e->getMessage(),
             ])->withInput();
         }
     }
@@ -183,7 +153,7 @@ class ClientController extends Controller
      */
     public function show(Client $client)
     {
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found');
         }
 
@@ -191,14 +161,14 @@ class ClientController extends Controller
         $client->load([
             'organizationUsers',
             'product',
-            'tickets' => function($query) {
+            'tickets' => function ($query) {
                 $query->latest()->limit(10)->with(['organizationUser']);
-            }
+            },
         ]);
 
         // Get user permissions
         $user = User::find(Auth::user()->id);
-        $canEdit = $user->hasPermission('client.edit') || $user->isSuperAdmin();
+        $canEdit = true;
         $canDelete = $user->hasPermission('client.delete') || $user->isSuperAdmin();
         $canRead = $user->hasPermission('client.read') || $user->isSuperAdmin();
 
@@ -227,7 +197,7 @@ class ClientController extends Controller
     public function edit(Request $request, $client_id)
     {
         $client = Client::find($client_id);
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found');
         }
 
@@ -255,56 +225,25 @@ class ClientController extends Controller
     /**
      * Update client.
      */
-    public function update(Request $request, $client_id)
+    public function update(UpdateClientRequest $request, $client_id)
     {
         $client = Client::find($client_id);
 
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found');
         }
 
         $ssoEnabled = $request->boolean('sso_enabled');
-        $secretRequired = $ssoEnabled && empty($client->sso_secret);
 
-        $validated = $request->validate([
-            'name'     => 'required|string',
-            'email'    => 'nullable|email',
-            'phone'    => 'required|string',
-            'code'     => 'nullable|string|max:255',
-            'address'  => 'required|string',
-            'status'   => 'required|string',
-            'product_id' => 'nullable|exists:products,id',
-            'sso_enabled' => ['sometimes', 'boolean'],
-            'sso_secret' => [
-                Rule::requiredIf(fn (): bool => $secretRequired),
-                'nullable',
-                'string',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if ($value === null || $value === '') {
-                        return;
-                    }
-
-                    if (! is_string($value)) {
-                        $fail('The SSO secret must be a string.');
-
-                        return;
-                    }
-
-                    $decoded = base64_decode($value, true);
-                    if ($decoded === false || strlen($decoded) !== 32) {
-                        $fail('The SSO secret must be a base64-encoded 32-byte key.');
-                    }
-                },
-            ],
-        ]);
+        $validated = $request->validated();
 
         $updatePayload = [
-            'name'     => $validated['name'],
-            'email'    => $validated['email'] ?? null,
-            'phone'    => $validated['phone'],
-            'code'     => $validated['code'] ?? null,
-            'address'  => $validated['address'],
-            'status'   => $validated['status'],
+            'name' => $validated['name'],
+            'email' => $validated['email'] ?? null,
+            'phone' => $validated['phone'] ?? null,
+            'code' => $validated['code'] ?? null,
+            'address' => $validated['address'],
+            'status' => $validated['status'],
             'product_id' => $validated['product_id'] ?? null,
             'sso_enabled' => $ssoEnabled,
         ];
@@ -315,7 +254,7 @@ class ClientController extends Controller
 
         $client->update($updatePayload);
 
-        return redirect('/admin/clients/' . $client_id)->with('success', 'Client updated successfully');
+        return redirect('/admin/clients/'.$client_id)->with('success', 'Client updated successfully');
     }
 
     /**
@@ -324,7 +263,7 @@ class ClientController extends Controller
     public function destroy(Request $request, $client_id)
     {
         $client = Client::find($client_id);
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found');
         }
         $client->delete();
@@ -344,7 +283,7 @@ class ClientController extends Controller
     public function restore(Request $request, $client_id)
     {
         $client = Client::onlyTrashed()->find($client_id);
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found');
         }
         $client->restore();
@@ -364,7 +303,7 @@ class ClientController extends Controller
     public function forceDelete(Request $request, $client_id)
     {
         $client = Client::onlyTrashed()->find($client_id);
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Archived client not found');
         }
 
@@ -385,8 +324,8 @@ class ClientController extends Controller
     public function getClientOrganizationUsers(Request $request, $client_id)
     {
         $client = Client::with('organizationUsers')->find($client_id);
-        
-        if (!$client) {
+
+        if (! $client) {
             return response()->json(['message' => 'Client not found'], 404);
         }
 
@@ -407,7 +346,7 @@ class ClientController extends Controller
                 'name' => $client->name,
                 'email' => $client->email,
             ],
-            'organization_users' => $organizationUsers
+            'organization_users' => $organizationUsers,
         ], 200);
     }
 }

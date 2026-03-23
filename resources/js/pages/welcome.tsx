@@ -63,13 +63,7 @@ export default function Welcome() {
                             <p className="text-xl text-muted-foreground mb-8">
                                 Efficient ticket management for organizations to raise issues and teams to manage tasks seamlessly.
                             </p>
-                            <div className="flex gap-4 justify-center">
-                                <Link href="/admin/login">
-                                    <Button size="lg" className="gap-2">
-                                        Get Started <ArrowRight className="h-4 w-4" />
-                                    </Button>
-                                </Link>
-                            </div>
+                            
                         </div>
 
                         {/* Features */}
