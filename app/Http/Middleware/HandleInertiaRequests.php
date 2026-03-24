@@ -43,24 +43,25 @@ class HandleInertiaRequests extends Middleware
         // Determine the current guard type based on route prefix and authentication
         $guardType = null;
         $user = null;
+        $isAdminContext = $request->routeIs('admin.*')
+            || $request->is('admin/*')
+            || $request->is('admin')
+            || $request->is('settings')
+            || $request->is('settings/*');
+        $isClientContext = $request->routeIs('client.*') || $request->is('c/*');
 
-        if (auth('organization')->check()) {
+        if ($isAdminContext && auth('web')->check()) {
+            $guardType = 'admin';
+            $user = auth('web')->user()->load('roles');
+        } elseif ($isClientContext && auth('organization')->check()) {
             $guardType = 'organization';
             $user = auth('organization')->user()->load('client');
-        }
-
-        // Check if we're on an admin route
-        if (! $guardType && ($request->is('admin/*') || $request->is('admin'))) {
-            if (auth('web')->check()) {
-                $guardType = 'admin';
-                $user = auth('web')->user()->load('roles');
-            }
-        } elseif (! $guardType) {
-            // Admins can access settings without admin/ prefix
-            if (auth('web')->check()) {
-                $guardType = 'admin';
-                $user = auth('web')->user()->load('roles');
-            }
+        } elseif (auth('web')->check()) {
+            $guardType = 'admin';
+            $user = auth('web')->user()->load('roles');
+        } elseif (auth('organization')->check()) {
+            $guardType = 'organization';
+            $user = auth('organization')->user()->load('client');
         }
 
         $menuAccess = [];

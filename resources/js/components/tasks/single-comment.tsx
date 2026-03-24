@@ -276,7 +276,7 @@ export default function SingleComment({
                             comment.deleted_at ? undefined : handleCommentClick
                         }
                     >
-                        <p className="text-sm break-words whitespace-pre-wrap">
+                        <p className="text-sm wrap-break-words whitespace-pre-wrap">
                             {comment.comment_text}
                         </p>
                     </div>

@@ -4,9 +4,9 @@ This application uses a custom AES-256-GCM encrypted token (not a standard JWT) 
 
 **SSO URL Format:**
 ```
-https://domain.com/s/{CLIENT_CODE}?token={SSO_TOKEN}
+https://work.vasptechnologies.com/s/{CLIENT_CODE}?token={SSO_TOKEN}
 
-Example: https://domain.com/s/2325?token=v1.7Q8...g4vA
+Example: https://work.vasptechnologies.com/s/2325?token=v1.7Q8...g4vA
 ```
 
 ## Token Payload (JSON)
@@ -80,7 +80,7 @@ Contact your administrator to obtain the client code and SSO secret.
 
 1. Client app builds the payload.
 2. Client app encrypts the payload to create `{SSO_TOKEN}`.
-3. Client app redirects the user to `https://domain.com/s/{CLIENT_CODE}?token={SSO_TOKEN}`.
+3. Client app redirects the user to `https://work.vasptechnologies.com/s/{CLIENT_CODE}?token={SSO_TOKEN}`.
 
 ## Integration Checklist
 
