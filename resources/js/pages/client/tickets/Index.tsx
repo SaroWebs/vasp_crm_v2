@@ -88,7 +88,7 @@ export default function ClientTicketsIndex({
 
     return (
         <ClientLayout client={client} title="Tickets">
-            <Head title={`${client.name} � Tickets`} />
+            <Head title={`${client.name} - Tickets`} />
 
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

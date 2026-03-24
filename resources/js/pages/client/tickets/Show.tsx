@@ -70,7 +70,7 @@ export default function ClientTicketShow({
 
     return (
         <ClientLayout client={client} title={ticket.ticket_number}>
-            <Head title={`${client.name} � ${ticket.ticket_number}`} />
+            <Head title={`${client.name} - ${ticket.ticket_number}`} />
 
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
