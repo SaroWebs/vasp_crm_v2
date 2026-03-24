@@ -3,7 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { TaskComment, TicketComment } from '@/types';
 import axios from 'axios';
-import { Check, Edit2, Loader2, Paperclip, Trash2, X } from 'lucide-react';
+import {
+    Check,
+    Edit2,
+    ExternalLink,
+    Loader2,
+    Paperclip,
+    Trash2,
+    X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface SingleCommentProps {
@@ -55,8 +63,32 @@ export default function SingleComment({
         });
     };
 
+    const formatFileSize = (bytes?: number) => {
+        if (!bytes) {
+            return null;
+        }
+
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const power = Math.min(
+            Math.floor(Math.log(bytes) / Math.log(1024)),
+            sizes.length - 1,
+        );
+
+        return `${(bytes / 1024 ** power).toFixed(power === 0 ? 0 : 1)} ${sizes[power]}`;
+    };
+
+    const isImageAttachment = (fileType?: string | null) => {
+        if (!fileType) {
+            return false;
+        }
+
+        return fileType.startsWith('image/');
+    };
+
     const handleEdit = async () => {
-        if (!editText.trim() || submitting) return;
+        if (!editText.trim() || submitting) {
+            return;
+        }
 
         try {
             setSubmitting(true);
@@ -80,7 +112,9 @@ export default function SingleComment({
     };
 
     const handleDelete = async () => {
-        if (!confirm('Are you sure you want to delete this comment?')) return;
+        if (!confirm('Are you sure you want to delete this comment?')) {
+            return;
+        }
 
         try {
             setSubmitting(true);
@@ -100,8 +134,9 @@ export default function SingleComment({
     };
 
     const handleDeleteAttachment = async (attachmentId: number) => {
-        if (!confirm('Are you sure you want to delete this attachment?'))
+        if (!confirm('Are you sure you want to delete this attachment?')) {
             return;
+        }
 
         try {
             setSubmitting(true);
@@ -179,14 +214,11 @@ export default function SingleComment({
                 </AvatarFallback>
             </Avatar>
             <div
-                className={`flex max-w-[75%] flex-col ${isOwn ? 'items-end' : ''}`}
+                className={`flex max-w-[85%] flex-col ${isOwn ? 'items-end' : ''}`}
             >
                 <div className="mb-1 flex items-center gap-2">
                     <span className="text-xs font-medium">{commenterName}</span>
-                    <span
-                        className="text-xs text-muted-foreground"
-                        onClick={() => console.log(comment.created_at)}
-                    >
+                    <span className="text-xs text-muted-foreground">
                         {formatTime(comment.created_at)}
                     </span>
                     {isEdited && !comment.deleted_at && (
@@ -233,79 +265,118 @@ export default function SingleComment({
                     </div>
                 ) : comment.comment_text ? (
                     <div
-                        className={`rounded-lg px-3 py-2 transition-colors ${comment.deleted_at ? 'bg-gray-100 text-gray-500 italic' : isOwn ? 'cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90' : 'cursor-pointer bg-muted'} }`}
+                        className={`rounded-lg px-3 py-2 transition-colors ${
+                            comment.deleted_at
+                                ? 'bg-gray-100 text-gray-500 italic'
+                                : isOwn
+                                  ? 'cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90'
+                                  : 'cursor-pointer bg-muted'
+                        }`}
                         onClick={
                             comment.deleted_at ? undefined : handleCommentClick
                         }
                     >
-                        <p className="text-sm wrap-break-word whitespace-pre-wrap">
+                        <p className="text-sm break-words whitespace-pre-wrap">
                             {comment.comment_text}
                         </p>
                     </div>
                 ) : null}
 
-                {/* Attachments display - hide for deleted comments */}
                 {!comment.deleted_at &&
                     comment.attachments &&
                     comment.attachments.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {comment.attachments.map((attachment) => (
-                                <div
-                                    key={attachment.id}
-                                    className="group relative"
-                                >
-                                    {attachment.file_type == 'image/png' ||
-                                    attachment.file_type == 'image/jpeg' ||
-                                    attachment.file_type == 'image/webp' ? (
-                                        <img
-                                            src={attachment.file_url}
-                                            alt={attachment.original_filename}
-                                            className="h-20 w-20 cursor-pointer rounded border object-cover hover:opacity-80"
-                                            onClick={() =>
-                                                window.open(
-                                                    attachment.file_url,
-                                                    '_blank',
-                                                )
-                                            }
-                                        />
-                                    ) : (
-                                        <div
-                                            className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border bg-gray-100 hover:bg-gray-200"
-                                            onClick={() =>
-                                                window.open(
-                                                    attachment.file_url,
-                                                    '_blank',
-                                                )
-                                            }
-                                        >
-                                            <div className="px-1 text-center text-xs">
-                                                <Paperclip className="mx-auto mb-1 h-4 w-4" />
-                                                <div className="truncate">
-                                                    {
-                                                        attachment.original_filename
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
+                        <div className="mt-2 grid w-full gap-2 sm:grid-cols-2">
+                            {comment.attachments.map((attachment) => {
+                                const fileName =
+                                    attachment.original_filename ||
+                                    'Attachment';
+                                const fileSize = formatFileSize(
+                                    attachment.file_size,
+                                );
+                                const isImage = isImageAttachment(
+                                    attachment.file_type,
+                                );
 
-                                    {/* Delete button for own attachments */}
-                                    {isOwn && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteAttachment(
-                                                    attachment.id,
-                                                );
-                                            }}
-                                            className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                                            disabled={submitting}
-                                        >
-                                            <X className="h-2 w-2" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                                return (
+                                    <div
+                                        key={attachment.id}
+                                        className="group relative rounded-md border bg-background"
+                                    >
+                                        {isImage ? (
+                                            <button
+                                                type="button"
+                                                className="w-full"
+                                                onClick={() =>
+                                                    window.open(
+                                                        attachment.file_url,
+                                                        '_blank',
+                                                    )
+                                                }
+                                            >
+                                                <img
+                                                    src={attachment.file_url}
+                                                    alt={fileName}
+                                                    className="h-28 w-full rounded-t-md object-cover"
+                                                />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className="flex w-full items-center gap-2 p-2 text-left"
+                                                onClick={() =>
+                                                    window.open(
+                                                        attachment.file_url,
+                                                        '_blank',
+                                                    )
+                                                }
+                                            >
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                                                    <Paperclip className="h-4 w-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-xs font-medium">
+                                                        {fileName}
+                                                    </p>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {fileSize ||
+                                                            'Unknown size'}
+                                                    </p>
+                                                </div>
+                                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                                            </button>
+                                        )}
+
+                                        {isImage && (
+                                            <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                                                <p className="truncate text-xs font-medium">
+                                                    {fileName}
+                                                </p>
+                                                {fileSize && (
+                                                    <span className="text-[11px] text-muted-foreground">
+                                                        {fileSize}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {isOwn && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void handleDeleteAttachment(
+                                                        attachment.id,
+                                                    );
+                                                }}
+                                                className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                disabled={submitting}
+                                                type="button"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
 

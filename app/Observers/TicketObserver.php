@@ -5,20 +5,19 @@ namespace App\Observers;
 use App\Models\Department;
 use App\Models\Ticket;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class TicketObserver
 {
-    public function __construct(private readonly NotificationService $notificationService)
-    {
-    }
+    public function __construct(private readonly NotificationService $notificationService) {}
 
     public function created(Ticket $ticket): void
     {
         $category = $ticket->category;
         $departmentSlug = config("tickets.notify_department_by_category.{$category}");
 
-        if (!$departmentSlug) {
+        if (! $departmentSlug) {
             return;
         }
 
@@ -27,17 +26,18 @@ class TicketObserver
             ->where('status', 'active')
             ->first();
 
-        if (!$department) {
+        if (! $department) {
             Log::warning('Ticket created but department slug not found/active for notifications.', [
                 'ticket_id' => $ticket->id,
                 'ticket_category' => $category,
                 'department_slug' => $departmentSlug,
             ]);
+
             return;
         }
 
         $userIds = $department->users()->pluck('users.id')->all();
-        if (!$userIds) {
+        if (! $userIds) {
             return;
         }
 
@@ -65,6 +65,8 @@ class TicketObserver
             'department_slug' => $departmentSlug,
         ];
 
+        $triggeredByUserId = (int) (Auth::guard('web')->id() ?? 0);
+
         foreach ($userIds as $userId) {
             $this->notificationService->sendToUser(
                 (int) $userId,
@@ -72,6 +74,13 @@ class TicketObserver
                 $title,
                 $message,
                 $data
+            );
+
+            $this->notificationService->notifyEmployee(
+                (int) $userId,
+                $title,
+                $message,
+                $triggeredByUserId
             );
         }
     }

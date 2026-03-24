@@ -2,22 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use Carbon\Carbon;
-use App\Models\User;
-use Inertia\Inertia;
 use App\Models\Client;
-use App\Models\OrganizationUser;
-use App\Models\Ticket;
 use App\Models\Notification;
-use App\Services\NotificationService;
-use Illuminate\Http\Request;
-use App\Models\TicketHistory;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use App\Models\TicketAttachment;
-use App\Models\Task;
+use App\Models\OrganizationUser;
 use App\Models\SlaPolicy;
+use App\Models\Task;
+use App\Models\Ticket;
+use App\Models\TicketAttachment;
+use App\Models\TicketHistory;
+use App\Models\User;
+use App\Services\NotificationService;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
 
 class AdminTicketController extends Controller
 {
@@ -35,7 +36,7 @@ class AdminTicketController extends Controller
     public static function computeWorkStatus(Ticket $ticket): array
     {
         // Load tasks if not already loaded
-        if (!$ticket->relationLoaded('tasks.assignedUsers')) {
+        if (! $ticket->relationLoaded('tasks.assignedUsers')) {
             $ticket->load('tasks.assignedUsers');
         }
 
@@ -58,15 +59,15 @@ class AdminTicketController extends Controller
         $completed = $tasks->filter(function ($task) {
             return in_array($task->state, ['Done', 'Cancelled', 'Rejected']);
         })->count();
-        
+
         $inProgress = $tasks->filter(function ($task) {
             return in_array($task->state, ['InProgress', 'InReview', 'Assigned']);
         })->count();
-        
+
         $blocked = $tasks->filter(function ($task) {
             return $task->state === 'Blocked';
         })->count();
-        
+
         $pending = $tasks->filter(function ($task) {
             return $task->state === 'Draft';
         })->count();
@@ -128,7 +129,7 @@ class AdminTicketController extends Controller
             $query->where('client_id', $request->client_id);
         }
 
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
@@ -145,6 +146,7 @@ class AdminTicketController extends Controller
         // Compute work status for each ticket
         $tickets->getCollection()->transform(function ($ticket) {
             $ticket->work_status = self::computeWorkStatus($ticket);
+
             return $ticket;
         });
 
@@ -154,7 +156,7 @@ class AdminTicketController extends Controller
         return Inertia::render('admin/tickets/Index', [
             'tickets' => $tickets,
             'filters' => $request->only(['status', 'priority', 'client_id', 'search']),
-            'clients' => $clients
+            'clients' => $clients,
         ]);
     }
 
@@ -164,7 +166,7 @@ class AdminTicketController extends Controller
     public function show($ticket)
     {
         $ticket = Ticket::withTrashed()->find($ticket);
-        if (!$ticket) {
+        if (! $ticket) {
             abort(404, 'Ticket not found');
         }
 
@@ -177,11 +179,11 @@ class AdminTicketController extends Controller
             'tasks' => function ($query) {
                 $query->with(['assignedUsers', 'assignedDepartment', 'createdBy'])
                     ->latest('created_at');
-            }
+            },
         ]);
 
         return Inertia::render('admin/tickets/Show', [
-            'ticket' => $ticket
+            'ticket' => $ticket,
         ]);
     }
 
@@ -195,7 +197,7 @@ class AdminTicketController extends Controller
             ->get();
 
         return Inertia::render('admin/tickets/Create', [
-            'clients' => $clients
+            'clients' => $clients,
         ]);
     }
 
@@ -219,14 +221,14 @@ class AdminTicketController extends Controller
         // Validate that assigned users are active and valid
         if ($validated['assigned_to'] ?? null) {
             $assignedUser = User::find($validated['assigned_to']);
-            if (!$assignedUser) {
+            if (! $assignedUser) {
                 return back()->withErrors(['assigned_to' => 'Assigned user does not exist']);
             }
         }
 
         if ($validated['approved_by'] ?? null) {
             $approvedUser = User::find($validated['approved_by']);
-            if (!$approvedUser) {
+            if (! $approvedUser) {
                 return back()->withErrors(['approved_by' => 'Approving user does not exist']);
             }
         }
@@ -236,7 +238,7 @@ class AdminTicketController extends Controller
                 ->where('client_id', $validated['client_id'])
                 ->first();
 
-            if (!$organizationUser) {
+            if (! $organizationUser) {
                 return back()->withErrors(['organization_user_id' => 'Organization user does not belong to the specified organization']);
             }
 
@@ -276,7 +278,7 @@ class AdminTicketController extends Controller
                 ->with('success', 'Ticket created successfully');
 
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Something went wrong: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Something went wrong: '.$e->getMessage()]);
         }
     }
 
@@ -286,7 +288,7 @@ class AdminTicketController extends Controller
     public function edit(Request $request, $ticket_id)
     {
         $ticket = Ticket::with(['client', 'organizationUser'])->find($ticket_id);
-        if (!$ticket) {
+        if (! $ticket) {
             abort(404, 'Ticket not found');
         }
 
@@ -299,7 +301,7 @@ class AdminTicketController extends Controller
         return Inertia::render('admin/tickets/Edit', [
             'ticket' => $ticket,
             'clients' => $clients,
-            'users' => $users
+            'users' => $users,
         ]);
     }
 
@@ -310,7 +312,7 @@ class AdminTicketController extends Controller
     {
         // Find the ticket
         $ticket = Ticket::find($ticket_id);
-        if (!$ticket) {
+        if (! $ticket) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Ticket not found'], 404);
             }
@@ -321,7 +323,7 @@ class AdminTicketController extends Controller
         $validated = $request->validate([
             'client_id' => 'required|integer|exists:clients,id',
             'organization_user_id' => 'required|integer|exists:organization_users,id',
-            'ticket_number' => 'required|string|unique:tickets,ticket_number,' . $ticket_id,
+            'ticket_number' => 'required|string|unique:tickets,ticket_number,'.$ticket_id,
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'priority' => 'required|in:low,medium,high,critical',
@@ -339,13 +341,14 @@ class AdminTicketController extends Controller
             ->where('client_id', $validated['client_id'])
             ->first();
 
-        if (!$organizationUser) {
+        if (! $organizationUser) {
             $message = 'Organization user does not belong to the specified organization';
             if ($request->expectsJson()) {
                 return response()->json([
-                    'message' => $message
+                    'message' => $message,
                 ], 422);
             }
+
             return back()
                 ->withErrors(['organization_user_id' => $message])
                 ->withInput();
@@ -356,13 +359,14 @@ class AdminTicketController extends Controller
 
         if ($validated['assigned_to'] ?? null) {
             $assignedUser = User::find($validated['assigned_to']);
-            if (!$assignedUser) {
+            if (! $assignedUser) {
                 $message = 'Assigned user does not exist';
                 if ($request->expectsJson()) {
                     return response()->json([
-                        'message' => $message
+                        'message' => $message,
                     ], 422);
                 }
+
                 return back()
                     ->withErrors(['assigned_to' => $message])
                     ->withInput();
@@ -371,13 +375,14 @@ class AdminTicketController extends Controller
 
         if ($validated['approved_by'] ?? null) {
             $approvedUser = User::find($validated['approved_by']);
-            if (!$approvedUser) {
+            if (! $approvedUser) {
                 $message = 'Approving user does not exist';
                 if ($request->expectsJson()) {
                     return response()->json([
-                        'message' => $message
+                        'message' => $message,
                     ], 422);
                 }
+
                 return back()
                     ->withErrors(['approved_by' => $message])
                     ->withInput();
@@ -436,7 +441,7 @@ class AdminTicketController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'Ticket updated successfully',
-                'ticket' => $ticket->load(['client', 'organizationUser'])
+                'ticket' => $ticket->load(['client', 'organizationUser']),
             ], 200);
         }
 
@@ -483,7 +488,7 @@ class AdminTicketController extends Controller
                 'sla_policy_id' => $this->findMatchingSlaPolicyForTicket($ticket)?->id,
                 'state' => 'Assigned',
                 'created_by' => $currentUser->id,
-                'task_code' => 'TSK-' . $ticket->ticket_number . '-' . Str::random(4),
+                'task_code' => 'TSK-'.$ticket->ticket_number.'-'.Str::random(4),
                 'current_owner_id' => $assignedUser->id,
                 'current_owner_kind' => 'USER',
                 'start_at' => now(),
@@ -573,10 +578,10 @@ class AdminTicketController extends Controller
     public function destroy(Request $request, $ticket_id)
     {
         $forceDelete = $request->input('force_delete', false);
-        
-        if(!$forceDelete) {
+
+        if (! $forceDelete) {
             $ticket = Ticket::with('tasks')->find($ticket_id);
-            if (!$ticket) {
+            if (! $ticket) {
                 return response()->json(['message' => 'Ticket not found'], 404);
             }
             $hasPendingTasks = $ticket->tasks->contains(function ($task) {
@@ -585,20 +590,22 @@ class AdminTicketController extends Controller
 
             if ($hasPendingTasks) {
                 return response()->json([
-                    'message' => 'Cannot delete ticket: There are pending or in-progress tasks associated with this ticket.'
+                    'message' => 'Cannot delete ticket: There are pending or in-progress tasks associated with this ticket.',
                 ], 422);
             }
             $ticket->delete();
+
             return $this->show($ticket->id);
         } else {
             $ticket = Ticket::with('tasks')->onlyTrashed()->find($ticket_id);
-            if (!$ticket) {
+            if (! $ticket) {
                 return response()->json(['message' => 'Deleted Ticket not found'], 404);
             }
             $ticket->comments()->delete();
             $ticket->attachments()->delete();
             $ticket->tasks()->delete();
             $ticket->forceDelete();
+
             return response()->json(['message' => 'Ticket permanently deleted successfully'], 200);
         }
     }
@@ -609,10 +616,11 @@ class AdminTicketController extends Controller
     public function restore(Request $request, $ticket_id)
     {
         $ticket = Ticket::onlyTrashed()->find($ticket_id);
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
         }
         $ticket->restore();
+
         // redirect to ticket details page after restore but not as json
         return $this->show($ticket->id);
     }
@@ -624,7 +632,7 @@ class AdminTicketController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('ticket.approve')) {
+        if (! $user->hasPermission('ticket.approve')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -642,7 +650,7 @@ class AdminTicketController extends Controller
 
         return response()->json([
             'tickets' => $tickets,
-            'user_departments' => $userDepartments
+            'user_departments' => $userDepartments,
         ]);
     }
 
@@ -653,11 +661,11 @@ class AdminTicketController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('ticket.approve')) {
+        if (! $user->hasPermission('ticket.approve')) {
             return response()->json(['message' => 'Insufficient permissions to approve tickets'], 403);
         }
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
@@ -666,12 +674,11 @@ class AdminTicketController extends Controller
             return response()->json(['message' => 'Ticket cannot be approved in current status'], 422);
         }
 
-
         try {
             $ticket->update([
                 'status' => 'approved',
                 'approved_by' => $user->id,
-                'approved_at' => now()
+                'approved_at' => now(),
             ]);
 
             // Send notifications
@@ -684,12 +691,14 @@ class AdminTicketController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json([
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
     /**
      * Reject ticket (Admin only).
      */
@@ -697,12 +706,12 @@ class AdminTicketController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('ticket.approve')) {
+        if (! $user->hasPermission('ticket.approve')) {
             return response()->json(['message' => 'Insufficient permissions to reject tickets'], 403);
         }
 
         $ticket = Ticket::find($ticket_id);
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
@@ -714,12 +723,12 @@ class AdminTicketController extends Controller
             'status' => 'rejected',
             'rejection_reason' => $validated['rejection_reason'],
             'rejected_by' => $user->id,
-            'rejected_at' => now()
+            'rejected_at' => now(),
         ]);
 
         return response()->json([
             'message' => 'Ticket rejected successfully',
-            'ticket' => $ticket
+            'ticket' => $ticket,
         ]);
     }
 
@@ -730,26 +739,26 @@ class AdminTicketController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('ticket.update')) {
+        if (! $user->hasPermission('ticket.update')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $ticket = Ticket::find($ticket_id);
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
         $validated = $request->validate([
-            'status' => 'required|in:open,approved,in-progress,closed,cancelled,rejected'
+            'status' => 'required|in:open,approved,in-progress,closed,cancelled,rejected',
         ]);
 
         $ticket->update([
-            'status' => $validated['status']
+            'status' => $validated['status'],
         ]);
 
         return response()->json([
             'message' => 'Ticket status updated successfully',
-            'ticket' => $ticket
+            'ticket' => $ticket,
         ]);
     }
 
@@ -760,19 +769,19 @@ class AdminTicketController extends Controller
     public function checkTaskStatus(Request $request, $ticket_id)
     {
         $ticket = Ticket::with(['tasks.assignedUsers', 'tasks.assignedDepartment'])->find($ticket_id);
-        
-        if (!$ticket) {
+
+        if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
         $tasks = $ticket->tasks;
-        
+
         // Define terminal states that allow ticket closure
         $terminalStates = ['Done', 'Cancelled', 'Rejected'];
-        
+
         // Get incomplete tasks (tasks not in terminal states)
         $incompleteTasks = $tasks->filter(function ($task) use ($terminalStates) {
-            return !in_array($task->state, $terminalStates);
+            return ! in_array($task->state, $terminalStates);
         });
 
         // Format task details for response
@@ -811,6 +820,7 @@ class AdminTicketController extends Controller
             'tasks' => $taskDetails,
             'incomplete_task_details' => $incompleteTasks->map(function ($task) {
                 $primaryAssignee = $task->assignedUsers->first();
+
                 return [
                     'id' => $task->id,
                     'task_code' => $task->task_code,
@@ -869,21 +879,17 @@ class AdminTicketController extends Controller
         }
     }
 
-
-
     /**
      * Assign ticket to a user
      *
-     * @param Request $request
-     * @param Ticket $ticket
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function assignTicket(Request $request, Ticket $ticket)
     {
         $currentUser = User::find(Auth::user()->id);
 
         // Check permissions
-        if (!$currentUser->hasPermission('ticket.assign')) {
+        if (! $currentUser->hasPermission('ticket.assign')) {
             return response()->json(['message' => 'Insufficient permissions to assign ticket'], 403);
         }
 
@@ -905,10 +911,10 @@ class AdminTicketController extends Controller
         $taskInput = $validated['task'] ?? [];
 
         // Check if ticket can be assigned based on status
-        if (!in_array($ticket->status, ['open', 'approved', 'in-progress'])) {
+        if (! in_array($ticket->status, ['open', 'approved', 'in-progress'])) {
             return response()->json([
                 'message' => 'Ticket cannot be assigned in current status',
-                'current_status' => $ticket->status
+                'current_status' => $ticket->status,
             ], 422);
         }
 
@@ -948,7 +954,7 @@ class AdminTicketController extends Controller
                 ->orderByRaw("CASE priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 WHEN 'P4' THEN 4 ELSE 5 END")
                 ->first();
 
-            $taskTitle = trim((string)($taskInput['title'] ?? ''));
+            $taskTitle = trim((string) ($taskInput['title'] ?? ''));
             if ($taskTitle === '') {
                 $taskTitle = $ticket->title;
             }
@@ -958,7 +964,7 @@ class AdminTicketController extends Controller
             $taskDueAt = $taskInput['due_at'] ?? null;
             $taskEstimateHours = $taskInput['estimate_hours'] ?? null;
             $taskSlaPolicyId = $taskInput['sla_policy_id'] ?? $matchedSlaPolicy?->id;
-            $assignmentNotes = trim((string)($taskInput['assignment_notes'] ?? ''));
+            $assignmentNotes = trim((string) ($taskInput['assignment_notes'] ?? ''));
             if ($assignmentNotes === '') {
                 $assignmentNotes = 'Auto-assigned from Ticket';
             }
@@ -987,7 +993,7 @@ class AdminTicketController extends Controller
                 'sla_policy_id' => $taskSlaPolicyId,
                 'state' => 'Assigned',
                 'created_by' => $currentUser->id,
-                'task_code' => 'TSK-' . $ticket->ticket_number . '-' . Str::random(4),
+                'task_code' => 'TSK-'.$ticket->ticket_number.'-'.Str::random(4),
                 'current_owner_id' => $assignedUserId,
                 'current_owner_kind' => 'USER',
                 'start_at' => $taskStartAt,
@@ -1001,10 +1007,10 @@ class AdminTicketController extends Controller
             // Create ticket history record
             TicketHistory::create([
                 'ticket_id' => $ticket->id,
-                'old_status' => 'Removed user: ' . $previousAssignedTo,
-                'new_status' => 'Ticket assigned to ' . $assignedUser->name,
+                'old_status' => 'Removed user: '.$previousAssignedTo,
+                'new_status' => 'Ticket assigned to '.$assignedUser->name,
                 'changed_by' => $currentUser->id,
-                'created_at' => Carbon::now()
+                'created_at' => Carbon::now(),
             ]);
 
             Notification::createWorkflowNotification(
@@ -1016,8 +1022,15 @@ class AdminTicketController extends Controller
                     'ticket_id' => $ticket->id,
                     'ticket_number' => $ticket->ticket_number,
                     'assigned_by' => $currentUser->id,
-                    'assigned_by_name' => $currentUser->name
+                    'assigned_by_name' => $currentUser->name,
                 ]
+            );
+
+            $this->notificationService->sendTicketAssignmentExternalNotification(
+                $ticket->id,
+                $ticket->title,
+                $assignedUserId,
+                $currentUser->id
             );
 
             DB::commit();
@@ -1034,8 +1047,8 @@ class AdminTicketController extends Controller
                 'assigned_user' => [
                     'id' => $assignedUser->id,
                     'name' => $assignedUser->name,
-                    'email' => $assignedUser->email
-                ]
+                    'email' => $assignedUser->email,
+                ],
             ], 200);
 
         } catch (\Exception $e) {
@@ -1043,7 +1056,7 @@ class AdminTicketController extends Controller
 
             return response()->json([
                 'message' => 'Failed to assign ticket',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -1054,7 +1067,7 @@ class AdminTicketController extends Controller
     public function getTicketHistory($ticket_id)
     {
         $ticket = Ticket::find($ticket_id);
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
@@ -1062,23 +1075,24 @@ class AdminTicketController extends Controller
             ->with([
                 'changedBy' => function ($query) {
                     $query->select('id', 'name', 'email');
-                }
+                },
             ])
             ->orderBy('created_at', 'desc')
             ->get();
 
         return response()->json([
             'ticket_id' => $ticket_id,
-            'history' => $history
+            'history' => $history,
         ], 200);
     }
+
     /**
      * Get the next ticket number for a specific client.
      */
     public function getNextTicketNumber($client_id)
     {
         $client = Client::find($client_id);
-        if (!$client) {
+        if (! $client) {
             return response()->json(['message' => 'Client not found'], 404);
         }
 
@@ -1086,9 +1100,9 @@ class AdminTicketController extends Controller
         $date = now()->format('Y-m-d'); // year-month-date
         $time = now()->format('H:i');  // hour-minute
 
-        $baseCode = $clientName . '-' . $date . '-' . $time . '-';
+        $baseCode = $clientName.'-'.$date.'-'.$time.'-';
 
-        $latest = Ticket::where('ticket_number', 'LIKE', $baseCode . '%')
+        $latest = Ticket::where('ticket_number', 'LIKE', $baseCode.'%')
             ->orderBy('ticket_number', 'DESC')
             ->first();
 
@@ -1099,10 +1113,10 @@ class AdminTicketController extends Controller
             $nextNum = '001';
         }
 
-        $ticketNumber = $baseCode . $nextNum;
+        $ticketNumber = $baseCode.$nextNum;
 
         return response()->json([
-            'ticket_number' => $ticketNumber
+            'ticket_number' => $ticketNumber,
         ]);
     }
 }

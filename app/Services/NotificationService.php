@@ -6,9 +6,12 @@ use App\Events\NotificationEvent;
 use App\Events\TaskAssignedNotificationEvent;
 use App\Events\TaskForwardedNotificationEvent;
 use App\Events\TaskStatusChangedNotificationEvent;
+use App\Models\Department;
 use App\Models\Notification;
+use App\Models\Task;
+use App\Models\TaskComment;
+use App\Models\Ticket;
 use App\Models\User;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
 
@@ -20,10 +23,10 @@ class NotificationService
     public function sendToUser(int $userId, string $type, string $title, string $message, array $data = []): Notification
     {
         $notification = Notification::createWorkflowNotification($userId, $type, $title, $message, $data);
-        
+
         // Broadcast the notification
         $this->broadcastNotification($notification, $userId);
-        
+
         return $notification;
     }
 
@@ -50,7 +53,7 @@ class NotificationService
     public function sendToDepartment(int $departmentId, string $type, string $title, string $message, array $data = []): array
     {
         return Notification::notifyUsers(
-            \App\Models\Department::find($departmentId)->users()->pluck('id')->toArray(),
+            Department::find($departmentId)->users()->pluck('id')->toArray(),
             $type,
             $title,
             $message,
@@ -64,7 +67,7 @@ class NotificationService
     public function sendToDepartmentManagers(int $departmentId, string $type, string $title, string $message, array $data = []): array
     {
         return Notification::notifyUsers(
-            \App\Models\Department::find($departmentId)->getManagers()->pluck('id')->toArray(),
+            Department::find($departmentId)->getManagers()->pluck('id')->toArray(),
             $type,
             $title,
             $message,
@@ -89,7 +92,7 @@ class NotificationService
                 'task_id' => $taskId,
                 'task_title' => $taskTitle,
                 'assigned_by_id' => $assignedByUserId,
-                'assigned_by_name' => $assignedByUser->name ?? 'System'
+                'assigned_by_name' => $assignedByUser->name ?? 'System',
             ]
         );
 
@@ -104,7 +107,7 @@ class NotificationService
      */
     public function sendTaskStatusChangeNotification(int $taskId, string $taskTitle, string $newStatus, int $changedByUserId): Notification
     {
-        $task = \App\Models\Task::find($taskId);
+        $task = Task::find($taskId);
         $changedByUser = User::find($changedByUserId);
 
         // Notify task assignee
@@ -120,7 +123,7 @@ class NotificationService
                     'task_title' => $taskTitle,
                     'new_status' => $newStatus,
                     'changed_by_id' => $changedByUserId,
-                    'changed_by_name' => $changedByUser->name ?? 'System'
+                    'changed_by_name' => $changedByUser->name ?? 'System',
                 ]
             );
 
@@ -142,12 +145,12 @@ class NotificationService
                     'task_title' => $taskTitle,
                     'new_status' => $newStatus,
                     'changed_by_id' => $changedByUserId,
-                    'changed_by_name' => $changedByUser->name ?? 'System'
+                    'changed_by_name' => $changedByUser->name ?? 'System',
                 ]
             );
 
             // Broadcast to department users
-            $departmentUserIds = \App\Models\Department::find($task->assigned_department_id)->users()->pluck('id')->toArray();
+            $departmentUserIds = Department::find($task->assigned_department_id)->users()->pluck('id')->toArray();
             foreach ($departmentUserIds as $userId) {
                 broadcast(new TaskStatusChangedNotificationEvent($departmentNotifications[0], $userId))->toOthers();
             }
@@ -163,10 +166,10 @@ class NotificationService
      */
     public function sendTaskForwardingNotification(int $taskId, int $fromDepartmentId, int $toDepartmentId, string $reason, int $forwardedByUserId): array
     {
-        $task = \App\Models\Task::find($taskId);
+        $task = Task::find($taskId);
         $forwardedByUser = User::find($forwardedByUserId);
-        $fromDepartment = \App\Models\Department::find($fromDepartmentId);
-        $toDepartment = \App\Models\Department::find($toDepartmentId);
+        $fromDepartment = Department::find($fromDepartmentId);
+        $toDepartment = Department::find($toDepartmentId);
 
         $notifications = [];
 
@@ -185,12 +188,12 @@ class NotificationService
                 'to_department_name' => $toDepartment->name,
                 'reason' => $reason,
                 'forwarded_by_id' => $forwardedByUserId,
-                'forwarded_by_name' => $forwardedByUser->name ?? 'System'
+                'forwarded_by_name' => $forwardedByUser->name ?? 'System',
             ]
         );
 
         // Broadcast to department users
-        $departmentUserIds = \App\Models\Department::find($toDepartmentId)->users()->pluck('id')->toArray();
+        $departmentUserIds = Department::find($toDepartmentId)->users()->pluck('id')->toArray();
         foreach ($departmentUserIds as $userId) {
             broadcast(new TaskForwardedNotificationEvent($departmentNotifications[0], $userId))->toOthers();
         }
@@ -208,12 +211,12 @@ class NotificationService
                 'task_title' => $task->title,
                 'requires_approval' => true,
                 'forwarded_by_id' => $forwardedByUserId,
-                'forwarded_by_name' => $forwardedByUser->name ?? 'System'
+                'forwarded_by_name' => $forwardedByUser->name ?? 'System',
             ]
         );
 
         // Broadcast to department managers
-        $managerUserIds = \App\Models\Department::find($toDepartmentId)->getManagers()->pluck('id')->toArray();
+        $managerUserIds = Department::find($toDepartmentId)->getManagers()->pluck('id')->toArray();
         foreach ($managerUserIds as $userId) {
             broadcast(new TaskForwardedNotificationEvent($managerNotifications[0], $userId))->toOthers();
         }
@@ -228,7 +231,7 @@ class NotificationService
      */
     public function sendTaskForwardingAcceptanceNotification(int $taskId, int $acceptedByUserId, int $forwardedUserId): Notification
     {
-        $task = \App\Models\Task::find($taskId);
+        $task = Task::find($taskId);
         $acceptedByUser = User::find($acceptedByUserId);
         $forwardedUser = User::find($forwardedUserId);
 
@@ -241,7 +244,7 @@ class NotificationService
                 'task_id' => $taskId,
                 'task_title' => $task->title,
                 'accepted_by_id' => $acceptedByUserId,
-                'accepted_by_name' => $acceptedByUser->name
+                'accepted_by_name' => $acceptedByUser->name,
             ]
         );
     }
@@ -251,7 +254,7 @@ class NotificationService
      */
     public function sendTaskForwardingRejectionNotification(int $taskId, int $rejectedByUserId, int $forwardedUserId, string $reason): Notification
     {
-        $task = \App\Models\Task::find($taskId);
+        $task = Task::find($taskId);
         $rejectedByUser = User::find($rejectedByUserId);
         $forwardedUser = User::find($forwardedUserId);
 
@@ -265,7 +268,7 @@ class NotificationService
                 'task_title' => $task->title,
                 'rejected_by_id' => $rejectedByUserId,
                 'rejected_by_name' => $rejectedByUser->name,
-                'rejection_reason' => $reason
+                'rejection_reason' => $reason,
             ]
         );
     }
@@ -275,7 +278,7 @@ class NotificationService
      */
     public function sendTicketCreationNotification(int $ticketId, string $ticketTitle, int $createdByUserId): Notification
     {
-        $ticket = \App\Models\Ticket::find($ticketId);
+        $ticket = Ticket::find($ticketId);
         $createdByUser = User::find($createdByUserId);
 
         return $this->sendToUser(
@@ -287,7 +290,7 @@ class NotificationService
                 'ticket_id' => $ticketId,
                 'ticket_title' => $ticketTitle,
                 'created_by_id' => $createdByUserId,
-                'created_by_name' => $createdByUser->name ?? 'System'
+                'created_by_name' => $createdByUser->name ?? 'System',
             ]
         );
     }
@@ -297,7 +300,7 @@ class NotificationService
      */
     public function sendTicketStatusChangeNotification(int $ticketId, string $ticketTitle, string $newStatus, int $changedByUserId): Notification
     {
-        $ticket = \App\Models\Ticket::find($ticketId);
+        $ticket = Ticket::find($ticketId);
         $changedByUser = User::find($changedByUserId);
 
         return $this->sendToUser(
@@ -310,7 +313,7 @@ class NotificationService
                 'ticket_title' => $ticketTitle,
                 'new_status' => $newStatus,
                 'changed_by_id' => $changedByUserId,
-                'changed_by_name' => $changedByUser->name ?? 'System'
+                'changed_by_name' => $changedByUser->name ?? 'System',
             ]
         );
     }
@@ -320,7 +323,7 @@ class NotificationService
      */
     public function sendDepartmentAssignmentNotification(int $departmentId, int $assignedUserId, int $assignedByUserId): Notification
     {
-        $department = \App\Models\Department::find($departmentId);
+        $department = Department::find($departmentId);
         $assignedUser = User::find($assignedUserId);
         $assignedByUser = User::find($assignedByUserId);
 
@@ -333,7 +336,7 @@ class NotificationService
                 'department_id' => $departmentId,
                 'department_name' => $department->name,
                 'assigned_by_id' => $assignedByUserId,
-                'assigned_by_name' => $assignedByUser->name ?? 'System'
+                'assigned_by_name' => $assignedByUser->name ?? 'System',
             ]
         );
     }
@@ -343,7 +346,7 @@ class NotificationService
      */
     public function sendOverdueTaskNotification(int $taskId, string $taskTitle, int $assignedUserId): Notification
     {
-        $task = \App\Models\Task::find($taskId);
+        $task = Task::find($taskId);
 
         return $this->sendToUser(
             $assignedUserId,
@@ -353,7 +356,7 @@ class NotificationService
             [
                 'task_id' => $taskId,
                 'task_title' => $taskTitle,
-                'due_date' => $task->due_date
+                'due_date' => $task->due_date,
             ]
         );
     }
@@ -363,7 +366,7 @@ class NotificationService
      */
     public function sendDueTodayTaskNotification(int $taskId, string $taskTitle, int $assignedUserId): Notification
     {
-        $task = \App\Models\Task::find($taskId);
+        $task = Task::find($taskId);
 
         return $this->sendToUser(
             $assignedUserId,
@@ -373,7 +376,7 @@ class NotificationService
             [
                 'task_id' => $taskId,
                 'task_title' => $taskTitle,
-                'due_date' => $task->due_date
+                'due_date' => $task->due_date,
             ]
         );
     }
@@ -383,7 +386,7 @@ class NotificationService
      */
     public function sendCommentNotification(int $commentId, int $commentedUserId): Notification
     {
-        $comment = \App\Models\TaskComment::find($commentId);
+        $comment = TaskComment::find($commentId);
         $task = $comment->task;
 
         return $this->sendToUser(
@@ -395,7 +398,7 @@ class NotificationService
                 'comment_id' => $commentId,
                 'task_id' => $task->id,
                 'task_title' => $task->title,
-                'comment_text' => $comment->comment_text
+                'comment_text' => $comment->comment_text,
             ]
         );
     }
@@ -414,9 +417,9 @@ class NotificationService
     public function markAllAsRead(int $userId): void
     {
         Notification::whereHas('users', function ($query) use ($userId) {
-                $query->where('user_id', $userId)
-                      ->where('read', false);
-            })
+            $query->where('user_id', $userId)
+                ->where('read', false);
+        })
             ->get()
             ->each(function ($notification) use ($userId) {
                 $notification->markAsReadForUser($userId);
@@ -450,8 +453,8 @@ class NotificationService
     /**
      * Send WhatsApp message to a phone number.
      *
-     * @param string $phone Phone number to send WhatsApp message to
-     * @param string $message Message content
+     * @param  string  $phone  Phone number to send WhatsApp message to
+     * @param  string  $message  Message content
      * @return bool True if WhatsApp message was sent successfully, false otherwise
      */
     public function sendWhatsApp(string $phone, string $message): bool
@@ -460,26 +463,27 @@ class NotificationService
         // mostly we have 9876543210 but if we have country code then it should be like 919876543210
         // if length is 10, we can assume it's a local number and prepend country code
         if (strlen($phone) === 10) {
-            $phone = '91' . $phone; // Assuming country code 91 for India, adjust as needed
+            $phone = '91'.$phone; // Assuming country code 91 for India, adjust as needed
         }
         // check if phone number is valid (basic check for digits and length)
-        if (!preg_match('/^\d{10,15}$/', $phone)) {
+        if (! preg_match('/^\d{10,15}$/', $phone)) {
             Log::warning('Invalid phone number format for WhatsApp notification', ['phone' => $phone]);
+
             return false;
         }
-
 
         $apiToken = config('services.whatsapp.api_token');
         $url = config('services.whatsapp.url', 'https://social.ednect.com/api/UWAPGet/send');
         $isGroup = config('services.whatsapp.is_group', 'false');
 
-        if (!$apiToken) {
+        if (! $apiToken) {
             Log::warning('WhatsApp API token not configured');
+
             return false;
         }
 
         // Build the URL with query parameters
-        $fullUrl = $url . '?apitoken=' . $apiToken . '&phoneno=' . urlencode($phone) . '&sms=' . urlencode($message) . '&isgroup=' . $isGroup;
+        $fullUrl = $url.'?apitoken='.$apiToken.'&phoneno='.urlencode($phone).'&sms='.urlencode($message).'&isgroup='.$isGroup;
 
         $ch = curl_init($fullUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -491,8 +495,9 @@ class NotificationService
         $result = curl_exec($ch);
 
         if ($result === false) {
-            Log::error('WhatsApp cURL error: ' . curl_error($ch));
+            Log::error('WhatsApp cURL error: '.curl_error($ch));
             curl_close($ch);
+
             return false;
         }
 
@@ -505,13 +510,14 @@ class NotificationService
             if (isset($firstResponse['status']) && $firstResponse['status'] === 'Success') {
                 Log::info('WhatsApp message sent successfully', [
                     'phone' => $phone,
-                    'response' => $firstResponse
+                    'response' => $firstResponse,
                 ]);
+
                 return true;
             } else {
                 Log::warning('WhatsApp message failed', [
                     'phone' => $phone,
-                    'response' => $firstResponse
+                    'response' => $firstResponse,
                 ]);
             }
         }
@@ -532,7 +538,7 @@ class NotificationService
             'senderid' => $senderId,
             'number' => $phone,
             'message' => $message,
-            'format' => 'json'
+            'format' => 'json',
         ];
 
         $url = config('services.sms.url', 'https://msgn.mtalkz.com/api');
@@ -550,6 +556,7 @@ class NotificationService
 
         if ($result === false) {
             curl_close($ch);
+
             return false;
         }
 
@@ -582,10 +589,10 @@ class NotificationService
      * Send notification to employee via WhatsApp, SMS, or Email.
      * First tries WhatsApp, then falls back to SMS, then email, then logs error if all fail.
      *
-     * @param int $userId The user to notify
-     * @param string $subject The notification subject/title
-     * @param string $message The notification message
-     * @param int $assignedByUserId The user who triggered the notification (to check if it's not self-action)
+     * @param  int  $userId  The user to notify
+     * @param  string  $subject  The notification subject/title
+     * @param  string  $message  The notification message
+     * @param  int  $assignedByUserId  The user who triggered the notification (to check if it's not self-action)
      */
     public function notifyEmployee(int $userId, string $subject, string $message, int $assignedByUserId): void
     {
@@ -595,16 +602,13 @@ class NotificationService
         }
 
         $user = User::find($userId);
-        if (!$user) {
+        if (! $user) {
             return;
         }
 
-        // Get phone number from employee profile
-        $phone = null;
-        if ($user->employee) {
-            $phone = $user->employee->phone;
-            $email = $user->employee->email;
-        }
+        // Prefer employee contact details, then fall back to user record.
+        $phone = $user->employee?->phone ?? $user->phone;
+        $email = $user->employee?->email ?? $user->email;
 
         // Try WhatsApp first
         if ($phone) {
@@ -630,8 +634,8 @@ class NotificationService
             }
         }
 
-        // Employee email failed or not available, try user email
-        if ($user->email) {
+        // Employee and fallback email failed or not available, try user email if different.
+        if ($user->email && $user->email !== $email) {
             $emailSent = $this->sendEmail($user->email, $subject, $message);
             if ($emailSent) {
                 return; // Success
@@ -653,17 +657,17 @@ class NotificationService
             'message' => $message,
             'phone' => $phone,
             'email' => $email,
-            'reason' => $phone ? 'WhatsApp, SMS, and email failed' : 'No phone number and email failed'
+            'reason' => $phone ? 'WhatsApp, SMS, and email failed' : 'No phone number and email failed',
         ]);
     }
 
     /**
      * Send task assignment notification via SMS/Email to the assigned user.
      *
-     * @param int $taskId The task ID
-     * @param string $taskTitle The task title
-     * @param int $assignedUserId The user being assigned
-     * @param int $assignedByUserId The user who assigned the task
+     * @param  int  $taskId  The task ID
+     * @param  string  $taskTitle  The task title
+     * @param  int  $assignedUserId  The user being assigned
+     * @param  int  $assignedByUserId  The user who assigned the task
      */
     public function sendTaskAssignmentExternalNotification(int $taskId, string $taskTitle, int $assignedUserId, int $assignedByUserId): void
     {
@@ -671,7 +675,7 @@ class NotificationService
         $assignedByName = $assignedByUser->name ?? 'System';
 
         $subject = 'New Task Assigned';
-        $taskUrl = config('app.url') . '/my/tasks/' . $taskId;
+        $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "You have been assigned to task: {$taskTitle}. Assigned by: {$assignedByName}. View: {$taskUrl}";
 
         $this->notifyEmployee($assignedUserId, $subject, $message, $assignedByUserId);
@@ -680,11 +684,11 @@ class NotificationService
     /**
      * Send task status change notification via SMS/Email.
      *
-     * @param int $taskId The task ID
-     * @param string $taskTitle The task title
-     * @param string $newStatus The new status
-     * @param int $changedByUserId The user who changed the status
-     * @param int $notifyUserId The user to notify
+     * @param  int  $taskId  The task ID
+     * @param  string  $taskTitle  The task title
+     * @param  string  $newStatus  The new status
+     * @param  int  $changedByUserId  The user who changed the status
+     * @param  int  $notifyUserId  The user to notify
      */
     public function sendTaskStatusChangeExternalNotification(int $taskId, string $taskTitle, string $newStatus, int $changedByUserId, int $notifyUserId): void
     {
@@ -692,7 +696,7 @@ class NotificationService
         $changedByName = $changedByUser->name ?? 'System';
 
         $subject = 'Task Status Updated';
-        $taskUrl = config('app.url') . '/my/tasks/' . $taskId;
+        $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "Task '{$taskTitle}' status changed to: {$newStatus}. Changed by: {$changedByName}. View: {$taskUrl}";
 
         $this->notifyEmployee($notifyUserId, $subject, $message, $changedByUserId);
@@ -701,12 +705,12 @@ class NotificationService
     /**
      * Send task forwarding notification via SMS/Email.
      *
-     * @param int $taskId The task ID
-     * @param string $taskTitle The task title
-     * @param string $fromDepartmentName Source department
-     * @param string $toDepartmentName Target department
-     * @param int $forwardedByUserId The user who forwarded the task
-     * @param int $notifyUserId The user to notify
+     * @param  int  $taskId  The task ID
+     * @param  string  $taskTitle  The task title
+     * @param  string  $fromDepartmentName  Source department
+     * @param  string  $toDepartmentName  Target department
+     * @param  int  $forwardedByUserId  The user who forwarded the task
+     * @param  int  $notifyUserId  The user to notify
      */
     public function sendTaskForwardExternalNotification(int $taskId, string $taskTitle, string $fromDepartmentName, string $toDepartmentName, int $forwardedByUserId, int $notifyUserId): void
     {
@@ -714,7 +718,7 @@ class NotificationService
         $forwardedByName = $forwardedByUser->name ?? 'System';
 
         $subject = 'Task Forwarded to Your Department';
-        $taskUrl = config('app.url') . '/my/tasks/' . $taskId;
+        $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "Task '{$taskTitle}' has been forwarded from {$fromDepartmentName} to {$toDepartmentName}. Forwarded by: {$forwardedByName}. View: {$taskUrl}";
 
         $this->notifyEmployee($notifyUserId, $subject, $message, $forwardedByUserId);
@@ -723,10 +727,10 @@ class NotificationService
     /**
      * Send ticket assignment notification via SMS/Email.
      *
-     * @param int $ticketId The ticket ID
-     * @param string $ticketTitle The ticket title
-     * @param int $assignedUserId The user being assigned
-     * @param int $assignedByUserId The user who assigned the ticket
+     * @param  int  $ticketId  The ticket ID
+     * @param  string  $ticketTitle  The ticket title
+     * @param  int  $assignedUserId  The user being assigned
+     * @param  int  $assignedByUserId  The user who assigned the ticket
      */
     public function sendTicketAssignmentExternalNotification(int $ticketId, string $ticketTitle, int $assignedUserId, int $assignedByUserId): void
     {
@@ -734,7 +738,7 @@ class NotificationService
         $assignedByName = $assignedByUser->name ?? 'System';
 
         $subject = 'New Ticket Assigned';
-        $ticketUrl = config('app.url') . '/tickets/' . $ticketId;
+        $ticketUrl = config('app.url').'/tickets/'.$ticketId;
         $message = "You have been assigned to ticket: {$ticketTitle}. Assigned by: {$assignedByName}. View: {$ticketUrl}";
 
         $this->notifyEmployee($assignedUserId, $subject, $message, $assignedByUserId);
