@@ -284,7 +284,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         const tasks = ticket.tasks || [];
         return {
             total: tasks.length,
-            pending: tasks.filter((t: Task) => t.state == 'Draft').length,
+            pending: tasks.filter((t: Task) => (t.state == 'Draft' || t.state == 'Assigned')).length,
             inProgress: tasks.filter((t: Task) => t.state == 'InProgress')
                 .length,
             completed: tasks.filter((t: Task) => t.state == 'Done').length,
@@ -339,7 +339,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                 console.log(err.message);
                 toast.error(
                     'Failed to assign ticket: ' +
-                        (err.response?.data?.message || err.message),
+                    (err.response?.data?.message || err.message),
                 );
             })
             .finally(() => {
@@ -384,7 +384,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .catch((err) => {
                 toast.error(
                     'Failed to close ticket: ' +
-                        (err.response?.data?.message || err.message),
+                    (err.response?.data?.message || err.message),
                 );
             })
             .finally(() => {
@@ -406,7 +406,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .catch((err) => {
                 toast.error(
                     'Failed to reopen ticket: ' +
-                        (err.response?.data?.message || err.message),
+                    (err.response?.data?.message || err.message),
                 );
             })
             .finally(() => {
@@ -428,7 +428,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .catch((err) => {
                 toast.error(
                     'Failed to update ticket: ' +
-                        (err.response?.data?.message || err.message),
+                    (err.response?.data?.message || err.message),
                 );
             })
             .finally(() => {
@@ -487,7 +487,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .catch((err) => {
                 toast.error(
                     'Failed to cancel ticket: ' +
-                        (err.response?.data?.message || err.message),
+                    (err.response?.data?.message || err.message),
                 );
             })
             .finally(() => {
@@ -578,12 +578,12 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         cancelText?: string;
         isOpen: boolean;
         confirmButtonVariant?:
-            | 'default'
-            | 'destructive'
-            | 'outline'
-            | 'secondary'
-            | 'ghost'
-            | 'link';
+        | 'default'
+        | 'destructive'
+        | 'outline'
+        | 'secondary'
+        | 'ghost'
+        | 'link';
     }) => {
         return (
             <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
@@ -745,8 +745,8 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                             <span className="text-sm font-medium">
                                                 {ticket.deleted_at
                                                     ? formatDate(
-                                                          ticket.deleted_at,
-                                                      )
+                                                        ticket.deleted_at,
+                                                    )
                                                     : 'N/A'}
                                             </span>
                                         </div>
@@ -802,15 +802,15 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                         'approved',
                                         'in-progress',
                                     ].includes(ticket.status) && (
-                                        <DropdownMenuItem
-                                            onClick={() =>
-                                                checkTasksBeforeAction('close')
-                                            }
-                                        >
-                                            <CheckCircle className="mr-2 h-4 w-4" />
-                                            Close Ticket
-                                        </DropdownMenuItem>
-                                    )}
+                                            <DropdownMenuItem
+                                                onClick={() =>
+                                                    checkTasksBeforeAction('close')
+                                                }
+                                            >
+                                                <CheckCircle className="mr-2 h-4 w-4" />
+                                                Close Ticket
+                                            </DropdownMenuItem>
+                                        )}
 
                                     {/* Reopen Ticket - show for closed or cancelled status */}
                                     {['closed', 'cancelled'].includes(
@@ -868,16 +868,16 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                         'approved',
                                         'in-progress',
                                     ].includes(ticket.status) && (
-                                        <DropdownMenuItem
-                                            className="text-orange-600"
-                                            onClick={() =>
-                                                checkTasksBeforeAction('cancel')
-                                            }
-                                        >
-                                            <XCircle className="mr-2 h-4 w-4" />
-                                            Cancel Ticket
-                                        </DropdownMenuItem>
-                                    )}
+                                            <DropdownMenuItem
+                                                className="text-orange-600"
+                                                onClick={() =>
+                                                    checkTasksBeforeAction('cancel')
+                                                }
+                                            >
+                                                <XCircle className="mr-2 h-4 w-4" />
+                                                Cancel Ticket
+                                            </DropdownMenuItem>
+                                        )}
 
                                     {/* Reject action */}
                                     {ticket.status !== 'cancelled' &&
@@ -1026,205 +1026,157 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                                 'approved',
                                                 'in-progress',
                                             ].includes(ticket.status) && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        setShowUserAssignment(
-                                                            true,
-                                                        )
-                                                    }
-                                                >
-                                                    <User className="mr-2 h-4 w-4" />
-                                                    {ticket.assigned_to
-                                                        ? 'Reassign'
-                                                        : 'Assign User'}
-                                                </Button>
-                                            )}
-                                        </div>
-
-                                        {/* Status Change */}
-                                        <div className="space-y-3">
-                                            <span className="text-sm font-medium">
-                                                Status
-                                            </span>
-                                            <div className="rounded-lg border p-3">
-                                                {getStatusBadge(ticket.status)}
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {[
-                                                    'open',
-                                                    'approved',
-                                                    'in-progress',
-                                                ].includes(ticket.status) && (
-                                                    <>
-                                                        {ticket.status ===
-                                                            'open' && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={
-                                                                    handleApproveTicket
-                                                                }
-                                                                disabled={
-                                                                    isApproving
-                                                                }
-                                                            >
-                                                                <CheckCircle className="mr-2 h-4 w-4" />
-                                                                Approve
-                                                            </Button>
-                                                        )}
-                                                        {ticket.status ===
-                                                            'approved' && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={
-                                                                    handleMarkInProgress
-                                                                }
-                                                                disabled={
-                                                                    isApproving
-                                                                }
-                                                            >
-                                                                <Clock className="mr-2 h-4 w-4" />
-                                                                Mark In Progress
-                                                            </Button>
-                                                        )}
-                                                        {[
-                                                            'open',
-                                                            'approved',
-                                                            'in-progress',
-                                                        ].includes(
-                                                            ticket.status,
-                                                        ) && (
-                                                            <>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() =>
-                                                                        checkTasksBeforeAction(
-                                                                            'close',
-                                                                        )
-                                                                    }
-                                                                    disabled={
-                                                                        isApproving
-                                                                    }
-                                                                >
-                                                                    <CheckCircle className="mr-2 h-4 w-4" />
-                                                                    Close
-                                                                </Button>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="text-orange-600"
-                                                                    onClick={() =>
-                                                                        checkTasksBeforeAction(
-                                                                            'cancel',
-                                                                        )
-                                                                    }
-                                                                    disabled={
-                                                                        isApproving
-                                                                    }
-                                                                >
-                                                                    <XCircle className="mr-2 h-4 w-4" />
-                                                                    Cancel
-                                                                </Button>
-                                                            </>
-                                                        )}
-                                                    </>
-                                                )}
-                                                {[
-                                                    'closed',
-                                                    'cancelled',
-                                                ].includes(ticket.status) && (
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        onClick={
-                                                            handleReopenTicket
+                                                        onClick={() =>
+                                                            setShowUserAssignment(
+                                                                true,
+                                                            )
                                                         }
-                                                        disabled={isApproving}
                                                     >
-                                                        <Clock className="mr-2 h-4 w-4" />
-                                                        Reopen
+                                                        <User className="mr-2 h-4 w-4" />
+                                                        {ticket.assigned_to
+                                                            ? 'Reassign'
+                                                            : 'Assign User'}
                                                     </Button>
                                                 )}
-                                                {ticket.status !==
-                                                    'cancelled' &&
-                                                    ticket.status !==
-                                                        'closed' &&
-                                                    ticket.status !==
-                                                        'rejected' && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="text-red-600"
-                                                            onClick={() =>
-                                                                checkTasksBeforeAction(
-                                                                    'reject',
-                                                                )
-                                                            }
-                                                            disabled={
-                                                                isApproving
-                                                            }
-                                                        >
-                                                            <XCircle className="mr-2 h-4 w-4" />
-                                                            Reject
-                                                        </Button>
-                                                    )}
-                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Approval Info */}
                                     {(ticket.approved_by ||
                                         ticket.approved_at) && (
-                                        <div className="border-t pt-4">
-                                            <span className="text-sm font-medium">
-                                                Approval Information
-                                            </span>
-                                            <div className="mt-2 flex items-center gap-3">
-                                                {ticket.approved_by && (
-                                                    <>
-                                                        <Avatar className="h-8 w-8">
-                                                            <AvatarImage
-                                                                src={
-                                                                    ticket
-                                                                        .approved_by
-                                                                        .avatar
-                                                                }
-                                                            />
-                                                            <AvatarFallback>
-                                                                {getInitials(
-                                                                    ticket
-                                                                        .approved_by
-                                                                        .name,
-                                                                )}
-                                                            </AvatarFallback>
-                                                        </Avatar>
-                                                        <div>
-                                                            <p className="text-sm font-medium">
-                                                                Approved by{' '}
-                                                                {
-                                                                    ticket
-                                                                        .approved_by
-                                                                        .name
-                                                                }
-                                                            </p>
-                                                            {ticket.approved_at && (
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    {formatDate(
-                                                                        ticket.approved_at,
+                                            <div className="border-t pt-4">
+                                                <span className="text-sm font-medium">
+                                                    Approval Information
+                                                </span>
+                                                <div className="mt-2 flex items-center gap-3">
+                                                    {ticket.approved_by && (
+                                                        <>
+                                                            <Avatar className="h-8 w-8">
+                                                                <AvatarImage
+                                                                    src={
+                                                                        ticket
+                                                                            .approved_by
+                                                                            .avatar
+                                                                    }
+                                                                />
+                                                                <AvatarFallback>
+                                                                    {getInitials(
+                                                                        ticket
+                                                                            .approved_by
+                                                                            .name,
                                                                     )}
+                                                                </AvatarFallback>
+                                                            </Avatar>
+                                                            <div>
+                                                                <p className="text-sm font-medium">
+                                                                    Approved by{' '}
+                                                                    {
+                                                                        ticket
+                                                                            .approved_by
+                                                                            .name
+                                                                    }
                                                                 </p>
-                                                            )}
-                                                        </div>
-                                                    </>
-                                                )}
+                                                                {ticket.approved_at && (
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {formatDate(
+                                                                            ticket.approved_at,
+                                                                        )}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                {/* Related Tasks Summary */}
+
+                                {ticket.tasks &&
+                                    ticket.tasks.length > 0 && (
+                                        <div className="space-y-3">
+                                            <span className="text-sm font-medium">
+                                                Tasks Summary (
+                                                {ticket.tasks.length})
+                                            </span>
+                                            <div className="rounded-lg border p-3">
+                                                <div className="mb-3 flex flex-wrap gap-2">
+                                                    <Badge variant="outline">
+                                                        {
+                                                            taskStats.total
+                                                        }{' '}
+                                                        Total
+                                                    </Badge>
+                                                    <Badge variant="secondary">
+                                                        {
+                                                            taskStats.pending
+                                                        }{' '}
+                                                        Pending
+                                                    </Badge>
+                                                    <Badge className="bg-blue-100 text-blue-700">
+                                                        {
+                                                            taskStats.inProgress
+                                                        }{' '}
+                                                        In Progress
+                                                    </Badge>
+                                                    <Badge className="bg-green-100 text-green-700">
+                                                        {
+                                                            taskStats.completed
+                                                        }{' '}
+                                                        Completed
+                                                    </Badge>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {ticket.tasks
+                                                        .slice(0, 3)
+                                                        .map(
+                                                            (
+                                                                task: Task,
+                                                            ) => (
+                                                                <div
+                                                                    key={
+                                                                        task.id
+                                                                    }
+                                                                    className="flex items-center justify-between text-sm"
+                                                                >
+                                                                    <Link
+                                                                        href={`/admin/tasks/${task.id}`}
+                                                                        className="hover:underline"
+                                                                    >
+                                                                        <div className="">
+                                                                            <h3>{task.title}</h3>
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                {
+                                                                                    task.task_code
+                                                                                }
+                                                                            </p>
+                                                                        </div>
+                                                                    </Link>
+                                                                    {getTaskStatusBadge(
+                                                                        task.state,
+                                                                    )}
+                                                                </div>
+                                                            ),
+                                                        )}
+                                                    {ticket.tasks
+                                                        .length > 3 && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                +
+                                                                {ticket
+                                                                    .tasks
+                                                                    .length -
+                                                                    3}{' '}
+                                                                more tasks
+                                                            </p>
+                                                        )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
                                 </CardContent>
+
                             </Card>
 
                             {/* 3. Attachments */}
@@ -1339,14 +1291,14 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                                         </p>
                                                         {ticket.client
                                                             .phone && (
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {
-                                                                    ticket
-                                                                        .client
-                                                                        .phone
-                                                                }
-                                                            </p>
-                                                        )}
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    {
+                                                                        ticket
+                                                                            .client
+                                                                            .phone
+                                                                    }
+                                                                </p>
+                                                            )}
                                                     </div>
                                                 </div>
                                             )}
@@ -1368,24 +1320,24 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                                     </p>
                                                     {ticket.organization_user
                                                         .designation && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {
-                                                                ticket
-                                                                    .organization_user
-                                                                    .designation
-                                                            }
-                                                        </p>
-                                                    )}
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {
+                                                                    ticket
+                                                                        .organization_user
+                                                                        .designation
+                                                                }
+                                                            </p>
+                                                        )}
                                                     {ticket.organization_user
                                                         .email && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {
-                                                                ticket
-                                                                    .organization_user
-                                                                    .email
-                                                            }
-                                                        </p>
-                                                    )}
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {
+                                                                    ticket
+                                                                        .organization_user
+                                                                        .email
+                                                                }
+                                                            </p>
+                                                        )}
                                                 </div>
                                             )}
                                         </div>
@@ -1439,83 +1391,6 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                             </div>
                                         </div>
 
-                                        {/* Related Tasks Summary */}
-                                        {ticket.tasks &&
-                                            ticket.tasks.length > 0 && (
-                                                <div className="space-y-3">
-                                                    <span className="text-sm font-medium">
-                                                        Tasks Summary (
-                                                        {ticket.tasks.length})
-                                                    </span>
-                                                    <div className="rounded-lg border p-3">
-                                                        <div className="mb-3 flex flex-wrap gap-2">
-                                                            <Badge variant="outline">
-                                                                {
-                                                                    taskStats.total
-                                                                }{' '}
-                                                                Total
-                                                            </Badge>
-                                                            <Badge variant="secondary">
-                                                                {
-                                                                    taskStats.pending
-                                                                }{' '}
-                                                                Pending
-                                                            </Badge>
-                                                            <Badge className="bg-blue-100 text-blue-700">
-                                                                {
-                                                                    taskStats.inProgress
-                                                                }{' '}
-                                                                In Progress
-                                                            </Badge>
-                                                            <Badge className="bg-green-100 text-green-700">
-                                                                {
-                                                                    taskStats.completed
-                                                                }{' '}
-                                                                Completed
-                                                            </Badge>
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            {ticket.tasks
-                                                                .slice(0, 3)
-                                                                .map(
-                                                                    (
-                                                                        task: Task,
-                                                                    ) => (
-                                                                        <div
-                                                                            key={
-                                                                                task.id
-                                                                            }
-                                                                            className="flex items-center justify-between text-sm"
-                                                                        >
-                                                                            <Link
-                                                                                href={`/admin/tasks/${task.id}`}
-                                                                                className="hover:underline"
-                                                                            >
-                                                                                {
-                                                                                    task.title
-                                                                                }
-                                                                            </Link>
-                                                                            {getTaskStatusBadge(
-                                                                                task.state,
-                                                                            )}
-                                                                        </div>
-                                                                    ),
-                                                                )}
-                                                            {ticket.tasks
-                                                                .length > 3 && (
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    +
-                                                                    {ticket
-                                                                        .tasks
-                                                                        .length -
-                                                                        3}{' '}
-                                                                    more tasks
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
 
                                         {/* Rejection Reason */}
                                         {ticket.rejection_reason && (
@@ -1532,86 +1407,6 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                                 </div>
                                             </div>
                                         )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* 6. Advanced Actions */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Settings className="h-4 w-4" />
-                                        Advanced Actions
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex flex-wrap gap-2">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                >
-                                                    <Settings className="mr-2 h-4 w-4" />
-                                                    More Actions
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuLabel>
-                                                    Ticket Actions
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem asChild>
-                                                    <Link
-                                                        href={`/admin/tickets/${ticket.id}/edit`}
-                                                    >
-                                                        <Edit className="mr-2 h-4 w-4" />
-                                                        Edit Ticket
-                                                    </Link>
-                                                </DropdownMenuItem>
-                                                {ticket.status === 'open' &&
-                                                    (!ticket.tasks ||
-                                                        ticket.tasks.length ===
-                                                            0) && (
-                                                        <>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                className="text-red-600 focus:bg-red-50"
-                                                                onClick={
-                                                                    handleDeleteTicket
-                                                                }
-                                                            >
-                                                                <Trash className="mr-2 h-4 w-4" />
-                                                                Delete Ticket
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
-                                                {ticket.deleted_at && (
-                                                    <>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                            onClick={() =>
-                                                                router.post(
-                                                                    `/admin/tickets/${ticket.id}/restore`,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            Restore Ticket
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            className="text-red-800 focus:bg-red-100"
-                                                            onClick={
-                                                                handlePermanentDeleteTicket
-                                                            }
-                                                        >
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            Permanent Delete
-                                                        </DropdownMenuItem>
-                                                    </>
-                                                )}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -1739,11 +1534,10 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                             {taskCheckData?.tasks?.map((task) => (
                                 <div
                                     key={task.id}
-                                    className={`flex items-center justify-between rounded-lg border p-3 ${
-                                        task.is_completed
-                                            ? 'border-green-200 bg-green-50'
-                                            : 'border-orange-200 bg-orange-50'
-                                    }`}
+                                    className={`flex items-center justify-between rounded-lg border p-3 ${task.is_completed
+                                        ? 'border-green-200 bg-green-50'
+                                        : 'border-orange-200 bg-orange-50'
+                                        }`}
                                 >
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">

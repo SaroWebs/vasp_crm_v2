@@ -135,21 +135,7 @@ export default function TicketHistory({ ticketId }: TicketHistoryProps) {
     }
 
     if (history.length === 0) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                        <Activity className="h-4 w-4" />
-                        <span>Ticket History</span>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-center py-4 text-gray-500">
-                        No history available for this ticket
-                    </div>
-                </CardContent>
-            </Card>
-        );
+        return null;
     }
 
     return (

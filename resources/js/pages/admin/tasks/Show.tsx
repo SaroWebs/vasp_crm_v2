@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import TaskAssignmentModal from '@/components/TaskAssignmentModal';
 import TaskComments from '@/components/tasks/task-comments';
 import { TaskFileAttachment } from '@/components/tasks/TaskFileAttachment';
 import { TaskMetrics } from '@/components/tasks/TaskMetrics';
 import { TaskMilestones } from '@/components/tasks/TaskMilestones';
-import TaskAssignmentModal from '@/components/TaskAssignmentModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +12,15 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,15 +32,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
 import AppLayout from '@/layouts/app-layout';
 import { Task, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
@@ -57,7 +56,7 @@ import {
     UserPlus,
     XCircle,
 } from 'lucide-react';
-
+import { useState } from 'react';
 
 interface TasksShowProps {
     task: Task;
@@ -157,24 +156,52 @@ export default function Show({ task, authUser }: TasksShowProps) {
     const isDeleted = task.deleted_at;
 
     // Determine if current user is the task creator (own task)
-    const isOwnTask = task.created_by?.id === authUser?.id || task.createdBy?.id === authUser?.id;
+    const isOwnTask =
+        task.created_by?.id === authUser?.id ||
+        task.createdBy?.id === authUser?.id;
     const isSuperAdmin = authUser?.is_super_admin ?? false;
 
     // Define valid state transitions based on current task state
-    const getValidStateTransitions = (currentState: Task['state']): Task['state'][] => {
+    const getValidStateTransitions = (
+        currentState: Task['state'],
+    ): Task['state'][] => {
         switch (currentState) {
             case 'Draft':
                 return ['Assigned', 'Blocked', 'Cancelled', 'Rejected'];
             case 'Assigned':
-                return ['InProgress', 'Blocked', 'Cancelled', 'Rejected', 'Draft'];
+                return [
+                    'InProgress',
+                    'Blocked',
+                    'Cancelled',
+                    'Rejected',
+                    'Draft',
+                ];
             case 'InProgress':
-                return ['InReview', 'Blocked', 'Cancelled', 'Rejected', 'Assigned'];
+                return [
+                    'InReview',
+                    'Blocked',
+                    'Cancelled',
+                    'Rejected',
+                    'Assigned',
+                ];
             case 'InReview':
-                return ['Done', 'Blocked', 'Cancelled', 'Rejected', 'InProgress'];
+                return [
+                    'Done',
+                    'Blocked',
+                    'Cancelled',
+                    'Rejected',
+                    'InProgress',
+                ];
             case 'Done':
                 return ['InReview', 'Cancelled', 'Rejected'];
             case 'Blocked':
-                return ['Assigned', 'InProgress', 'Cancelled', 'Rejected', 'Draft'];
+                return [
+                    'Assigned',
+                    'InProgress',
+                    'Cancelled',
+                    'Rejected',
+                    'Draft',
+                ];
             case 'Cancelled':
                 return ['Draft', 'Assigned'];
             case 'Rejected':
@@ -270,7 +297,9 @@ export default function Show({ task, authUser }: TasksShowProps) {
             })
             .catch((err) => {
                 console.error(err);
-                alert(err.response?.data?.message || 'Failed to extend due date');
+                alert(
+                    err.response?.data?.message || 'Failed to extend due date',
+                );
             })
             .finally(() => {
                 setIsExtending(false);
@@ -320,10 +349,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                         <p className="text-muted-foreground">
                             Task {task.task_code && `• ${task.task_code}`} •
                             Created{' '}
-                            {format(
-                                new Date(task.created_at),
-                                'MMM dd, yyyy',
-                            )}
+                            {format(new Date(task.created_at), 'MMM dd, yyyy')}
                             {isDeleted &&
                                 task.deleted_at &&
                                 ` • Deleted ${format(new Date(task.deleted_at), 'MMM dd, yyyy')}`}
@@ -343,21 +369,26 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         Update State
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator />
-                                    {getValidStateTransitions(task.state).map((newState) => (
-                                        <DropdownMenuItem
-                                            key={newState}
-                                            onClick={() => handleStatusChange(newState)}
-                                        >
-                                            {getStatusIcon(newState)}
-                                            <span className="ml-2 capitalize">
-                                                {newState === 'InProgress'
-                                                    ? 'Mark as In Progress'
-                                                    : newState === 'InReview'
-                                                        ? 'Mark as In Review'
-                                                        : `Mark as ${newState}`}
-                                            </span>
-                                        </DropdownMenuItem>
-                                    ))}
+                                    {getValidStateTransitions(task.state).map(
+                                        (newState) => (
+                                            <DropdownMenuItem
+                                                key={newState}
+                                                onClick={() =>
+                                                    handleStatusChange(newState)
+                                                }
+                                            >
+                                                {getStatusIcon(newState)}
+                                                <span className="ml-2 capitalize">
+                                                    {newState === 'InProgress'
+                                                        ? 'Mark as In Progress'
+                                                        : newState ===
+                                                            'InReview'
+                                                          ? 'Mark as In Review'
+                                                          : `Mark as ${newState}`}
+                                                </span>
+                                            </DropdownMenuItem>
+                                        ),
+                                    )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         )}
@@ -400,6 +431,18 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 {!isDeleted && (
+                                    <DropdownMenuItem
+                                        className="text-blue-600"
+                                        onClick={() =>
+                                            setIsAssignmentModalOpen(true)
+                                        }
+                                        disabled={isDeleting || isForceDeleting}
+                                    >
+                                        <UserPlus className="mr-2 h-4 w-4" />
+                                        Manage Assignments
+                                    </DropdownMenuItem>
+                                )}
+                                {!isDeleted && (
                                     <DropdownMenuItem asChild>
                                         <Link
                                             href={`/admin/tasks/${task.id}/edit`}
@@ -420,8 +463,8 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                             ? 'Force Deleting...'
                                             : 'Force Delete'
                                         : isDeleting
-                                            ? 'Deleting...'
-                                            : 'Delete Task'}
+                                          ? 'Deleting...'
+                                          : 'Delete Task'}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -455,7 +498,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         <Badge
                                             className={getPriorityColor(
                                                 task.sla_policy?.priority ||
-                                                'P2',
+                                                    'P2',
                                             )}
                                         >
                                             <AlertCircle className="mr-1 h-3 w-3" />
@@ -467,7 +510,24 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                     </div>
                                 </CardTitle>
                             </CardHeader>
+
                             <CardContent className="space-y-6">
+                                {/* Task Description */}
+                                <div>
+                                    <h4 className="mb-2 text-sm font-medium">
+                                        Description
+                                    </h4>
+                                    <div className="text-sm text-muted-foreground">
+                                        {task.description ? (
+                                            <div className="whitespace-pre-wrap">
+                                                {task.description}
+                                            </div>
+                                        ) : (
+                                            <span>No description provided</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <Separator />
                                 {/* Basic Information */}
                                 <div>
                                     <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -475,19 +535,6 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         Basic Information
                                     </h4>
                                     <div className="grid gap-4 md:grid-cols-2">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <TicketIcon className="h-4 w-4" />
-                                                <span>Task Code</span>
-                                            </div>
-                                            <div className="text-sm font-medium">
-                                                {task.task_code || (
-                                                    <span className="text-muted-foreground">
-                                                        Not assigned
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                 <TicketIcon className="h-4 w-4" />
@@ -505,18 +552,14 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                                     .ticket_number
                                                             }{' '}
                                                             -{' '}
-                                                            {
-                                                                task.ticket
-                                                                    .title
-                                                            }
+                                                            {task.ticket.title}
                                                         </Link>
                                                         {task.ticket.client
                                                             ?.name && (
                                                             <p className="text-xs font-normal text-muted-foreground">
                                                                 Client:{' '}
                                                                 {
-                                                                    task
-                                                                        .ticket
+                                                                    task.ticket
                                                                         .client
                                                                         .name
                                                                 }
@@ -535,24 +578,26 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                 <Calendar className="h-4 w-4" />
-                                                <span>Created Date</span>
+                                                <span>Start Date</span>
                                             </div>
                                             <div className="text-sm font-medium">
-                                                {format(
-                                                    new Date(task.created_at),
-                                                    'MMM dd, yyyy h:mm a',
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <Clock3 className="h-4 w-4" />
-                                                <span>Last Updated</span>
-                                            </div>
-                                            <div className="text-sm font-medium">
-                                                {format(
-                                                    new Date(task.updated_at),
-                                                    'MMM dd, yyyy h:mm a',
+                                                {localTask.start_at ? (
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span>
+                                                                {format(
+                                                                    new Date(
+                                                                        localTask.start_at,
+                                                                    ),
+                                                                    'MMM dd, yyyy',
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground">
+                                                        No start date
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
@@ -567,58 +612,238 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                         <div className="flex items-center gap-2">
                                                             <span>
                                                                 {format(
-                                                                    new Date(localTask.due_at),
+                                                                    new Date(
+                                                                        localTask.due_at,
+                                                                    ),
                                                                     'MMM dd, yyyy',
                                                                 )}
                                                             </span>
-                                                            {localTask.is_overdue && localTask.overdue_time && (
-                                                                <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                                                                    Overdue by {localTask.overdue_time}
-                                                                </span>
-                                                            )}
+                                                            {localTask.is_overdue &&
+                                                                localTask.overdue_time && (
+                                                                    <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                                                        Overdue
+                                                                        by{' '}
+                                                                        {
+                                                                            localTask.overdue_time
+                                                                        }
+                                                                    </span>
+                                                                )}
                                                         </div>
-                                                        {!localTask.is_overdue && localTask.state !== 'Done' && (
-                                                            <Dialog open={isExtendDueDateOpen} onOpenChange={setIsExtendDueDateOpen}>
-                                                                <DialogTrigger asChild>
-                                                                    <Button variant="outline" size="sm" className="h-7 w-fit text-xs">
+                                                        {!localTask.is_overdue &&
+                                                            localTask.state !==
+                                                                'Done' && (
+                                                                <Dialog
+                                                                    open={
+                                                                        isExtendDueDateOpen
+                                                                    }
+                                                                    onOpenChange={
+                                                                        setIsExtendDueDateOpen
+                                                                    }
+                                                                >
+                                                                    <DialogTrigger
+                                                                        asChild
+                                                                    >
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="h-7 w-fit text-xs"
+                                                                        >
+                                                                            <CalendarPlus className="mr-1 h-3 w-3" />
+                                                                            Extend
+                                                                            Due
+                                                                            Date
+                                                                        </Button>
+                                                                    </DialogTrigger>
+                                                                    <DialogContent className="sm:max-w-[400px]">
+                                                                        <DialogHeader>
+                                                                            <DialogTitle>
+                                                                                Extend
+                                                                                Due
+                                                                                Date
+                                                                            </DialogTitle>
+                                                                            <DialogDescription>
+                                                                                Set
+                                                                                a
+                                                                                new
+                                                                                due
+                                                                                date
+                                                                                for
+                                                                                this
+                                                                                task.
+                                                                            </DialogDescription>
+                                                                        </DialogHeader>
+                                                                        <div className="grid gap-4 py-4">
+                                                                            <div className="grid gap-2">
+                                                                                <Label htmlFor="new-due-date">
+                                                                                    New
+                                                                                    Due
+                                                                                    Date
+                                                                                </Label>
+                                                                                <Input
+                                                                                    id="new-due-date"
+                                                                                    type="datetime-local"
+                                                                                    value={
+                                                                                        newDueDate
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e,
+                                                                                    ) =>
+                                                                                        setNewDueDate(
+                                                                                            e
+                                                                                                .target
+                                                                                                .value,
+                                                                                        )
+                                                                                    }
+                                                                                    min={format(
+                                                                                        new Date(),
+                                                                                        "yyyy-MM-dd'T'HH:mm",
+                                                                                    )}
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                        <DialogFooter>
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                onClick={() =>
+                                                                                    setIsExtendDueDateOpen(
+                                                                                        false,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                Cancel
+                                                                            </Button>
+                                                                            <Button
+                                                                                onClick={
+                                                                                    handleExtendDueDate
+                                                                                }
+                                                                                disabled={
+                                                                                    isExtending
+                                                                                }
+                                                                            >
+                                                                                {isExtending
+                                                                                    ? 'Extending...'
+                                                                                    : 'Extend Due Date'}
+                                                                            </Button>
+                                                                        </DialogFooter>
+                                                                    </DialogContent>
+                                                                </Dialog>
+                                                            )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col gap-2">
+                                                        <span className="text-muted-foreground">
+                                                            No due date
+                                                        </span>
+                                                        {localTask.state !==
+                                                            'Done' && (
+                                                            <Dialog
+                                                                open={
+                                                                    isExtendDueDateOpen
+                                                                }
+                                                                onOpenChange={
+                                                                    setIsExtendDueDateOpen
+                                                                }
+                                                            >
+                                                                <DialogTrigger
+                                                                    asChild
+                                                                >
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="h-7 w-fit text-xs"
+                                                                    >
                                                                         <CalendarPlus className="mr-1 h-3 w-3" />
-                                                                        Extend Due Date
+                                                                        Set Due
+                                                                        Date
                                                                     </Button>
                                                                 </DialogTrigger>
                                                                 <DialogContent className="sm:max-w-[400px]">
                                                                     <DialogHeader>
-                                                                        <DialogTitle>Extend Due Date</DialogTitle>
+                                                                        <DialogTitle>
+                                                                            Set
+                                                                            Due
+                                                                            Date
+                                                                        </DialogTitle>
                                                                         <DialogDescription>
-                                                                            Set a new due date for this task.
+                                                                            Set
+                                                                            a
+                                                                            due
+                                                                            date
+                                                                            for
+                                                                            this
+                                                                            task.
                                                                         </DialogDescription>
                                                                     </DialogHeader>
                                                                     <div className="grid gap-4 py-4">
                                                                         <div className="grid gap-2">
-                                                                            <Label htmlFor="new-due-date">New Due Date</Label>
+                                                                            <Label htmlFor="new-due-date">
+                                                                                Due
+                                                                                Date
+                                                                            </Label>
                                                                             <Input
                                                                                 id="new-due-date"
                                                                                 type="datetime-local"
-                                                                                value={newDueDate}
-                                                                                onChange={(e) => setNewDueDate(e.target.value)}
-                                                                                min={format(new Date(), 'yyyy-MM-dd\'T\'HH:mm')}
+                                                                                value={
+                                                                                    newDueDate
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    setNewDueDate(
+                                                                                        e
+                                                                                            .target
+                                                                                            .value,
+                                                                                    )
+                                                                                }
+                                                                                min={format(
+                                                                                    new Date(),
+                                                                                    "yyyy-MM-dd'T'HH:mm",
+                                                                                )}
                                                                             />
                                                                         </div>
                                                                     </div>
                                                                     <DialogFooter>
-                                                                        <Button variant="outline" onClick={() => setIsExtendDueDateOpen(false)}>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            onClick={() =>
+                                                                                setIsExtendDueDateOpen(
+                                                                                    false,
+                                                                                )
+                                                                            }
+                                                                        >
                                                                             Cancel
                                                                         </Button>
-                                                                        <Button onClick={handleExtendDueDate} disabled={isExtending}>
-                                                                            {isExtending ? 'Extending...' : 'Extend Due Date'}
+                                                                        <Button
+                                                                            onClick={
+                                                                                handleExtendDueDate
+                                                                            }
+                                                                            disabled={
+                                                                                isExtending
+                                                                            }
+                                                                        >
+                                                                            {isExtending
+                                                                                ? 'Setting...'
+                                                                                : 'Set Due Date'}
                                                                         </Button>
                                                                     </DialogFooter>
                                                                 </DialogContent>
                                                             </Dialog>
                                                         )}
                                                     </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Clock3 className="h-4 w-4" />
+                                                <span>Estimated Time</span>
+                                            </div>
+                                            <div className="text-sm font-medium">
+                                                {task.estimate_hours ? (
+                                                    `${task.estimate_hours} hours`
                                                 ) : (
                                                     <span className="text-muted-foreground">
-                                                        No due date
+                                                        Not estimated
                                                     </span>
                                                 )}
                                             </div>
@@ -657,17 +882,39 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                             </div>
                                             <div className="text-sm font-medium">
                                                 {(() => {
-                                                    const assignedUsers = task.assigned_users || [];
-                                                    return assignedUsers.length > 0 ? (
+                                                    const assignedUsers =
+                                                        task.assigned_users ||
+                                                        [];
+                                                    return assignedUsers.length >
+                                                        0 ? (
                                                         <div className="flex flex-wrap gap-1">
-                                                            {assignedUsers.map((user, index) => (
-                                                                <span key={user.id} className="text-sm">
-                                                                    {user.name}{index < assignedUsers.length - 1 ? ', ' : ''}
-                                                                </span>
-                                                            ))}
+                                                            {assignedUsers.map(
+                                                                (
+                                                                    user,
+                                                                    index,
+                                                                ) => (
+                                                                    <span
+                                                                        key={
+                                                                            user.id
+                                                                        }
+                                                                        className="text-sm"
+                                                                    >
+                                                                        {
+                                                                            user.name
+                                                                        }
+                                                                        {index <
+                                                                        assignedUsers.length -
+                                                                            1
+                                                                            ? ', '
+                                                                            : ''}
+                                                                    </span>
+                                                                ),
+                                                            )}
                                                         </div>
                                                     ) : (
-                                                        <span className="text-muted-foreground">Unassigned</span>
+                                                        <span className="text-muted-foreground">
+                                                            Unassigned
+                                                        </span>
                                                     );
                                                 })()}
                                             </div>
@@ -679,7 +926,10 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                     <span>Department</span>
                                                 </div>
                                                 <div className="text-sm font-medium">
-                                                    {task.assigned_department.name}
+                                                    {
+                                                        task.assigned_department
+                                                            .name
+                                                    }
                                                 </div>
                                             </div>
                                         ) : null}
@@ -688,19 +938,23 @@ export default function Show({ task, authUser }: TasksShowProps) {
 
                                 <Separator />
 
-                                {/* Metrics & Progress */}
-                                <TaskMetrics taskId={task.id} />
-
                                 {/* Milestones */}
-                                <TaskMilestones 
-                                    taskId={task.id} 
+                                <TaskMilestones
+                                    taskId={task.id}
                                     taskStartAt={task.start_at}
                                     taskDueAt={task.due_at}
-                                    initialMilestones={task.timeline_events?.filter((e: any) => e.is_milestone) || []}
+                                    initialMilestones={
+                                        task.timeline_events?.filter(
+                                            (e: any) => e.is_milestone,
+                                        ) || []
+                                    }
                                     isOwnTask={isOwnTask}
                                     isSuperAdmin={isSuperAdmin}
                                     taskState={task.state}
                                 />
+
+                                {/* Metrics & Progress */}
+                                <TaskMetrics taskId={task.id} />
 
                                 <Separator />
 
@@ -792,29 +1046,12 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         </div>
                                     </>
                                 )}
-
-                                <Separator />
-
-                                {/* Task Description */}
-                                <div>
-                                    <h4 className="mb-2 text-sm font-medium">
-                                        Description
-                                    </h4>
-                                    <div className="text-sm text-muted-foreground">
-                                        {task.description ? (
-                                            <div className="whitespace-pre-wrap">
-                                                {task.description}
-                                            </div>
-                                        ) : (
-                                            <span>No description provided</span>
-                                        )}
-                                    </div>
-                                </div>
                             </CardContent>
                         </Card>
 
                         {/* Parent and Child Tasks */}
-                        {(task.parent_task || (task.child_tasks && task.child_tasks.length > 0)) ? (
+                        {task.parent_task ||
+                        (task.child_tasks && task.child_tasks.length > 0) ? (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Task Hierarchy</CardTitle>
@@ -873,326 +1110,63 @@ export default function Show({ task, authUser }: TasksShowProps) {
 
                         <TaskFileAttachment task={task} />
 
-                        {/* Task Audit Events */}
+                        {/* Task Audit Events - Collapsed by default */}
                         {task.audit_events && task.audit_events.length > 0 && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Task Audit Events</CardTitle>
-                                    <CardDescription>
-                                        Audit trail for task changes
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-4 max-h-[300px] overflow-y-auto">
-                                        {task.audit_events.map((event) => (
-                                            <div
-                                                key={event.id}
-                                                className="rounded-lg border p-4"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center space-x-2">
-                                                        <div className="text-sm">
-                                                            Task{' '}
-                                                            {event.action.toLowerCase()}{' '}
-                                                            by{' '}
-                                                            <a href={`/admin/employees/${event.actor_user?.id}`} target='_blank' className="underline italic font-semibold">
-                                                                {event.actor_user?.name ||
-                                                                    'Unknown User'}
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-xs text-gray-500">
-                                                        {new Date(
-                                                            event.occurred_at,
-                                                        ).toLocaleString()}
-                                                    </div>
+                            <details className="group">
+                                <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+                                    <svg
+                                        className="h-4 w-4 transition-transform group-open:rotate-90"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M9 5l7 7-7 7"
+                                        />
+                                    </svg>
+                                    Task Audit Events (
+                                    {task.audit_events.length})
+                                </summary>
+                                <div className="mt-4 max-h-[300px] space-y-4 overflow-y-auto border-l-2 pl-4">
+                                    {task.audit_events.map((event) => (
+                                        <div
+                                            key={event.id}
+                                            className="rounded-lg border p-3"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-sm">
+                                                    Task{' '}
+                                                    {event.action?.toLowerCase()}{' '}
+                                                    by{' '}
+                                                    <span className="font-semibold">
+                                                        {event.actor_user
+                                                            ?.name ||
+                                                            'Unknown User'}
+                                                    </span>
                                                 </div>
-
-                                                {event.reason && (
-                                                    <div className="mt-2 text-xs text-gray-600">
-                                                        Reason: {event.reason}
-                                                    </div>
-                                                )}
-                                                {event.action && (
-                                                    <div className="mt-2 text-xs text-gray-600">
-                                                        Action: {event.action}
-                                                    </div>
-                                                )}
+                                                <div className="text-xs text-gray-500">
+                                                    {new Date(
+                                                        event.occurred_at,
+                                                    ).toLocaleString()}
+                                                </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-                        {/* Workload Metrics */}
-                        {task.workload_metrics &&
-                            task.workload_metrics.length > 0 && (
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Workload Metrics</CardTitle>
-                                        <CardDescription>
-                                            Performance and workload tracking
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-4">
-                                            {task.workload_metrics.map(
-                                                (metric) => (
-                                                    <div
-                                                        key={metric.id}
-                                                        className="rounded-lg border p-4"
-                                                    >
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center space-x-2">
-                                                                <span className="text-sm font-medium">
-                                                                    {metric.user
-                                                                        ?.name ||
-                                                                        'Unknown User'}
-                                                                </span>
-                                                                <Badge
-                                                                    variant="secondary"
-                                                                    className="text-xs"
-                                                                >
-                                                                    Workload
-                                                                </Badge>
-                                                            </div>
-                                                            <div className="text-xs text-gray-500">
-                                                                {new Date(
-                                                                    metric.calculated_at,
-                                                                ).toLocaleDateString()}
-                                                            </div>
-                                                        </div>
-                                                        <div className="mt-2 text-sm">
-                                                            Metric Value:{' '}
-                                                            {
-                                                                metric.metric_value
-                                                            }{' '}
-                                                            {metric.metric_unit}
-                                                        </div>
-                                                        <div className="mt-1 text-xs text-gray-600">
-                                                            Period:{' '}
-                                                            {new Date(
-                                                                metric.period_start,
-                                                            ).toLocaleDateString()}{' '}
-                                                            -{' '}
-                                                            {new Date(
-                                                                metric.period_end,
-                                                            ).toLocaleDateString()}
-                                                        </div>
-                                                        {metric.metadata && (
-                                                            <div className="mt-2 text-xs text-gray-600">
-                                                                {JSON.stringify(
-                                                                    metric.metadata,
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ),
+                                            {event.reason && (
+                                                <div className="mt-1 text-xs text-gray-600">
+                                                    Reason: {event.reason}
+                                                </div>
                                             )}
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
-
-                        {/* User Skills */}
-                        {task.user_skills && task.user_skills.length > 0 && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>User Skills</CardTitle>
-                                    <CardDescription>
-                                        Skills associated with this task
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-4">
-                                        {task.user_skills.map((skill) => (
-                                            <div
-                                                key={skill.id}
-                                                className="rounded-lg border p-4"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center space-x-2">
-                                                        <span className="text-sm font-medium">
-                                                            {skill.user?.name ||
-                                                                'Unknown User'}
-                                                        </span>
-                                                        <Badge
-                                                            variant="secondary"
-                                                            className="text-xs"
-                                                        >
-                                                            {skill.is_primary
-                                                                ? 'Primary'
-                                                                : 'Secondary'}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="text-xs text-gray-500">
-                                                        Level:{' '}
-                                                        {skill.skill_level}
-                                                    </div>
-                                                </div>
-                                                <div className="mt-2 text-sm">
-                                                    Skill: {skill.skill_name}
-                                                </div>
-                                                <div className="mt-1 text-xs text-gray-600">
-                                                    {skill.is_primary
-                                                        ? 'Primary skill'
-                                                        : 'Secondary skill'}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                    ))}
+                                </div>
+                            </details>
                         )}
-
-
                     </div>
 
                     {/* Sidebar */}
                     <div className="space-y-6">
-                        {/* Quick Actions */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Quick Actions</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                                {!isDeleted && (
-                                    <Button asChild className="w-full">
-                                        <Link
-                                            href={`/admin/tasks/${task.id}/edit`}
-                                        >
-                                            <Edit className="mr-2 h-4 w-4" />
-                                            Edit Task
-                                        </Link>
-                                    </Button>
-                                )}
-
-                                {!isDeleted && (
-                                    <Button 
-                                        variant="outline" 
-                                        className="w-full"
-                                        onClick={() => setIsAssignmentModalOpen(true)}
-                                    >
-                                        <UserPlus className="mr-2 h-4 w-4" />
-                                        Manage Assignments
-                                    </Button>
-                                )}
-
-                                {isDeleted ? (
-                                    <Button
-                                        onClick={handleRestoreTask}
-                                        disabled={isRestoring}
-                                        className="w-full bg-green-600 hover:bg-green-700"
-                                    >
-                                        <RotateCcw className="mr-2 h-4 w-4" />
-                                        {isRestoring
-                                            ? 'Restoring...'
-                                            : 'Restore Task'}
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        variant="destructive"
-                                        className="w-full"
-                                        onClick={handleDeleteTask}
-                                        disabled={isDeleting}
-                                    >
-                                        <Trash className="mr-2 h-4 w-4" />
-                                        {isDeleting
-                                            ? 'Deleting...'
-                                            : 'Delete Task'}
-                                    </Button>
-                                )}
-
-                                {isDeleted && (
-                                    <Button
-                                        variant="destructive"
-                                        className="w-full"
-                                        onClick={handleDeleteTask}
-                                        disabled={isForceDeleting}
-                                    >
-                                        <Trash className="mr-2 h-4 w-4" />
-                                        {isForceDeleting
-                                            ? 'Force Deleting...'
-                                            : 'Force Delete'}
-                                    </Button>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Task Info Card */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Task Information</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-muted-foreground">
-                                        Task ID
-                                    </span>
-                                    <span className="text-sm font-medium">
-                                        #{task.id}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-muted-foreground">
-                                        Status
-                                    </span>
-                                    <Badge
-                                        className={getStatusColor(task.state)}
-                                    >
-                                        {task.state.replace('-', ' ')}
-                                    </Badge>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-muted-foreground">
-                                        Priority
-                                    </span>
-                                    <Badge
-                                        className={getPriorityColor(
-                                            task.sla_policy?.priority || 'P2',
-                                        )}
-                                    >
-                                        {task.sla_policy?.priority || 'P2'}
-                                    </Badge>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-muted-foreground">
-                                        Created
-                                    </span>
-                                    <span className="text-sm">
-                                        {format(
-                                            new Date(task.created_at),
-                                            'MMM dd, yyyy',
-                                        )}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-muted-foreground">
-                                        Updated
-                                    </span>
-                                    <span className="text-sm">
-                                        {format(
-                                            new Date(task.updated_at),
-                                            'MMM dd, yyyy',
-                                        )}
-                                    </span>
-                                </div>
-                                {isDeleted && task.deleted_at && (
-                                    <div className="flex justify-between">
-                                        <span className="text-sm text-muted-foreground">
-                                            Deleted
-                                        </span>
-                                        <span className="text-sm">
-                                            {format(
-                                                new Date(task.deleted_at),
-                                                'MMM dd, yyyy',
-                                            )}
-                                        </span>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
                         {/* Comments Section */}
                         <TaskComments taskId={task.id} />
                     </div>

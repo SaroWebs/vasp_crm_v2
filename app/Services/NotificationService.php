@@ -582,7 +582,16 @@ class NotificationService
         $headers = "From: {$fromName} <{$fromEmail}>\r\n";
         $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
 
-        return mail($to, $subject, $message, $headers);
+        try {
+            return mail($to, $subject, $message, $headers);
+        } catch (\Exception $e) {
+            Log::warning('Email sending failed: '.$e->getMessage(), [
+                'to' => $to,
+                'subject' => $subject,
+            ]);
+
+            return false;
+        }
     }
 
     /**
