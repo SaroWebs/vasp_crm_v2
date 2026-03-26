@@ -109,7 +109,7 @@ class AdminTaskController extends Controller
      */
     public function show($task)
     {
-        $task = Task::withTrashed()
+        $tsk = Task::withTrashed()
             ->with([
                 'createdBy:id,name,email',
                 'assignedDepartment:id,name',
@@ -122,7 +122,6 @@ class AdminTaskController extends Controller
                 'ticket.client:id,name',
                 'comments',
                 'comments.user:id,name',
-                'comments.client:id,name',
                 'attachments',
                 'forwardings:id,from_user_id,to_user_id,to_department_id,remarks,status,forwarded_at,is_end_user,created_at',
                 'forwardings.fromUser:id,name',
@@ -137,7 +136,7 @@ class AdminTaskController extends Controller
             ])
             ->find($task);
 
-        if (!$task) {
+        if (!$tsk) {
             abort(404, 'Task not found');
         }
 
@@ -146,7 +145,7 @@ class AdminTaskController extends Controller
         $isSuperAdmin = $currentUser && $currentUser->roles->contains('slug', 'super-admin');
 
         return Inertia::render('admin/tasks/Show', [
-            'task' => $task,
+            'task' => $tsk,
             'authUser' => [
                 'id' => Auth::user()->id,
                 'is_super_admin' => $isSuperAdmin,

@@ -160,4 +160,20 @@ class ClientTicketController extends Controller
             abort(403, 'Ticket can only be modified before it is assigned.');
         }
     }
+
+    public function reopen(Request $request, Client $client, Ticket $ticket): RedirectResponse
+    {
+        $this->ensureCanAccessTicket($client, $ticket);
+
+        $reopenableStatuses = ['closed', 'cancelled'];
+
+        if (! in_array($ticket->status, $reopenableStatuses)) {
+            return redirect()->back()->with('error', 'Only closed or cancelled tickets can be reopened.');
+        }
+
+        $ticket->update(['status' => 'open']);
+
+        return redirect()->route('client.tickets.show', [$client, $ticket])
+            ->with('success', 'Ticket reopened successfully.');
+    }
 }

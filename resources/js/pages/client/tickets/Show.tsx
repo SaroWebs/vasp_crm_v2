@@ -30,6 +30,14 @@ export default function ClientTicketShow({
     client,
     ticket,
 }: ClientTicketShowProps) {
+    const handleReopen = () => {
+        if (!confirm('Reopen this ticket?')) {
+            return;
+        }
+
+        router.post(`/c/${client.code}/tickets/${ticket.id}/reopen`);
+    };
+
     const handleDelete = () => {
         if (!confirm('Delete this ticket?')) {
             return;
@@ -107,14 +115,28 @@ export default function ClientTicketShow({
                         <Link href={`/c/${client.code}/tickets`}>
                             <Button variant="outline">Back</Button>
                         </Link>
-                        <Link
-                            href={`/c/${client.code}/tickets/${ticket.id}/edit`}
-                        >
-                            <Button variant="outline">Edit</Button>
-                        </Link>
-                        <Button variant="destructive" onClick={handleDelete}>
-                            Delete
-                        </Button>
+                        {ticket.status === 'closed' ||
+                        ticket.status === 'cancelled' ? (
+                            <Button variant="outline" onClick={handleReopen}>
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                Reopen
+                            </Button>
+                        ) : null}
+                        {ticket.status === 'open' && !ticket.assigned_to ? (
+                            <Link
+                                href={`/c/${client.code}/tickets/${ticket.id}/edit`}
+                            >
+                                <Button variant="outline">Edit</Button>
+                            </Link>
+                        ) : null}
+                        {ticket.status === 'open' && !ticket.assigned_to ? (
+                            <Button
+                                variant="destructive"
+                                onClick={handleDelete}
+                            >
+                                Delete
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
 

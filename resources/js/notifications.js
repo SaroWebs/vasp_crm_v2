@@ -1,14 +1,14 @@
 // Pusher Notifications Integration
 // This file demonstrates how to listen to real-time notifications using Pusher
 
-import { createApp } from 'vue';
 import Echo from 'laravel-echo';
+import { createApp } from 'vue';
 
 // Initialize Pusher connection via Laravel Echo
 const echo = new Echo({
     broadcaster: 'pusher',
-    key: import.meta.env.VITE_PUSHER_APP_KEY,
-    cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+    key: import.meta.env.VITE_PUSHER_APP_KEY || '614b7155df91494dab2a',
+    cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER || 'ap1',
     forceTLS: true,
 });
 
@@ -30,7 +30,9 @@ const notificationStore = {
         this.saveToLocalStorage();
     },
     markAsRead(notificationId) {
-        const notification = this.state.notifications.find(n => n.id === notificationId);
+        const notification = this.state.notifications.find(
+            (n) => n.id === notificationId,
+        );
         if (notification) {
             notification.read_at = new Date().toISOString();
             this.state.unreadCount = Math.max(0, this.state.unreadCount - 1);
@@ -38,20 +40,26 @@ const notificationStore = {
         }
     },
     markAllAsRead() {
-        this.state.notifications.forEach(notification => {
-            notification.read_at = notification.read_at || new Date().toISOString();
+        this.state.notifications.forEach((notification) => {
+            notification.read_at =
+                notification.read_at || new Date().toISOString();
         });
         this.state.unreadCount = 0;
         this.saveToLocalStorage();
     },
     saveToLocalStorage() {
-        localStorage.setItem('notifications', JSON.stringify(this.state.notifications));
+        localStorage.setItem(
+            'notifications',
+            JSON.stringify(this.state.notifications),
+        );
     },
     loadFromLocalStorage() {
         const saved = localStorage.getItem('notifications');
         if (saved) {
             this.state.notifications = JSON.parse(saved);
-            this.state.unreadCount = this.state.notifications.filter(n => !n.read_at).length;
+            this.state.unreadCount = this.state.notifications.filter(
+                (n) => !n.read_at,
+            ).length;
         }
     },
     showBrowserNotification(notification) {
@@ -59,9 +67,9 @@ const notificationStore = {
             const notif = new Notification(notification.notification.title, {
                 body: notification.notification.message,
                 icon: '/favicon.ico',
-                tag: notification.id
+                tag: notification.id,
             });
-            
+
             notif.onclick = () => {
                 window.focus();
                 this.markAsRead(notification.id);
@@ -69,7 +77,7 @@ const notificationStore = {
                 this.navigateToNotification(notification);
                 notif.close();
             };
-            
+
             // Auto-close after 5 seconds
             setTimeout(() => notif.close(), 5000);
         }
@@ -81,7 +89,7 @@ const notificationStore = {
         } else if (notification.data && notification.data.ticket_id) {
             window.location.href = `/tickets/${notification.data.ticket_id}`;
         }
-    }
+    },
 };
 
 // Initialize notification store
@@ -119,7 +127,7 @@ userChannel.listen('task.forwarded', (event) => {
 // Request notification permissions
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
+        Notification.requestPermission().then((permission) => {
             console.log('Notification permission:', permission);
         });
     }
@@ -138,19 +146,19 @@ function showNotificationToast(notification) {
         </div>
         <button class="toast-close">×</button>
     `;
-    
+
     document.body.appendChild(toast);
-    
+
     // Auto-hide after 5 seconds
     setTimeout(() => {
         toast.remove();
     }, 5000);
-    
+
     // Click to dismiss
     toast.querySelector('.toast-close').addEventListener('click', () => {
         toast.remove();
     });
-    
+
     // Click to mark as read and navigate
     toast.addEventListener('click', () => {
         notificationStore.markAsRead(notification.id);
@@ -161,16 +169,21 @@ function showNotificationToast(notification) {
 
 // Show task-specific notification
 function showTaskNotification(event, title) {
-    const taskData = event.task_assigned || event.task_status_changed || event.task_forwarded;
-    const message = taskData ? `Task: ${taskData.task_title}` : event.notification.message;
-    
+    const taskData =
+        event.task_assigned ||
+        event.task_status_changed ||
+        event.task_forwarded;
+    const message = taskData
+        ? `Task: ${taskData.task_title}`
+        : event.notification.message;
+
     showNotificationToast({
         ...event,
         notification: {
             ...event.notification,
             title,
-            message
-        }
+            message,
+        },
     });
 }
 
@@ -187,7 +200,7 @@ if (typeof Vue !== 'undefined') {
             return {
                 notifications: notificationStore.state.notifications,
                 unreadCount: notificationStore.state.unreadCount,
-                showDropdown: false
+                showDropdown: false,
             };
         },
         methods: {
@@ -201,12 +214,12 @@ if (typeof Vue !== 'undefined') {
             },
             toggleDropdown() {
                 this.showDropdown = !this.showDropdown;
-            }
-        }
+            },
+        },
     });
-    
+
     app.mount('#notification-component');
 }
 
 // Export for module usage
-export { notificationStore, echo };
+export { echo, notificationStore };

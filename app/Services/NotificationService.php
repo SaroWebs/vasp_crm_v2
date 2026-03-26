@@ -738,7 +738,7 @@ class NotificationService
         $assignedByName = $assignedByUser->name ?? 'System';
 
         $subject = 'New Ticket Assigned';
-        $ticketUrl = config('app.url').'/tickets/'.$ticketId;
+        $ticketUrl = config('app.url').'/admin/tickets/'.$ticketId;
         $message = "You have been assigned to ticket: {$ticketTitle}. Assigned by: {$assignedByName}. View: {$ticketUrl}";
 
         $this->notifyEmployee($assignedUserId, $subject, $message, $assignedByUserId);

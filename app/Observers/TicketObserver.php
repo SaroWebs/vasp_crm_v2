@@ -14,7 +14,7 @@ class TicketObserver
 
     public function created(Ticket $ticket): void
     {
-        $category = $ticket->category;
+        $category = 'support';
         $departmentSlug = config("tickets.notify_department_by_category.{$category}");
 
         if (! $departmentSlug) {
@@ -35,6 +35,7 @@ class TicketObserver
 
             return;
         }
+        // $employees = Employee::where('department_id', $department->id)->all();
 
         $userIds = $department->users()->pluck('users.id')->all();
         if (! $userIds) {

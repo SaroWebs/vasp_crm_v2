@@ -90,6 +90,7 @@ Route::prefix('c/{client:code}')
             Route::get('/tickets/{ticket}/edit', 'edit')->name('tickets.edit');
             Route::patch('/tickets/{ticket}', 'update')->name('tickets.update');
             Route::delete('/tickets/{ticket}', 'destroy')->name('tickets.destroy');
+            Route::post('/tickets/{ticket}/reopen', 'reopen')->name('tickets.reopen');
         });
 
         Route::controller(ClientTicketCommentController::class)->group(function () {
