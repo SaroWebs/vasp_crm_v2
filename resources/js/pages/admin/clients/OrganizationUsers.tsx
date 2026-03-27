@@ -117,11 +117,11 @@ export default function OrganizationUsers(props: OrganizationUsersProps) {
                     <div className="flex items-center gap-2">
                         {canRead && (
                             <Button variant="outline" asChild>
-                            <Link href={`/admin/clients/${client.id}`}>
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                Back to Client
-                            </Link>
-                        </Button>
+                                <Link href={`/admin/clients/${client.id}`}>
+                                    <ArrowLeft className="mr-2 h-4 w-4" />
+                                    Back to Client
+                                </Link>
+                            </Button>
                         )}
                     </div>
                 </div>

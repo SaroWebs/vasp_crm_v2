@@ -26,7 +26,7 @@ class OrganizationUserController extends Controller
         }]);
 
         $user = User::find(Auth::user()->id);
-        $canCreate = $user->hasPermission('client.edit') || $user->isSuperAdmin();
+        $canCreate = $user->hasPermission('client.create') || $user->isSuperAdmin();
         $canEdit = $user->hasPermission('client.edit') || $user->isSuperAdmin();
         $canDelete = $user->hasPermission('client.delete') || $user->isSuperAdmin();
         $canRead = $user->hasPermission('client.read') || $user->isSuperAdmin();

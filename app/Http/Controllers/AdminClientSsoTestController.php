@@ -37,12 +37,10 @@ class AdminClientSsoTestController extends Controller
         }
 
         $validated = $request->validate([
-            'email' => ['required', 'string', 'email', 'max:255'],
-            'name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['sometimes', 'nullable', 'string', 'email', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
-
-        $userName = $validated['name'] ?? $validated['email'];
 
         $payload = [
             'ClientCode' => $client->code,
@@ -50,8 +48,8 @@ class AdminClientSsoTestController extends Controller
             'ClientEmail' => $client->email,
             'ClientPhone' => $client->phone,
             'UserLogin' => $validated['email'],
-            'UserName' => $userName,
-            'UserEmail' => $validated['email'],
+            'UserName' => $validated['name'],
+            'UserEmail' => $validated['email'] ?? null,
             'UserPhone' => $validated['phone'] ?? null,
             'iat' => now()->timestamp,
             'exp' => now()->addMinutes(5)->timestamp,

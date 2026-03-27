@@ -28,32 +28,29 @@ class ClientSsoController extends Controller
             ->where('code', $code)
             ->first();
 
-        if (!$client) {
+        if (! $client) {
             abort(404, 'Client not found.');
         }
 
-        if (!$client->sso_enabled) {
+        if (! $client->sso_enabled) {
             abort(403, 'SSO is disabled for this client.');
         }
 
-        if (!$client->sso_secret) {
+        if (! $client->sso_secret) {
             abort(403, 'SSO secret is not configured for this client.');
         }
 
         $payload = $cipher->decryptV1($client, $token);
 
         $validator = Validator::make($payload, [
-            // Client info (for validation/updates)
             'ClientCode' => ['required', 'string', 'max:255'],
             'ClientName' => ['sometimes', 'nullable', 'string', 'max:255'],
             'ClientEmail' => ['sometimes', 'nullable', 'string', 'email', 'max:255'],
             'ClientPhone' => ['sometimes', 'nullable', 'string', 'max:50'],
-            // User info
             'UserLogin' => ['sometimes', 'nullable', 'string', 'max:255'],
             'UserName' => ['required', 'string', 'max:255'],
             'UserPhone' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'UserEmail' => ['required', 'string', 'email', 'max:255'],
-            // Standard JWT claims
+            'UserEmail' => ['sometimes', 'nullable', 'string', 'email', 'max:255'],
             'iat' => ['required', 'integer'],
             'exp' => ['required', 'integer'],
             'jti' => ['required', 'string', 'max:191'],
@@ -91,14 +88,28 @@ class ClientSsoController extends Controller
             abort(403, 'This link has already been used.');
         }
 
-        $email = mb_strtolower(trim($validated['UserEmail']));
+        $userName = $validated['UserName'] ?? '';
+        $userEmail = isset($validated['UserEmail']) ? mb_strtolower(trim($validated['UserEmail'])) : null;
 
-        $organizationUser = OrganizationUser::withTrashed()->firstOrNew([
-            'client_id' => $client->id,
-            'email' => $email,
-        ]);
+        $organizationUser = OrganizationUser::withTrashed()
+            ->where('client_id', $client->id)
+            ->where('name', $userName)
+            ->first();
 
-        $organizationUser->name = $validated['UserName'] ?? $organizationUser->name ?? $email;
+        if (! $organizationUser && $userEmail) {
+            $organizationUser = OrganizationUser::withTrashed()
+                ->where('client_id', $client->id)
+                ->where('email', $userEmail)
+                ->first();
+        }
+
+        if (! $organizationUser) {
+            $organizationUser = new OrganizationUser;
+            $organizationUser->client_id = $client->id;
+        }
+
+        $organizationUser->name = $userName;
+        $organizationUser->email = $userEmail ?? $organizationUser->email;
         $organizationUser->phone = $validated['UserPhone'] ?? $organizationUser->phone;
         $organizationUser->status = $organizationUser->status ?: 'active';
 

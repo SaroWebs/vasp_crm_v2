@@ -12,6 +12,7 @@ use App\Models\TicketAttachment;
 use App\Models\TicketHistory;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\TicketNumberGenerator;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -204,12 +205,12 @@ class AdminTicketController extends Controller
     /**
      * Store a newly created ticket in storage (Admin can create for any client).
      */
-    public function store(Request $request)
+    public function store(Request $request, TicketNumberGenerator $ticketNumberGenerator)
     {
         $validated = $request->validate([
             'client_id' => ['required', 'integer', 'exists:clients,id'],
             'organization_user_id' => ['required', 'integer', 'exists:organization_users,id'],
-            'ticket_number' => ['required', 'string', 'unique:tickets,ticket_number'],
+            'ticket_number' => ['nullable'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'priority' => ['required', 'in:low,medium,high,critical'],
@@ -241,17 +242,16 @@ class AdminTicketController extends Controller
             if (! $organizationUser) {
                 return back()->withErrors(['organization_user_id' => 'Organization user does not belong to the specified organization']);
             }
-
-            $existingTicket = Ticket::where('ticket_number', $request->ticket_number)->first();
-
-            if ($existingTicket) {
-                return back()->withErrors(['ticket_number' => 'Ticket already exists with this ticket number']);
+            $client = Client::find($validated['client_id']);
+            if (! $client) {
+                return back()->withErrors(['client_id' => 'Client not found']);
             }
+            $TicketNum = $ticketNumberGenerator->generateForClient($client);
 
             $newTicket = Ticket::create([
                 'client_id' => $validated['client_id'],
                 'organization_user_id' => $validated['organization_user_id'],
-                'ticket_number' => $validated['ticket_number'],
+                'ticket_number' => $TicketNum,
                 'title' => $validated['title'],
                 'description' => $validated['description'],
                 'priority' => $validated['priority'],

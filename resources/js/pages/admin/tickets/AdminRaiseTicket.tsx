@@ -34,7 +34,6 @@ interface OrganizationUser {
 }
 
 interface FormData {
-    ticket_number: string;
     organization_user_id: number | '';
     title: string;
     description: string;
@@ -46,19 +45,16 @@ interface FormData {
 
 interface AdminRaiseTicketProps {
     clients: Client[];
-    ticket_number: string;
 }
 
 export default function AdminRaiseTicket({
     clients,
-    ticket_number,
 }: AdminRaiseTicketProps) {
     const [open, setOpen] = useState(false);
     const [organizationUsers, setOrganizationUsers] = useState<OrganizationUser[]>([]);
     const [loadingOrganizationUsers, setLoadingOrganizationUsers] = useState(false);
 
     const [form, setForm] = useState<FormData>({
-        ticket_number: ticket_number,
         organization_user_id: '',
         title: '',
         description: '',
@@ -90,16 +86,6 @@ export default function AdminRaiseTicket({
                 );
                 const users = response.data.organization_users ?? [];
                 setOrganizationUsers(users);
-
-                const ticketResponse = await axios.get(
-                    `/admin/client/${id}/next-ticket-number`,
-                );
-                if (ticketResponse.data.ticket_number) {
-                    setForm((prev) => ({
-                        ...prev,
-                        ticket_number: ticketResponse.data.ticket_number,
-                    }));
-                }
             } catch (error) {
                 console.error('Failed to fetch data', error);
             } finally {
@@ -139,7 +125,6 @@ export default function AdminRaiseTicket({
             onSuccess: () => {
                 setOpen(false);
                 setForm({
-                    ticket_number: ticket_number,
                     organization_user_id: '',
                     title: '',
                     description: '',
@@ -271,50 +256,6 @@ export default function AdminRaiseTicket({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        {/* Ticket Number */}
-                        <div className="space-y-2">
-                            <Label htmlFor="ticket_number">Ticket Number</Label>
-                            <Input
-                                id="ticket_number"
-                                name="ticket_number"
-                                value={form.ticket_number || 'Auto-generated'}
-                                readOnly
-                                className="bg-muted"
-                            />
-                        </div>
-
-                        {/* Status */}
-                        <div className="space-y-2">
-                            <Label htmlFor="status">Status</Label>
-                            <Select
-                                value={form.status}
-                                onValueChange={(val) =>
-                                    handleSelectChange('status', val)
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="open">Open</SelectItem>
-                                    <SelectItem value="approved">
-                                        Approved
-                                    </SelectItem>
-                                    <SelectItem value="in-progress">
-                                        In Progress
-                                    </SelectItem>
-                                    <SelectItem value="closed">
-                                        Closed
-                                    </SelectItem>
-                                    <SelectItem value="cancelled">
-                                        Cancelled
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
                     {/* Title */}
                     <div className="space-y-2">
                         <Label htmlFor="title">Title *</Label>
@@ -343,7 +284,7 @@ export default function AdminRaiseTicket({
                     </div>
 
                     {/* Category and Priority */}
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-3">
                         <div className="space-y-2">
                             <Label htmlFor="category">Category</Label>
                             <Select
@@ -391,6 +332,35 @@ export default function AdminRaiseTicket({
                                     <SelectItem value="high">High</SelectItem>
                                     <SelectItem value="critical">
                                         Critical
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="status">Status</Label>
+                            <Select
+                                value={form.status}
+                                onValueChange={(val) =>
+                                    handleSelectChange('status', val)
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="open">Open</SelectItem>
+                                    <SelectItem value="approved">
+                                        Approved
+                                    </SelectItem>
+                                    <SelectItem value="in-progress">
+                                        In Progress
+                                    </SelectItem>
+                                    <SelectItem value="closed">
+                                        Closed
+                                    </SelectItem>
+                                    <SelectItem value="cancelled">
+                                        Cancelled
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
