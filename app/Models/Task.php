@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
+use App\Services\DueDateCalculatorService;
+use App\Services\TimeCalculatorService;
+// Add WorkloadMetric import for the relationship
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-// Add WorkloadMetric import for the relationship
-use App\Models\WorkloadMetric;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-
 class Task extends Model
 {
-    use SoftDeletes, HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'task_code',
@@ -76,7 +77,7 @@ class Task extends Model
             return true;
         }
 
-        return isset(static::$validStateTransitions[$this->state]) && 
+        return isset(static::$validStateTransitions[$this->state]) &&
                in_array($newState, static::$validStateTransitions[$this->state]);
     }
 
@@ -90,47 +91,43 @@ class Task extends Model
         static::updating(function ($task) {
             if (isset($task->attributes['state']) && $task->attributes['state'] !== $task->getOriginal('state')) {
                 $newState = $task->attributes['state'];
-                if (!$task->isValidStateTransition($newState)) {
+                if (! $task->isValidStateTransition($newState)) {
                     throw new \InvalidArgumentException(
                         "Invalid state transition from '{$task->getOriginal('state')}' to '{$newState}'"
                     );
                 }
-                
+
                 // Set completed_at when transitioning to a terminal state
                 $terminalStates = ['Done', 'Cancelled', 'Rejected'];
-                if (in_array($newState, $terminalStates) && !$task->getOriginal('completed_at')) {
+                if (in_array($newState, $terminalStates) && ! $task->getOriginal('completed_at')) {
                     $task->attributes['completed_at'] = now();
                 }
-                
+
                 // Clear completed_at if transitioning away from a terminal state
-                if (in_array($task->getOriginal('state'), $terminalStates) && !in_array($newState, $terminalStates)) {
+                if (in_array($task->getOriginal('state'), $terminalStates) && ! in_array($newState, $terminalStates)) {
                     $task->attributes['completed_at'] = null;
                 }
-                
+
                 // Auto-update ticket status when task state changes
                 if ($task->ticket_id) {
-                    $ticket = \App\Models\Ticket::find($task->ticket_id);
+                    $ticket = Ticket::find($task->ticket_id);
                     if ($ticket) {
                         // If any task goes to InProgress, update ticket to in-progress
-                        if ($newState === 'InProgress' && !in_array($ticket->status, ['closed', 'cancelled'])) {
+                        if ($newState === 'InProgress' && ! in_array($ticket->status, ['closed', 'cancelled'])) {
                             $ticket->update(['status' => 'in-progress']);
                         }
-                        
+
                         // Check if all tasks are done/cancelled/rejected, then update ticket status
                         $allTasks = $ticket->tasks()->get();
                         $completedStates = ['Done', 'Cancelled', 'Rejected'];
                         $incompleteTasks = $allTasks->filter(function ($t) use ($completedStates, $newState, $task) {
                             // Exclude the current task being updated
                             if ($t->id === $task->id) {
-                                return !in_array($newState, $completedStates);
+                                return ! in_array($newState, $completedStates);
                             }
-                            return !in_array($t->state, $completedStates);
+
+                            return ! in_array($t->state, $completedStates);
                         });
-                        
-                        // If all tasks are completed, update ticket to closed
-                        if ($incompleteTasks->isEmpty() && $allTasks->isNotEmpty() && !in_array($ticket->status, ['closed', 'cancelled'])) {
-                            $ticket->update(['status' => 'closed']);
-                        }
                     }
                 }
             }
@@ -145,7 +142,6 @@ class Task extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-  
     /**
      * The department assigned to the task.
      */
@@ -319,17 +315,17 @@ class Task extends Model
     /**
      * Assign a user to this task.
      *
-     * @param int $userId
-     * @param int|null $assignedBy
-     * @param string|null $notes
-     * @param array|null $metadata
-     * @param float|null $estimatedTime
+     * @param  int  $userId
+     * @param  int|null  $assignedBy
+     * @param  string|null  $notes
+     * @param  array|null  $metadata
+     * @param  float|null  $estimatedTime
      * @return TaskAssignment
      */
     public function assignUser($userId, $assignedBy = null, $notes = null, $metadata = null, $estimatedTime = null)
     {
         $assignedById = $assignedBy ?? (app('auth')->check() ? app('auth')->user()->id : null);
-        
+
         return $this->taskAssignments()->create([
             'user_id' => $userId,
             'assigned_by' => $assignedById,
@@ -338,14 +334,14 @@ class Task extends Model
             'estimated_time' => $estimatedTime,
             'assigned_at' => now(),
             'is_active' => true,
-            'state' => 'pending'
+            'state' => 'pending',
         ]);
     }
 
     /**
      * Unassign a user from this task.
      *
-     * @param int $userId
+     * @param  int  $userId
      * @return bool
      */
     public function unassignUser($userId)
@@ -358,7 +354,7 @@ class Task extends Model
     /**
      * Check if a user is assigned to this task.
      *
-     * @param int $userId
+     * @param  int  $userId
      * @return bool
      */
     public function isAssignedToUser($userId)
@@ -377,13 +373,14 @@ class Task extends Model
     public function getPrimaryAssignee()
     {
         $assignment = $this->activeTaskAssignments()->oldest('created_at')->first();
+
         return $assignment ? $assignment->user : null;
     }
 
     /**
      * Get all active assignments for this task.
      *
-     * @return \Illuminate\Database\Eloquent\Collection
+     * @return Collection
      */
     public function getActiveAssignments()
     {
@@ -409,14 +406,15 @@ class Task extends Model
     /**
      * Assign the current user to this task (self-assignment).
      *
-     * @param string|null $notes
-     * @param array|null $metadata
-     * @param float|null $estimatedTime
+     * @param  string|null  $notes
+     * @param  array|null  $metadata
+     * @param  float|null  $estimatedTime
      * @return TaskAssignment
      */
     public function selfAssign($notes = null, $metadata = null, $estimatedTime = null)
     {
         $userId = app('auth')->check() ? app('auth')->user()->id : null;
+
         return $this->assignUser($userId, $userId, $notes, $metadata, $estimatedTime);
     }
 
@@ -435,14 +433,14 @@ class Task extends Model
     {
         return $this->hasMany(TaskDependency::class);
     }
-    
+
     /**
      * Get the reports that include this task.
      */
     public function reports()
     {
         return $this->belongsToMany(Report::class, 'report_tasks')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
     /**
@@ -502,7 +500,7 @@ class Task extends Model
     {
         return $query->whereHas('slaPolicy', function ($subquery) use ($taskTypeId, $priority) {
             $subquery->where('task_type_id', $taskTypeId)
-                     ->where('priority', $priority);
+                ->where('priority', $priority);
         });
     }
 
@@ -557,8 +555,8 @@ class Task extends Model
         return $query->whereHas('slaPolicy', function ($subquery) {
             $subquery->whereIn('priority', ['P1', 'P2']);
         })
-        ->where('due_at', '<', now())
-        ->where('state', '!=', 'Done');
+            ->where('due_at', '<', now())
+            ->where('state', '!=', 'Done');
     }
 
     /**
@@ -566,12 +564,12 @@ class Task extends Model
      */
     public function getSlaStatusAttribute()
     {
-        if (!$this->due_at || in_array($this->state, ['Done', 'Cancelled', 'Rejected'])) {
+        if (! $this->due_at || in_array($this->state, ['Done', 'Cancelled', 'Rejected'])) {
             return 'not_applicable';
         }
 
         $daysUntilDue = now()->diffInDays($this->due_at, false);
-        
+
         if ($this->due_at < now()) {
             return 'overdue';
         } elseif ($daysUntilDue <= 1) {
@@ -588,7 +586,7 @@ class Task extends Model
      */
     public function isOverdue(): bool
     {
-        return $this->due_at && $this->due_at->isPast() && !in_array($this->state, ['Done', 'Cancelled', 'Rejected']);
+        return $this->due_at && $this->due_at->isPast() && ! in_array($this->state, ['Done', 'Cancelled', 'Rejected']);
     }
 
     /**
@@ -597,26 +595,26 @@ class Task extends Model
      */
     public function getOverdueTime(): ?string
     {
-        if (!$this->due_at || !$this->isOverdue()) {
+        if (! $this->due_at || ! $this->isOverdue()) {
             return null;
         }
 
         $overdueDuration = $this->due_at->diff(now());
-        
+
         $days = $overdueDuration->d;
         $hours = $overdueDuration->h;
         $minutes = $overdueDuration->i;
 
         $parts = [];
-        
+
         if ($days > 0) {
-            $parts[] = $days . ' day' . ($days > 1 ? 's' : '');
+            $parts[] = $days.' day'.($days > 1 ? 's' : '');
         }
         if ($hours > 0) {
-            $parts[] = $hours . ' hour' . ($hours > 1 ? 's' : '');
+            $parts[] = $hours.' hour'.($hours > 1 ? 's' : '');
         }
         if ($minutes > 0 && $days === 0) {
-            $parts[] = $minutes . ' minute' . ($minutes > 1 ? 's' : '');
+            $parts[] = $minutes.' minute'.($minutes > 1 ? 's' : '');
         }
 
         return empty($parts) ? 'Just now' : implode(', ', $parts);
@@ -628,7 +626,7 @@ class Task extends Model
      */
     public function getOverdueTimeSeconds(): ?int
     {
-        if (!$this->due_at || !$this->isOverdue()) {
+        if (! $this->due_at || ! $this->isOverdue()) {
             return null;
         }
 
@@ -643,6 +641,7 @@ class Task extends Model
         if ($this->status === 'Done') {
             return 100;
         }
+
         return 0; // No progress field available
     }
 
@@ -651,22 +650,23 @@ class Task extends Model
      */
     public function getTimeRemaining()
     {
-        if ($this->state === 'Done' || !$this->estimate_hours) {
+        if ($this->state === 'Done' || ! $this->estimate_hours) {
             return 0;
         }
 
         // Calculate total working time spent on task
         $totalWorkingSeconds = 0;
         foreach ($this->timeEntries as $entry) {
-            if (!$entry->is_active) {
+            if (! $entry->is_active) {
                 $totalWorkingSeconds += $entry->calculateDuration();
-            } else if ($entry->start_time) {
-                $timeCalculator = app(\App\Services\TimeCalculatorService::class);
+            } elseif ($entry->start_time) {
+                $timeCalculator = app(TimeCalculatorService::class);
                 $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now());
             }
         }
 
         $totalWorkingHours = $totalWorkingSeconds / 3600;
+
         return max(0, $this->estimate_hours - $totalWorkingHours);
     }
 
@@ -675,11 +675,12 @@ class Task extends Model
      */
     public function calculateDueDate(): ?\DateTime
     {
-        if (!$this->estimate_hours || !$this->start_at) {
+        if (! $this->estimate_hours || ! $this->start_at) {
             return null;
         }
 
-        $dueDateCalculator = app(\App\Services\DueDateCalculatorService::class);
+        $dueDateCalculator = app(DueDateCalculatorService::class);
+
         return $dueDateCalculator->calculateDueDate($this->start_at, $this->estimate_hours);
     }
 
@@ -688,8 +689,9 @@ class Task extends Model
      */
     public function calculateDaysRequired(): float
     {
-        $dueDateCalculator = app(\App\Services\DueDateCalculatorService::class);
+        $dueDateCalculator = app(DueDateCalculatorService::class);
         $remainingHours = $this->getTimeRemaining();
+
         return $dueDateCalculator->calculateDaysRequired($remainingHours);
     }
 
@@ -702,17 +704,17 @@ class Task extends Model
             'P1' => 4,
             'P2' => 3,
             'P3' => 2,
-            'P4' => 1
+            'P4' => 1,
         ];
 
         $priorityScore = $priorityScores[$this->slaPolicy?->priority] ?? 1;
-        
-        if (!$this->due_at) {
+
+        if (! $this->due_at) {
             return $priorityScore;
         }
 
         $daysUntilDue = now()->diffInDays($this->due_at, false);
-        
+
         if ($daysUntilDue < 0) {
             return $priorityScore + 5; // Overdue tasks get high urgency
         } elseif ($daysUntilDue === 0) {
@@ -733,10 +735,10 @@ class Task extends Model
     {
         $totalWorkingSeconds = 0;
         foreach ($this->timeEntries as $entry) {
-            if (!$entry->is_active) {
+            if (! $entry->is_active) {
                 $totalWorkingSeconds += $entry->calculateDuration();
-            } else if ($entry->start_time) {
-                $timeCalculator = app(\App\Services\TimeCalculatorService::class);
+            } elseif ($entry->start_time) {
+                $timeCalculator = app(TimeCalculatorService::class);
                 $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now());
             }
         }
@@ -751,10 +753,10 @@ class Task extends Model
     {
         $totalWorkingSeconds = 0;
         foreach ($this->timeEntries as $entry) {
-            if (!$entry->is_active) {
+            if (! $entry->is_active) {
                 $totalWorkingSeconds += $entry->calculateDuration();
-            } else if ($entry->start_time) {
-                $timeCalculator = app(\App\Services\TimeCalculatorService::class);
+            } elseif ($entry->start_time) {
+                $timeCalculator = app(TimeCalculatorService::class);
                 $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now());
             }
         }
@@ -780,7 +782,7 @@ class Task extends Model
             'progress' => 0, // No progress field available
             'estimated_hours' => $this->estimate_hours,
             'actual_hours' => 0, // No actual_hours field available
-            'urgency_score' => $this->getUrgencyScore()
+            'urgency_score' => $this->getUrgencyScore(),
         ];
     }
 }
