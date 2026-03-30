@@ -1,6 +1,5 @@
-import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -8,10 +7,9 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
     Select,
     SelectContent,
@@ -19,8 +17,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
     Building2,
@@ -49,14 +49,16 @@ interface ClientEditProps {
         code?: string;
         address?: string;
         status: string;
+        product_id?: string;
         sso_enabled: boolean;
         has_sso_secret: boolean;
         created_at: string;
         updated_at: string;
     };
+    products?: Array<{ id: number; name: string }>;
 }
 
-export default function ClientEdit({ client }: ClientEditProps) {
+export default function ClientEdit({ client, products = [] }: ClientEditProps) {
     const { data, setData, patch, processing, errors, recentlySuccessful } =
         useForm({
             name: client.name || '',
@@ -65,6 +67,7 @@ export default function ClientEdit({ client }: ClientEditProps) {
             code: client.code || '',
             address: client.address || '',
             status: client.status || 'active',
+            product_id: client.product_id?.toString() || '',
             sso_enabled: Boolean(client.sso_enabled),
             sso_secret: '',
         });
@@ -151,7 +154,7 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                 Client Name *
                                             </Label>
                                             <div className="relative">
-                                                <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                                <Building2 className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                                 <Input
                                                     id="name"
                                                     type="text"
@@ -179,7 +182,7 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                 Email Address
                                             </Label>
                                             <div className="relative">
-                                                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                                <Mail className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                                 <Input
                                                     id="email"
                                                     type="email"
@@ -208,7 +211,7 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                 Phone Number (optional)
                                             </Label>
                                             <div className="relative">
-                                                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                                <Phone className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                                 <Input
                                                     id="phone"
                                                     type="tel"
@@ -281,12 +284,45 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                 </p>
                                             ) : null}
                                         </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="product_id">
+                                                Product
+                                            </Label>
+                                            <select
+                                                id="product_id"
+                                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                value={data.product_id || ''}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'product_id',e.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    No Product
+                                                </option>
+                                                {products.map((product) => (
+                                                    <option
+                                                        key={product.id}
+                                                        value={product.id}
+                                                    >
+                                                        {product.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {errors.product_id ? (
+                                                <p className="text-sm text-red-600">
+                                                    {errors.product_id}
+                                                </p>
+                                            ) : null}
+                                        </div>
                                     </div>
 
                                     <div className="space-y-2">
                                         <Label htmlFor="address">Address</Label>
                                         <div className="relative">
-                                            <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                            <MapPin className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                             <Textarea
                                                 id="address"
                                                 placeholder="Enter complete address"
@@ -326,7 +362,9 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                 <Checkbox
                                                     id="sso_enabled"
                                                     checked={data.sso_enabled}
-                                                    onCheckedChange={(checked) =>
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) =>
                                                         setData(
                                                             'sso_enabled',
                                                             Boolean(checked),
@@ -348,18 +386,23 @@ export default function ClientEdit({ client }: ClientEditProps) {
                                                             id="sso_secret"
                                                             type="text"
                                                             placeholder="Paste new base64 key (32 bytes) or generate"
-                                                            value={data.sso_secret}
+                                                            value={
+                                                                data.sso_secret
+                                                            }
                                                             onChange={(e) =>
                                                                 setData(
                                                                     'sso_secret',
-                                                                    e.target.value,
+                                                                    e.target
+                                                                        .value,
                                                                 )
                                                             }
                                                         />
                                                         <Button
                                                             type="button"
                                                             variant="outline"
-                                                            onClick={generateSsoSecret}
+                                                            onClick={
+                                                                generateSsoSecret
+                                                            }
                                                         >
                                                             Generate
                                                         </Button>

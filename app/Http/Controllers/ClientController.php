@@ -133,7 +133,7 @@ class ClientController extends Controller
                 'code' => $validated['code'] ?? null,
                 'address' => $validated['address'] ?? null,
                 'status' => $validated['status'],
-                'product_id' => $validated['product_id'] ?? null,
+                'product_id' => $validated['product_id'] ? (int) $validated['product_id'] : null,
                 'sso_enabled' => $request->boolean('sso_enabled'),
                 'sso_secret' => $validated['sso_secret'] ?? null,
             ]);

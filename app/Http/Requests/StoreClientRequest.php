@@ -32,7 +32,7 @@ class StoreClientRequest extends FormRequest
             'code' => ['nullable', 'string', 'max:255'],
             'address' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
-            'product_id' => ['nullable', 'exists:products,id'],
+            'product_id' => ['nullable', 'string', 'exists:products,id'],
             'sso_enabled' => ['sometimes', 'boolean'],
             'sso_secret' => [
                 Rule::requiredIf(fn (): bool => $this->boolean('sso_enabled')),

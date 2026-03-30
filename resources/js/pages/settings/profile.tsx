@@ -20,6 +20,15 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+function isEmailUnverified(user: unknown): boolean {
+    return (
+        typeof user === 'object' &&
+        user !== null &&
+        'email_verified_at' in user &&
+        (user as { email_verified_at: string | null }).email_verified_at === null
+    );
+}
+
 export default function Profile({
     mustVerifyEmail,
     status,
@@ -90,7 +99,8 @@ export default function Profile({
                                 </div>
 
                                 {mustVerifyEmail &&
-                                    auth?.user?.email_verified_at === null && (
+                                    auth?.user &&
+                                    isEmailUnverified(auth.user) && (
                                         <div>
                                             <p className="-mt-4 text-sm text-muted-foreground">
                                                 Your email address is

@@ -1,6 +1,5 @@
-import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -8,10 +7,9 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
     Select,
     SelectContent,
@@ -19,8 +17,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
+import { Head, useForm } from '@inertiajs/react';
 import {
     Building2,
     CheckCircle,
@@ -43,11 +43,16 @@ interface ClientFormData {
     code: string;
     address: string;
     status: string;
+    product_id: string;
     sso_enabled: boolean;
     sso_secret: string;
 }
 
-export default function ClientsCreate() {
+interface ClientsCreateProps {
+    products?: Array<{ id: number; name: string }>;
+}
+
+export default function ClientsCreate({ products = [] }: ClientsCreateProps) {
     const { data, setData, post, processing, errors, recentlySuccessful } =
         useForm<ClientFormData>({
             name: '',
@@ -56,6 +61,7 @@ export default function ClientsCreate() {
             code: '',
             address: '',
             status: 'active',
+            product_id: '',
             sso_enabled: false,
             sso_secret: '',
         });
@@ -114,7 +120,8 @@ export default function ClientsCreate() {
                             Client Information
                         </CardTitle>
                         <CardDescription>
-                            Provide the organization name and contact information
+                            Provide the organization name and contact
+                            information
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -123,7 +130,7 @@ export default function ClientsCreate() {
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Client Name *</Label>
                                     <div className="relative">
-                                        <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                        <Building2 className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                         <Input
                                             id="name"
                                             type="text"
@@ -146,7 +153,7 @@ export default function ClientsCreate() {
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email Address</Label>
                                     <div className="relative">
-                                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                        <Mail className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                         <Input
                                             id="email"
                                             type="email"
@@ -168,9 +175,11 @@ export default function ClientsCreate() {
 
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
-                                    <Label htmlFor="phone">Phone Number (optional)</Label>
+                                    <Label htmlFor="phone">
+                                        Phone Number (optional)
+                                    </Label>
                                     <div className="relative">
-                                        <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                        <Phone className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                         <Input
                                             id="phone"
                                             type="tel"
@@ -233,12 +242,42 @@ export default function ClientsCreate() {
                                         </p>
                                     ) : null}
                                 </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="product_id">Product</Label>
+                                    <select
+                                        id="product_id"
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={data.product_id || ''}
+                                        onChange={(e) =>
+                                            setData(
+                                                'product_id',
+                                                e.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">No Product</option>
+                                        {products.map((product) => (
+                                            <option
+                                                key={product.id}
+                                                value={product.id}
+                                            >
+                                                {product.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {errors.product_id ? (
+                                        <p className="text-sm text-red-600">
+                                            {errors.product_id}
+                                        </p>
+                                    ) : null}
+                                </div>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="address">Address</Label>
                                 <div className="relative">
-                                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                    <MapPin className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
                                     <Textarea
                                         id="address"
                                         placeholder="Enter complete address"
