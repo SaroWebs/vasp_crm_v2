@@ -17,9 +17,13 @@ class TaskCommentAttachment extends Model
         'uploaded_by',
     ];
 
-    public function comment(): BelongsTo
+    // public function comment(): BelongsTo
+    // {
+    //     return $this->belongsTo(TaskComment::class, 'comment_id');
+    // }
+    public function comment()
     {
-        return $this->belongsTo(TaskComment::class, 'comment_id');
+        return $this->morphTo();
     }
 
     public function getFileUrlAttribute(): string

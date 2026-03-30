@@ -23,9 +23,13 @@ class TaskComment extends Model
         'is_internal' => 'boolean',
     ];
 
-    public function attachments(): HasMany
+    // public function attachments(): HasMany
+    // {
+    //     return $this->hasMany(TaskCommentAttachment::class, 'comment_id');
+    // }
+    public function attachments()
     {
-        return $this->hasMany(TaskCommentAttachment::class, 'comment_id');
+        return $this->morphMany(TaskCommentAttachment::class, 'comment');
     }
 
     /**
