@@ -5,10 +5,11 @@ import { cn } from '@/lib/utils';
 
 interface SwitchProps extends React.InputHTMLAttributes<HTMLInputElement> {
     className?: string;
+    onCheckedChange?: (checked: boolean) => void;
 }
 
 const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
-    ({ className, ...props }, ref) => {
+    ({ className, onCheckedChange, ...props }, ref) => {
         return (
             <label className={cn(
                 'relative inline-flex items-center cursor-pointer',
@@ -18,6 +19,7 @@ const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
                     type="checkbox"
                     className="sr-only peer"
                     ref={ref}
+                    onChange={(e) => onCheckedChange?.(e.target.checked)}
                     {...props}
                 />
                 <div className={cn(

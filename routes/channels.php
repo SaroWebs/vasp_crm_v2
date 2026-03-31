@@ -34,3 +34,14 @@ Broadcast::channel('ticket.{ticketId}', function ($user, $ticketId) {
 
     return false;
 }, ['guards' => ['organization', 'web', 'admin']]);
+
+// Notifications channel - allows users to receive real-time notification broadcasts
+Broadcast::channel('notifications.{userId}', function ($user, $userId) {
+    // Allow admin users to receive all notifications
+    if (Auth::guard('admin')->check()) {
+        return true;
+    }
+
+    // Allow regular users to only receive their own notifications
+    return (int) $user->id === (int) $userId;
+});

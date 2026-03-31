@@ -36,7 +36,7 @@ import {
     Trash,
     Users,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -50,38 +50,76 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 interface ClientsIndexProps {
-    clients?: any[];
     filters?: any;
     userPermissions?: string[];
     canCreate?: boolean;
     canEdit?: boolean;
     canDelete?: boolean;
     canRead?: boolean;
-    pagination?: {
-        current_page: number;
-        per_page: number;
-        total: number;
-        last_page: number;
-    };
+}
+
+interface ClientData {
+    id: number;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    code: string | null;
+    address: string | null;
+    status: string;
+    deleted_at: string | null;
+    created_at: string;
+    updated_at: string;
+    product: { id: number; name: string } | null;
+    organization_users: Array<{
+        id: number;
+        name: string;
+        email: string;
+        designation: string | null;
+        phone: string | null;
+        status: string;
+    }>;
+    tickets: Array<{
+        id: number;
+        ticket_number: string;
+        title: string;
+        status: string;
+        priority: string;
+        created_at: string;
+    }>;
+}
+
+interface PaginatedClients {
+    data: ClientData[];
+    current_page: number;
+    per_page: number;
+    total: number;
+    last_page: number;
 }
 
 export default function ClientsIndex(props: ClientsIndexProps) {
     const {
-        clients = [],
         filters = {},
-        userPermissions = [],
         canCreate = false,
         canEdit = false,
         canDelete = false,
         canRead = false,
-        pagination = { current_page: 1, per_page: 10, total: 0, last_page: 1 },
     } = props;
+
+    // State for clients data
+    const [clients, setClients] = useState<ClientData[]>([]);
+    const [pagination, setPagination] = useState({
+        current_page: 1,
+        per_page: 10,
+        total: 0,
+        last_page: 1,
+    });
+    const [loading, setLoading] = useState(false);
 
     // State for search, filtering, and selection
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
     const [selectedClients, setSelectedClients] = useState<number[]>([]);
-    const [currentPage, setCurrentPage] = useState(pagination.current_page);
+    const [currentPage, setCurrentPage] = useState(1);
     const [deletingClientId, setDeletingClientId] = useState<number | null>(
         null,
     );
@@ -93,61 +131,93 @@ export default function ClientsIndex(props: ClientsIndexProps) {
     >(null);
     const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-    // Filter and search clients
-    const filteredClients = useMemo(() => {
-        return clients.filter((client) => {
-            const email = client.email ?? '';
-            const matchesSearch =
-                !searchTerm ||
-                client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                email.toLowerCase().includes(searchTerm.toLowerCase());
+    // Load clients from server
+    const loadClients = (page = 1, search = '', status = 'all') => {
+        setLoading(true);
+        const params = new URLSearchParams();
+        params.append('page', page.toString());
+        if (search) {
+            params.append('search', search);
+        }
+        if (status !== 'all') {
+            params.append('status', status);
+        }
 
-            const matchesStatus =
-                statusFilter === 'all' ||
-                (statusFilter === 'archived' && !!client.deleted_at) ||
-                (statusFilter !== 'archived' &&
-                    !client.deleted_at &&
-                    client.status === statusFilter);
+        axios
+            .get(`/admin/clients?${params.toString()}`)
+            .then((res) => {
+                setClients(res.data.clients || []);
+                setPagination(res.data.pagination || {
+                    current_page: 1,
+                    per_page: 10,
+                    total: 0,
+                    last_page: 1,
+                });
+                setCurrentPage(page);
+            })
+            .catch((err) => {
+                console.error('Failed to load clients:', err);
+            })
+            .finally(() => {
+                setLoading(false);
+            });
+    };
 
-            return matchesSearch && matchesStatus;
-        });
-    }, [clients, searchTerm, statusFilter]);
+    // Load clients on mount
+    useEffect(() => {
+        loadClients(1, searchTerm, statusFilter);
+    }, []);
 
-    // Paginate filtered clients
+    // Debounced search - reload clients when search term changes (after delay)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchTerm !== filters.search) {
+                loadClients(1, searchTerm, statusFilter);
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
+
+    // Handle status filter change
+    const handleStatusFilterChange = useCallback((value: string) => {
+        setStatusFilter(value);
+        loadClients(1, searchTerm, value);
+    }, [searchTerm]);
+
+    // Use server-side paginated clients directly
     const paginatedClients = useMemo(() => {
-        const startIndex = (currentPage - 1) * pagination.per_page;
-        return filteredClients.slice(
-            startIndex,
-            startIndex + pagination.per_page,
-        );
-    }, [filteredClients, currentPage, pagination.per_page]);
+        return clients;
+    }, [clients]);
 
-    // Calculate statistics
+    // Calculate statistics from current page clients
     const stats = useMemo(() => {
-        const total = filteredClients.length;
-        const active = filteredClients.filter(
+        const displayedClients = clients;
+        const active = displayedClients.filter(
             (c) => c.status === 'active',
         ).length;
-        const inactive = filteredClients.filter(
+        const inactive = displayedClients.filter(
             (c) => c.status === 'inactive',
         ).length;
-        const archived = filteredClients.filter((c) => !!c.deleted_at).length;
-        const withOrganizationUsers = filteredClients.filter(
+        const archived = displayedClients.filter(
+            (c) => !!c.deleted_at,
+        ).length;
+        const withOrganizationUsers = displayedClients.filter(
             (c) => c.organization_users?.length > 0,
         ).length;
-        const withOpenTickets = filteredClients.filter((c) =>
+        const withOpenTickets = displayedClients.filter((c) =>
             c.tickets?.some((t: any) => t.status === 'open'),
         ).length;
 
         return {
-            total,
+            total: pagination.total,
             active,
             inactive,
             archived,
             withOrganizationUsers,
             withOpenTickets,
         };
-    }, [filteredClients]);
+    }, [clients, pagination.total]);
 
     const getStatusBadge = (status: string, isArchived: boolean) => {
         if (isArchived) {
@@ -322,7 +392,7 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                         </div>
                         <Select
                             value={statusFilter}
-                            onValueChange={setStatusFilter}
+                            onValueChange={handleStatusFilterChange}
                         >
                             <SelectTrigger className="w-[180px]">
                                 <Filter className="mr-2 h-4 w-4" />
@@ -475,11 +545,11 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <CardTitle>
-                                    All Clients ({filteredClients.length})
+                                    All Clients ({pagination.total})
                                 </CardTitle>
                                 <CardDescription>
                                     {searchTerm || statusFilter !== 'all'
-                                        ? `Showing ${filteredClients.length} of ${clients.length} clients`
+                                        ? `Showing ${clients.length} of ${pagination.total} clients`
                                         : `Complete list of all clients`}
                                 </CardDescription>
                             </div>
@@ -491,7 +561,7 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                         onClick={handleSelectAll}
                                     >
                                         {selectedClients.length ===
-                                        paginatedClients.length ? (
+                                            paginatedClients.length ? (
                                             <CheckSquare className="mr-2 h-4 w-4" />
                                         ) : (
                                             <Square className="mr-2 h-4 w-4" />
@@ -504,7 +574,7 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                            {filteredClients.length === 0 ? (
+                            {clients.length === 0 ? (
                                 <p className="py-8 text-center text-sm text-muted-foreground">
                                     {searchTerm || statusFilter !== 'all'
                                         ? 'No clients match your search criteria.'
@@ -674,15 +744,15 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                                                     }
                                                                     disabled={
                                                                         restoringClientId ===
-                                                                            client.id ||
+                                                                        client.id ||
                                                                         forceDeletingClientId ===
-                                                                            client.id ||
+                                                                        client.id ||
                                                                         isBulkDeleting
                                                                     }
                                                                 >
                                                                     <RotateCcw className="mr-2 h-4 w-4" />
                                                                     {restoringClientId ===
-                                                                    client.id
+                                                                        client.id
                                                                         ? 'Restoring...'
                                                                         : 'Restore'}
                                                                 </Button>
@@ -696,15 +766,15 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                                                     }
                                                                     disabled={
                                                                         forceDeletingClientId ===
-                                                                            client.id ||
+                                                                        client.id ||
                                                                         restoringClientId ===
-                                                                            client.id ||
+                                                                        client.id ||
                                                                         isBulkDeleting
                                                                     }
                                                                 >
                                                                     <Trash className="mr-2 h-4 w-4" />
                                                                     {forceDeletingClientId ===
-                                                                    client.id
+                                                                        client.id
                                                                         ? 'Deleting...'
                                                                         : 'Force Delete'}
                                                                 </Button>
@@ -720,13 +790,13 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                                                 }
                                                                 disabled={
                                                                     deletingClientId ===
-                                                                        client.id ||
+                                                                    client.id ||
                                                                     isBulkDeleting
                                                                 }
                                                             >
                                                                 <Trash className="mr-2 h-4 w-4" />
                                                                 {deletingClientId ===
-                                                                client.id
+                                                                    client.id
                                                                     ? 'Deleting...'
                                                                     : 'Delete'}
                                                             </Button>
@@ -746,7 +816,7 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                             </span>
                                             <span className="text-xs text-muted-foreground">
                                                 {client.status == 'active' &&
-                                                !client.deleted_at ? (
+                                                    !client.deleted_at ? (
                                                     <Link
                                                         href={`/admin/tickets?client_id=${client.id}`}
                                                     >
@@ -778,17 +848,19 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                     to{' '}
                                     {Math.min(
                                         currentPage * pagination.per_page,
-                                        filteredClients.length,
+                                        pagination.total,
                                     )}{' '}
-                                    of {filteredClients.length} results
+                                    of {pagination.total} results
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() =>
-                                            setCurrentPage((prev) =>
-                                                Math.max(prev - 1, 1),
+                                            loadClients(
+                                                currentPage - 1,
+                                                searchTerm,
+                                                statusFilter,
                                             )
                                         }
                                         disabled={currentPage === 1}
@@ -803,11 +875,10 @@ export default function ClientsIndex(props: ClientsIndexProps) {
                                         variant="outline"
                                         size="sm"
                                         onClick={() =>
-                                            setCurrentPage((prev) =>
-                                                Math.min(
-                                                    prev + 1,
-                                                    pagination.last_page,
-                                                ),
+                                            loadClients(
+                                                currentPage + 1,
+                                                searchTerm,
+                                                statusFilter,
                                             )
                                         }
                                         disabled={

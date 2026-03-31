@@ -5,14 +5,23 @@ namespace App\Http\Controllers;
 use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\TaskCommentAttachment;
+use App\Models\TaskAssignment;
 use App\Models\User;
 use App\Models\OrganizationUser;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
 class TaskCommentController extends Controller
 {
+    /**
+     * Create a new controller instance.
+     */
+    public function __construct(
+        protected NotificationService $notificationService
+    ) {}
+
     /**
      * Display a listing of comments for a task.
      */
@@ -131,6 +140,9 @@ class TaskCommentController extends Controller
                 : $comment->organizationUser,
             'attachments' => $comment->attachments,
         ];
+
+        // Send notification to all assigned users in the task hierarchy
+        $this->sendCommentNotifications($task, $comment, $commentedBy);
 
         return response()->json([
             'success' => true,
@@ -576,5 +588,48 @@ class TaskCommentController extends Controller
             'uploaded_by_type' => $commentedByType,
             'uploaded_by' => $commentedBy,
         ]);
+    }
+
+    /**
+     * Send notifications to all users assigned to the task when a comment is added.
+     *
+     * @param Task $task
+     * @param TaskComment $comment
+     * @param int $commentedBy
+     * @return void
+     */
+    protected function sendCommentNotifications(Task $task, TaskComment $comment, int $commentedBy): void
+    {
+        // Get all active task assignments for this task
+        $assignments = TaskAssignment::where('task_id', $task->id)
+            ->where('is_active', true)
+            ->get();
+
+        // Get the commenter name
+        $commenter = User::find($commentedBy);
+        $commenterName = $commenter ? $commenter->name : 'Unknown User';
+
+        // Notify all assigned users except the commenter themselves
+        foreach ($assignments as $assignment) {
+            // Skip notifying the person who made the comment
+            if ($assignment->user_id === $commentedBy) {
+                continue;
+            }
+
+            $this->notificationService->sendToUser(
+                $assignment->user_id,
+                'App\Notifications\TaskCommentNotification',
+                'New Comment on Task',
+                "{$commenterName} commented on task '{$task->title}'",
+                [
+                    'task_id' => $task->id,
+                    'task_title' => $task->title,
+                    'comment_id' => $comment->id,
+                    'comment_text' => $comment->comment_text,
+                    'commented_by_id' => $commentedBy,
+                    'commented_by_name' => $commenterName,
+                ]
+            );
+        }
     }
 }

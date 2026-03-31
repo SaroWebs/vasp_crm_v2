@@ -680,18 +680,35 @@ class NotificationService
      */
     public function sendTaskAssignmentExternalNotification(int $taskId, string $taskTitle, int $assignedUserId, int $assignedByUserId): void
     {
+        // Don't notify if user is doing action on their own task
+        if ($assignedUserId === $assignedByUserId) {
+            return;
+        }
+
         $assignedByUser = User::find($assignedByUserId);
         $assignedByName = $assignedByUser->name ?? 'System';
 
-        $subject = 'New Task Assigned';
+        $title = 'New Task Assigned';
         $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "You have been assigned to task: {$taskTitle}. Assigned by: {$assignedByName}. View: {$taskUrl}";
 
-        $this->notifyEmployee($assignedUserId, $subject, $message, $assignedByUserId);
+        // Send both Pusher and external notifications based on user preferences
+        $this->sendUnifiedNotification(
+            $assignedUserId,
+            'App\Notifications\TaskAssignedNotification',
+            $title,
+            $message,
+            [
+                'task_id' => $taskId,
+                'task_title' => $taskTitle,
+                'assigned_by_id' => $assignedByUserId,
+                'assigned_by_name' => $assignedByName,
+            ]
+        );
     }
 
     /**
-     * Send task status change notification via SMS/Email.
+     * Send task status change notification via Pusher and external channels.
      *
      * @param  int  $taskId  The task ID
      * @param  string  $taskTitle  The task title
@@ -701,18 +718,35 @@ class NotificationService
      */
     public function sendTaskStatusChangeExternalNotification(int $taskId, string $taskTitle, string $newStatus, int $changedByUserId, int $notifyUserId): void
     {
+        // Don't notify if user is doing action on their own task
+        if ($notifyUserId === $changedByUserId) {
+            return;
+        }
+
         $changedByUser = User::find($changedByUserId);
         $changedByName = $changedByUser->name ?? 'System';
 
-        $subject = 'Task Status Updated';
+        $title = 'Task Status Updated';
         $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "Task '{$taskTitle}' status changed to: {$newStatus}. Changed by: {$changedByName}. View: {$taskUrl}";
 
-        $this->notifyEmployee($notifyUserId, $subject, $message, $changedByUserId);
+        $this->sendUnifiedNotification(
+            $notifyUserId,
+            'App\Notifications\TaskStatusChangedNotification',
+            $title,
+            $message,
+            [
+                'task_id' => $taskId,
+                'task_title' => $taskTitle,
+                'new_status' => $newStatus,
+                'changed_by_id' => $changedByUserId,
+                'changed_by_name' => $changedByName,
+            ]
+        );
     }
 
     /**
-     * Send task forwarding notification via SMS/Email.
+     * Send task forwarding notification via Pusher and external channels.
      *
      * @param  int  $taskId  The task ID
      * @param  string  $taskTitle  The task title
@@ -723,18 +757,36 @@ class NotificationService
      */
     public function sendTaskForwardExternalNotification(int $taskId, string $taskTitle, string $fromDepartmentName, string $toDepartmentName, int $forwardedByUserId, int $notifyUserId): void
     {
+        // Don't notify if user is doing action on their own task
+        if ($notifyUserId === $forwardedByUserId) {
+            return;
+        }
+
         $forwardedByUser = User::find($forwardedByUserId);
         $forwardedByName = $forwardedByUser->name ?? 'System';
 
-        $subject = 'Task Forwarded to Your Department';
+        $title = 'Task Forwarded to Your Department';
         $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "Task '{$taskTitle}' has been forwarded from {$fromDepartmentName} to {$toDepartmentName}. Forwarded by: {$forwardedByName}. View: {$taskUrl}";
 
-        $this->notifyEmployee($notifyUserId, $subject, $message, $forwardedByUserId);
+        $this->sendUnifiedNotification(
+            $notifyUserId,
+            'App\Notifications\TaskForwardedNotification',
+            $title,
+            $message,
+            [
+                'task_id' => $taskId,
+                'task_title' => $taskTitle,
+                'from_department_name' => $fromDepartmentName,
+                'to_department_name' => $toDepartmentName,
+                'forwarded_by_id' => $forwardedByUserId,
+                'forwarded_by_name' => $forwardedByName,
+            ]
+        );
     }
 
     /**
-     * Send ticket assignment notification via SMS/Email.
+     * Send ticket assignment notification via Pusher and external channels.
      *
      * @param  int  $ticketId  The ticket ID
      * @param  string  $ticketTitle  The ticket title
@@ -743,13 +795,120 @@ class NotificationService
      */
     public function sendTicketAssignmentExternalNotification(int $ticketId, string $ticketTitle, int $assignedUserId, int $assignedByUserId): void
     {
+        // Don't notify if user is doing action on their own ticket
+        if ($assignedUserId === $assignedByUserId) {
+            return;
+        }
+
         $assignedByUser = User::find($assignedByUserId);
         $assignedByName = $assignedByUser->name ?? 'System';
 
-        $subject = 'New Ticket Assigned';
+        $title = 'New Ticket Assigned';
         $ticketUrl = config('app.url').'/admin/tickets/'.$ticketId;
         $message = "You have been assigned to ticket: {$ticketTitle}. Assigned by: {$assignedByName}. View: {$ticketUrl}";
 
-        $this->notifyEmployee($assignedUserId, $subject, $message, $assignedByUserId);
+        $this->sendUnifiedNotification(
+            $assignedUserId,
+            'App\Notifications\TicketAssignedNotification',
+            $title,
+            $message,
+            [
+                'ticket_id' => $ticketId,
+                'ticket_title' => $ticketTitle,
+                'assigned_by_id' => $assignedByUserId,
+                'assigned_by_name' => $assignedByName,
+            ]
+        );
+    }
+
+    /**
+     * Send unified notification via multiple channels based on user preferences.
+     * This method sends notifications through Pusher (in-app), WhatsApp, SMS, and Email.
+     *
+     * @param int $userId The user ID to notify
+     * @param string $type Notification type/class
+     * @param string $title Notification title
+     * @param string $message Notification message
+     * @param array $data Additional data for the notification
+     * @return array Results of each delivery channel
+     */
+    public function sendUnifiedNotification(
+        int $userId,
+        string $type,
+        string $title,
+        string $message,
+        array $data = []
+    ): array {
+        $results = [];
+        $user = User::find($userId);
+
+        if (!$user) {
+            Log::warning('User not found for unified notification', ['user_id' => $userId]);
+
+            return $results;
+        }
+
+        $preferences = $user->notificationPreferences ?? null;
+
+        // 1. ALWAYS send Pusher/in-app notification (mandatory)
+        try {
+            $notification = Notification::createWorkflowNotification($userId, $type, $title, $message, $data);
+            $notification->update([
+                'delivery_channel' => 'pusher',
+                'delivered' => true,
+                'delivered_at' => now(),
+            ]);
+            $this->broadcastNotification($notification, $userId);
+            $results['pusher'] = ['success' => true, 'notification_id' => $notification->id];
+        } catch (\Exception $e) {
+            Log::error('Failed to send Pusher notification', ['user_id' => $userId, 'error' => $e->getMessage()]);
+            $results['pusher'] = ['success' => false, 'error' => $e->getMessage()];
+        }
+
+        // Check if external notifications are enabled (user preference for WhatsApp/SMS/Email)
+        $wantsExternalNotification = $preferences && $preferences->hasExternalNotificationEnabled();
+
+        if ($wantsExternalNotification) {
+            // 2. Try WhatsApp
+            $whatsappEnabled = $preferences ? $preferences->notify_via_whatsapp : false;
+            if ($whatsappEnabled && $preferences->getWhatsAppNumber()) {
+                try {
+                    $whatsappSent = $this->sendWhatsApp($preferences->getWhatsAppNumber(), "{$title}\n\n{$message}");
+                    $results['whatsapp'] = ['success' => $whatsappSent, 'message' => $whatsappSent ? 'Sent' : 'Failed'];
+                } catch (\Exception $e) {
+                    $results['whatsapp'] = ['success' => false, 'error' => $e->getMessage()];
+                }
+            } else {
+                $results['whatsapp'] = ['success' => false, 'reason' => 'Disabled or no number'];
+            }
+
+            // 3. Try SMS
+            $smsEnabled = $preferences ? $preferences->notify_via_sms : false;
+            if ($smsEnabled && $preferences->getSmsNumber()) {
+                try {
+                    $smsSent = $this->sendSms($preferences->getSmsNumber(), "{$title}: {$message}");
+                    $results['sms'] = ['success' => $smsSent, 'message' => $smsSent ? 'Sent' : 'Failed'];
+                } catch (\Exception $e) {
+                    $results['sms'] = ['success' => false, 'error' => $e->getMessage()];
+                }
+            } else {
+                $results['sms'] = ['success' => false, 'reason' => 'Disabled or no number'];
+            }
+
+            // 4. Try Email
+            $emailEnabled = $preferences ? $preferences->notify_via_email : true;
+            if ($emailEnabled && $user->email) {
+                try {
+                    $emailSent = $this->sendEmail($user->email, $title, nl2br($message));
+                    $results['email'] = ['success' => $emailSent, 'message' => $emailSent ? 'Sent' : 'Failed'];
+                } catch (\Exception $e) {
+                    $results['email'] = ['success' => false, 'error' => $e->getMessage()];
+                }
+            } else {
+                $results['email'] = ['success' => false, 'reason' => 'Disabled or no email'];
+            }
+        }
+
+        return $results;
     }
 }

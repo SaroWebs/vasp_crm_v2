@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Badge, Button } from '../ui';
 import { Bell, CheckCircle, XCircle, UserPlus, Check, Users, Info } from 'lucide-react';
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 
 type Props = {};
 
@@ -30,7 +30,20 @@ interface Note {
     data?: any;
 }
 
+interface PageProps {
+    auth?: {
+        user?: {
+            id: number;
+            name: string;
+            email: string;
+        };
+    };
+    [key: string]: any;
+}
+
 const NotificationMenu = (_props: Props) => {
+    const { auth } = usePage<PageProps>().props;
+    const userId = auth?.user?.id;
     const [data, setData] = useState<NotificationData>({
         notifications: [],
         total: 0,
@@ -119,12 +132,46 @@ const NotificationMenu = (_props: Props) => {
     useEffect(() => {
         void getData();
 
+        // Set up real-time Pusher/Echo listener for new notifications
+        if (userId && window.Echo) {
+            const channel = window.Echo.private(`notifications.${userId}`);
+
+            // Listen for new notification events
+            channel.listen('.notification.created', (event: { notification: Note }) => {
+                // Add new notification to the list
+                setData((prevData) => ({
+                    ...prevData,
+                    notifications: [event.notification, ...prevData.notifications],
+                    total: prevData.total + 1,
+                    total_unread: prevData.total_unread + 1,
+                }));
+            });
+
+            // Listen for notification read events
+            channel.listen('.notification.read', (event: { notification_id: string }) => {
+                setData((prevData) => ({
+                    ...prevData,
+                    notifications: prevData.notifications.map((n) =>
+                        n.id === event.notification_id
+                            ? { ...n, status: 'read', read_at: new Date().toISOString() }
+                            : n,
+                    ),
+                }));
+            });
+
+            // Cleanup on unmount
+            return () => {
+                window.Echo?.leave(`notifications.${userId}`);
+            };
+        }
+
+        // Fallback: polling every 30 seconds if no Echo available
         const intervalId = window.setInterval(() => {
             void getData();
         }, 30000);
 
         return () => window.clearInterval(intervalId);
-    }, []);
+    }, [userId]);
 
     return (
         <DropdownMenu>

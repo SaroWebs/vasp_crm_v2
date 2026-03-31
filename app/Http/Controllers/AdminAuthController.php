@@ -31,8 +31,19 @@ class AdminAuthController extends Controller
 
         $credentials = $request->only('email', 'password');
 
+        $user = \App\Models\User::where('email', $credentials['email'])->first();
+
+        if ($user && $user->session_id && $user->session_id !== $request->session()->getId()) {
+            // User has an active session on a different device - invalidate it
+            // The previous session will be logged out automatically when it tries to access protected routes
+        }
+
         if (Auth::guard('web')->attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
+
+            // Store the session ID in the user record
+            $user = Auth::user();
+            $user->setCurrentSessionId($request->session()->getId());
 
             return redirect('/admin/dashboard');
         }
@@ -44,6 +55,11 @@ class AdminAuthController extends Controller
 
     public function logout(Request $request)
     {
+        $user = Auth::user();
+        if ($user) {
+            $user->clearSessionId();
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

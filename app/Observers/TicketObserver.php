@@ -43,7 +43,8 @@ class TicketObserver
         }
 
         $title = 'New Ticket';
-        $message = "New {$department->name} ticket created: {$ticket->title}";
+        $ticketUrl = config('app.url') . '/admin/tickets/' . $ticket->id;
+        $message = "New {$department->name} ticket created: {$ticket->title}\nView: {$ticketUrl}";
 
         $clientName = $ticket->client?->name;
         if ($clientName) {

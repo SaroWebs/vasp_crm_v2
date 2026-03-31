@@ -22,6 +22,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'session_id',
     ];
 
     /**
@@ -395,5 +396,39 @@ class User extends Authenticatable
     public function getLogName()
     {
         return 'User';
+    }
+
+    /**
+     * Get the user's notification preferences.
+     */
+    public function notificationPreferences()
+    {
+        return $this->hasOne(UserNotificationPreference::class);
+    }
+
+    /**
+     * Set the current session ID for this user.
+     */
+    public function setCurrentSessionId(string $sessionId): void
+    {
+        $this->session_id = $sessionId;
+        $this->save();
+    }
+
+    /**
+     * Clear the current session ID (logout).
+     */
+    public function clearSessionId(): void
+    {
+        $this->session_id = null;
+        $this->save();
+    }
+
+    /**
+     * Check if the given session ID matches the user's current session.
+     */
+    public function isValidSession(string $sessionId): bool
+    {
+        return $this->session_id === $sessionId;
     }
 }
