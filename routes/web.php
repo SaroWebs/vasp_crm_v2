@@ -245,6 +245,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
 
         // Admin Task management routes (web pages)
         Route::get('/tasks', [AdminTaskController::class, 'index'])->name('tasks.admin.index');
+        Route::get('/data/tasks', [AdminTaskController::class, 'getData'])->name('tasks.admin.data');
         Route::post('/tasks', [AdminTaskController::class, 'store'])->name('tasks.admin.store');
         Route::get('/tasks/create', [AdminTaskController::class, 'create'])->name('tasks.admin.create');
         Route::get('/tasks/{task}', [AdminTaskController::class, 'show'])->name('tasks.admin.show');
@@ -487,6 +488,7 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     // Milestone routes
     Route::post('/timeline-events/milestones', [TimelineEventController::class, 'storeMilestone'])->name('api.timeline-events.milestones.store');
     Route::patch('/timeline-events/{timelineEvent}/milestone', [TimelineEventController::class, 'updateMilestone'])->name('api.timeline-events.milestones.update');
+    Route::delete('/timeline-events/{timelineEvent}/milestone', [TimelineEventController::class, 'destroyMilestone'])->name('api.timeline-events.milestones.destroy');
     Route::patch('/timeline-events/{timelineEvent}/complete', [TimelineEventController::class, 'completeMilestone'])->name('api.timeline-events.milestones.complete');
     Route::get('/tasks/{task}/milestones', [TimelineEventController::class, 'getMilestonesForTask'])->name('api.tasks.milestones');
     Route::get('/api/milestones/summary', [TimelineEventController::class, 'getMilestoneSummary'])->name('api.milestones.summary');

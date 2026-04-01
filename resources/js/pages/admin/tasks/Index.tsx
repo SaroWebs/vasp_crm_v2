@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { Task, type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
@@ -51,19 +51,20 @@ import { toast } from 'sonner';
 import TaskAssignmentModal from '@/components/TaskAssignmentModal';
 import { Badge } from '@mantine/core';
 
+interface PaginatedTasks {
+    data: Task[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    links: Array<{
+        url: string | null;
+        label: string;
+        active: boolean;
+    }>;
+}
+
 interface TasksIndexProps {
-    tasks: {
-        data: Task[];
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
-        links: Array<{
-            url: string | null;
-            label: string;
-            active: boolean;
-        }>;
-    };
     filters: {
         state?: string;
         assigned_to?: string;
@@ -73,6 +74,8 @@ interface TasksIndexProps {
     users: Array<{ id: number; name: string }>;
     departments: Array<{ id: number; name: string }>;
 }
+
+type TaskFilterKey = 'state' | 'assigned_to' | 'assigned_department_id';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -150,7 +153,6 @@ const getPriorityCheck = (priority?: string) => {
   
 
 export default function TasksIndex({
-    tasks,
     filters = {},
     users,
     departments,
@@ -159,10 +161,26 @@ export default function TasksIndex({
     const [isDeleting, setIsDeleting] = useState(false);
     const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<number | null>(null);
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-    const filteredTasks = tasks.data;
+    const [tasksData, setTasksData] = useState<PaginatedTasks>({
+        data: [],
+        current_page: 1,
+        last_page: 1,
+        per_page: 5,
+        total: 0,
+        links: [],
+    });
+    const [activeFilters, setActiveFilters] = useState({
+        state: filters.state || 'all',
+        assigned_to: filters.assigned_to || 'all',
+        assigned_department_id: filters.assigned_department_id || 'all',
+        search: filters.search || '',
+    });
+    const [isTasksLoading, setIsTasksLoading] = useState(false);
+
+    const filteredTasks = tasksData.data;
 
     const stats = useMemo(() => {
-        const allTasks: Task[] = tasks.data;
+        const allTasks: Task[] = tasksData.data;
         return {
             total: allTasks.length,
             draft: allTasks.filter((t: Task) => t.state === 'Draft').length,
@@ -179,31 +197,74 @@ export default function TasksIndex({
             rejected: allTasks.filter((t: Task) => t.state === 'Rejected')
                 .length,
         };
-    }, [tasks.data]);
+    }, [tasksData.data]);
 
-    const handleFilterChange = (key: string, value: string) => {
-        const params = new URLSearchParams(window.location.search);
-        if (value && value !== 'all') {
-            params.set(key, value);
-        } else {
-            params.delete(key);
+    const loadTasksData = async (
+        overrides: Partial<{
+            state: string;
+            assigned_to: string;
+            assigned_department_id: string;
+            search: string;
+            page: number;
+        }> = {},
+    ) => {
+        const mergedFilters = {
+            ...activeFilters,
+            ...overrides,
+        };
+
+        const requestParams: Record<string, string | number> = {
+            per_page: tasksData.per_page || 5,
+        };
+
+        if (mergedFilters.state && mergedFilters.state !== 'all') {
+            requestParams.state = mergedFilters.state;
         }
-        // Reset to page 1 when filters change
-        params.set('page', '1');
-        router.get(`/admin/tasks?${params.toString()}`);
+
+        if (mergedFilters.assigned_to && mergedFilters.assigned_to !== 'all') {
+            requestParams.assigned_to = mergedFilters.assigned_to;
+        }
+
+        if (mergedFilters.assigned_department_id && mergedFilters.assigned_department_id !== 'all') {
+            requestParams.assigned_department_id = mergedFilters.assigned_department_id;
+        }
+
+        if (mergedFilters.search && mergedFilters.search.trim() !== '') {
+            requestParams.search = mergedFilters.search.trim();
+        }
+
+        if (overrides.page) {
+            requestParams.page = overrides.page;
+        }
+
+        setIsTasksLoading(true);
+
+        try {
+            const response = await axios.get('/admin/data/tasks', {
+                params: requestParams,
+            });
+            setTasksData(response.data);
+            setActiveFilters(mergedFilters);
+        } catch (error) {
+            console.error('Error loading tasks data:', error);
+        } finally {
+            setIsTasksLoading(false);
+        }
     };
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleFilterChange = (key: TaskFilterKey, value: string) => {
+        loadTasksData({
+            [key]: value,
+            page: 1,
+        });
+    };
+
+    const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const params = new URLSearchParams(window.location.search);
-        if (searchQuery.trim()) {
-            params.set('search', searchQuery.trim());
-        } else {
-            params.delete('search');
-        }
-        // Reset to page 1 when search changes
-        params.set('page', '1');
-        router.get(`/admin/tasks?${params.toString()}`);
+        loadTasksData({
+            search: searchQuery.trim(),
+            page: 1,
+        });
     };
 
     const handleDeleteTask = (task: any) => {
@@ -215,9 +276,10 @@ export default function TasksIndex({
             setIsDeleting(true);
             axios
                 .delete(`/admin/tasks/${task.id}`)
-                .then((res) => {
-                    const currentParams = window.location.search;
-                    router.visit(`/admin/tasks${currentParams}`);
+                .then(() => {
+                    loadTasksData({
+                        page: tasksData.current_page,
+                    });
                 })
                 .catch((res) => {
                     console.log(res);
@@ -243,12 +305,25 @@ export default function TasksIndex({
                             Manage and track all tasks across your organization
                         </p>
                     </div>
-                    <Link href="/admin/tasks/create">
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create Task
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                loadTasksData({
+                                    page: tasksData.current_page,
+                                });
+                            }}
+                            disabled={isTasksLoading}
+                        >
+                            Refresh Tasks
                         </Button>
-                    </Link>
+                        <Link href="/admin/tasks/create">
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create Task
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Stats Cards */}
@@ -350,7 +425,7 @@ export default function TasksIndex({
                             </form>
 
                             <Select
-                                value={filters.state || 'all'}
+                                value={activeFilters.state}
                                 onValueChange={(value) =>
                                     handleFilterChange('state', value)
                                 }
@@ -386,7 +461,7 @@ export default function TasksIndex({
                             </Select>
 
                             <Select
-                                value={filters.assigned_to || 'all'}
+                                value={activeFilters.assigned_to}
                                 onValueChange={(value) =>
                                     handleFilterChange('assigned_to', value)
                                 }
@@ -410,7 +485,7 @@ export default function TasksIndex({
                             </Select>
 
                             <Select
-                                value={filters.assigned_department_id || 'all'}
+                                value={activeFilters.assigned_department_id}
                                 onValueChange={(value) =>
                                     handleFilterChange(
                                         'assigned_department_id',
@@ -715,17 +790,19 @@ export default function TasksIndex({
                 </Card>
 
                 {/* Pagination */}
-                {tasks.last_page > 1 && (
+                {tasksData.last_page > 1 && (
                     <div className="flex justify-center mt-4">
                         <div className="flex items-center gap-2">
-                            {tasks.links.map((link, index) => (
+                            {tasksData.links.map((link, index) => (
                                 <Button
                                     key={index}
                                     variant={link.active ? 'default' : 'outline'}
                                     disabled={!link.url || link.active}
                                     onClick={() => {
                                         if (link.url) {
-                                            router.visit(link.url);
+                                            const url = new URL(link.url, window.location.origin);
+                                            const page = Number(url.searchParams.get('page') || '1');
+                                            loadTasksData({ page });
                                         }
                                     }}
                                 >
@@ -746,6 +823,9 @@ export default function TasksIndex({
                 }}
                 onAssignmentsUpdated={() => {
                     toast.success('Task assignments updated successfully');
+                    loadTasksData({
+                        page: tasksData.current_page,
+                    });
                 }}
             />
         </AppLayout>

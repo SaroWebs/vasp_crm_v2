@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TaskCommentAttachment extends Model
 {
@@ -17,10 +16,6 @@ class TaskCommentAttachment extends Model
         'uploaded_by',
     ];
 
-    // public function comment(): BelongsTo
-    // {
-    //     return $this->belongsTo(TaskComment::class, 'comment_id');
-    // }
     public function comment()
     {
         return $this->morphTo();
@@ -28,7 +23,7 @@ class TaskCommentAttachment extends Model
 
     public function getFileUrlAttribute(): string
     {
-        return asset('storage/' . $this->file_path);
+        return asset('storage/'.$this->file_path);
     }
 
     public function isImage(): bool

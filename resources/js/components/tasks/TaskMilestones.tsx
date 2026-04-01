@@ -36,6 +36,7 @@ import {
     Clock,
     AlertCircle,
     Calendar,
+    Trash2,
 } from 'lucide-react';
 
 interface Milestone {
@@ -75,6 +76,7 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
     const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
     const [isOpen, setIsOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [deletingMilestoneId, setDeletingMilestoneId] = useState<number | null>(null);
     const [formData, setFormData] = useState({
         event_name: '',
         event_description: '',
@@ -208,7 +210,8 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
 
     // Determine if user can add milestones (own task or super admin, and task not completed)
     const isTaskCompleted = taskState === 'Done' || taskState === 'Cancelled' || taskState === 'Rejected';
-    const canAddMilestone = (isOwnTask || isSuperAdmin) && !isTaskCompleted;
+    const canManageMilestones = isOwnTask || isSuperAdmin;
+    const canAddMilestone = canManageMilestones && !isTaskCompleted;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -314,6 +317,27 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
         } catch (error) {
             console.error('Error completing milestone:', error);
             alert('Failed to complete milestone. Please try again.');
+        }
+    };
+
+    const handleDeleteMilestone = async (milestoneId: number) => {
+        const confirmed = window.confirm('Are you sure you want to delete this milestone?');
+        if (!confirmed) {
+            return;
+        }
+
+        setDeletingMilestoneId(milestoneId);
+
+        try {
+            await axios.delete(`/timeline-events/${milestoneId}/milestone`);
+            setMilestones((previousMilestones) =>
+                previousMilestones.filter((milestone) => milestone.id !== milestoneId),
+            );
+        } catch (error) {
+            console.error('Error deleting milestone:', error);
+            alert('Failed to delete milestone. Please try again.');
+        } finally {
+            setDeletingMilestoneId(null);
         }
     };
 
@@ -609,21 +633,34 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                                             </div>
                                         </div>
                                     </div>
-                                    {!milestone.is_completed && (
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => handleCompleteMilestone(milestone.id)}
-                                        >
-                                            <CheckCircle className="mr-1 h-4 w-4" />
-                                            Complete
-                                        </Button>
-                                    )}
-                                    {milestone.is_completed && milestone.completed_at && (
-                                        <span className="text-xs text-green-600">
-                                            Completed {format(new Date(milestone.completed_at || ''), 'MMM dd')}
-                                        </span>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        {!milestone.is_completed && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleCompleteMilestone(milestone.id)}
+                                            >
+                                                <CheckCircle className="mr-1 h-4 w-4" />
+                                                Complete
+                                            </Button>
+                                        )}
+                                        {canManageMilestones && (
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                onClick={() => void handleDeleteMilestone(milestone.id)}
+                                                disabled={deletingMilestoneId === milestone.id}
+                                            >
+                                                <Trash2 className="mr-1 h-4 w-4" />
+                                                {deletingMilestoneId === milestone.id ? 'Deleting...' : 'Delete'}
+                                            </Button>
+                                        )}
+                                        {milestone.is_completed && milestone.completed_at && (
+                                            <span className="text-xs text-green-600">
+                                                Completed {format(new Date(milestone.completed_at || ''), 'MMM dd')}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                     </div>

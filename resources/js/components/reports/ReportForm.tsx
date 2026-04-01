@@ -201,6 +201,12 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
         }
     }, [open]);
 
+    const formatHours = (hours: number) => {
+        const h = Math.floor(hours);
+        const m = Math.round((hours - h) * 60);
+        if(h === 0) return `${m}m`;
+        return `${h}h ${m}m`;
+    }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -260,7 +266,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                                                 {task && (
                                                     <div className="text-right">
                                                         <p className="text-sm font-medium text-blue-600">
-                                                            {Number(task.total_hours).toFixed(2)} hrs
+                                                            {formatHours(Number(task.total_hours))}
                                                         </p>
                                                     </div>
                                                 )}

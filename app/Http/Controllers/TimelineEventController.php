@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TimelineEvent;
 use App\Models\Task;
+use App\Models\TimelineEvent;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -66,7 +66,7 @@ class TimelineEventController extends Controller
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
                 $path = $file->store('timeline_attachments', 'public');
-                
+
                 $event->attachments()->create([
                     'file_name' => $file->getClientOriginalName(),
                     'file_path' => $path,
@@ -74,8 +74,8 @@ class TimelineEventController extends Controller
                     'file_size' => $file->getSize(),
                     'metadata' => [
                         'original_name' => $file->getClientOriginalName(),
-                        'extension' => $file->getClientOriginalExtension()
-                    ]
+                        'extension' => $file->getClientOriginalExtension(),
+                    ],
                 ]);
             }
         }
@@ -144,7 +144,7 @@ class TimelineEventController extends Controller
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
                 $path = $file->store('timeline_attachments', 'public');
-                
+
                 $event->attachments()->create([
                     'file_name' => $file->getClientOriginalName(),
                     'file_path' => $path,
@@ -152,8 +152,8 @@ class TimelineEventController extends Controller
                     'file_size' => $file->getSize(),
                     'metadata' => [
                         'original_name' => $file->getClientOriginalName(),
-                        'extension' => $file->getClientOriginalExtension()
-                    ]
+                        'extension' => $file->getClientOriginalExtension(),
+                    ],
                 ]);
             }
         }
@@ -187,7 +187,7 @@ class TimelineEventController extends Controller
         $rangeError = $this->validateMilestoneRangeAgainstTask($task, $eventDate, $targetDate);
         if ($rangeError) {
             return response()->json([
-                'error' => $rangeError
+                'error' => $rangeError,
             ], 422);
         }
 
@@ -196,9 +196,10 @@ class TimelineEventController extends Controller
         if ($overlapMilestone) {
             $overlapStart = Carbon::parse($overlapMilestone->event_date)->format('M d, Y h:i A');
             $overlapEnd = Carbon::parse($overlapMilestone->target_date)->format('M d, Y h:i A');
+
             return response()->json([
-                'error' => 'Cannot create milestone - timeslot overlaps with "' .
-                    $overlapMilestone->event_name . '" (' . $overlapStart . ' to ' . $overlapEnd . ')'
+                'error' => 'Cannot create milestone - timeslot overlaps with "'.
+                    $overlapMilestone->event_name.'" ('.$overlapStart.' to '.$overlapEnd.')',
             ], 422);
         }
 
@@ -218,7 +219,7 @@ class TimelineEventController extends Controller
      */
     public function updateMilestone(Request $request, TimelineEvent $timelineEvent)
     {
-        if (!$timelineEvent->is_milestone) {
+        if (! $timelineEvent->is_milestone) {
             return response()->json(['error' => 'This is not a milestone'], 400);
         }
 
@@ -239,16 +240,16 @@ class TimelineEventController extends Controller
             ? Carbon::parse($validated['target_date'])
             : Carbon::parse($timelineEvent->target_date);
 
-        if (!$targetDate->gt($eventDate)) {
+        if (! $targetDate->gt($eventDate)) {
             return response()->json([
-                'error' => 'Target date must be after event date'
+                'error' => 'Target date must be after event date',
             ], 422);
         }
 
         $rangeError = $this->validateMilestoneRangeAgainstTask($timelineEvent->task, $eventDate, $targetDate);
         if ($rangeError) {
             return response()->json([
-                'error' => $rangeError
+                'error' => $rangeError,
             ], 422);
         }
 
@@ -256,9 +257,10 @@ class TimelineEventController extends Controller
         if ($overlapMilestone) {
             $overlapStart = Carbon::parse($overlapMilestone->event_date)->format('M d, Y h:i A');
             $overlapEnd = Carbon::parse($overlapMilestone->target_date)->format('M d, Y h:i A');
+
             return response()->json([
-                'error' => 'Cannot update milestone - timeslot overlaps with "' .
-                    $overlapMilestone->event_name . '" (' . $overlapStart . ' to ' . $overlapEnd . ')'
+                'error' => 'Cannot update milestone - timeslot overlaps with "'.
+                    $overlapMilestone->event_name.'" ('.$overlapStart.' to '.$overlapEnd.')',
             ], 422);
         }
 
@@ -272,7 +274,7 @@ class TimelineEventController extends Controller
      */
     public function completeMilestone(Request $request, TimelineEvent $timelineEvent)
     {
-        if (!$timelineEvent->is_milestone) {
+        if (! $timelineEvent->is_milestone) {
             return response()->json(['error' => 'This is not a milestone'], 400);
         }
 
@@ -282,16 +284,32 @@ class TimelineEventController extends Controller
 
         $timelineEvent->is_completed = true;
         $timelineEvent->completed_at = now();
-        
+
         if (isset($validated['progress_percentage'])) {
             $timelineEvent->progress_percentage = $validated['progress_percentage'];
         } else {
             $timelineEvent->progress_percentage = 100;
         }
-        
+
         $timelineEvent->save();
 
         return response()->json($timelineEvent);
+    }
+
+    /**
+     * Delete a milestone.
+     */
+    public function destroyMilestone(TimelineEvent $timelineEvent)
+    {
+        if (! $timelineEvent->is_milestone) {
+            return response()->json(['error' => 'This is not a milestone'], 400);
+        }
+
+        $timelineEvent->delete();
+
+        return response()->json([
+            'message' => 'Milestone deleted successfully',
+        ]);
     }
 
     /**

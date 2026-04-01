@@ -14,20 +14,22 @@ class ValidateUserSession
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = Auth::user();
+        if (! $request->is('admin') && ! $request->is('admin/*')) {
+            return $next($request);
+        }
+
+        $user = Auth::guard('web')->user();
 
         if ($user) {
             $currentSessionId = $request->session()->getId();
             $storedSessionId = $user->session_id;
 
-            // If stored session ID doesn't match current session, log the user out
-            if (!$storedSessionId || $storedSessionId !== $currentSessionId) {
+            if (! $storedSessionId || $storedSessionId !== $currentSessionId) {
                 Auth::guard('web')->logout();
 
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
-                // Redirect to login with a message
                 return redirect('/admin/login')->with('status', 'Your session has been invalidated. Please login again.');
             }
         }

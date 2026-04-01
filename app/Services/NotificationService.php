@@ -819,17 +819,19 @@ class NotificationService
                 'assigned_by_name' => $assignedByName,
             ]
         );
+
+        $this->notifyEmployee($assignedUserId, $title, $message, $assignedByUserId);
     }
 
     /**
      * Send unified notification via multiple channels based on user preferences.
      * This method sends notifications through Pusher (in-app), WhatsApp, SMS, and Email.
      *
-     * @param int $userId The user ID to notify
-     * @param string $type Notification type/class
-     * @param string $title Notification title
-     * @param string $message Notification message
-     * @param array $data Additional data for the notification
+     * @param  int  $userId  The user ID to notify
+     * @param  string  $type  Notification type/class
+     * @param  string  $title  Notification title
+     * @param  string  $message  Notification message
+     * @param  array  $data  Additional data for the notification
      * @return array Results of each delivery channel
      */
     public function sendUnifiedNotification(
@@ -842,7 +844,7 @@ class NotificationService
         $results = [];
         $user = User::find($userId);
 
-        if (!$user) {
+        if (! $user) {
             Log::warning('User not found for unified notification', ['user_id' => $userId]);
 
             return $results;

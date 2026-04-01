@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TaskComment extends Model
 {
@@ -23,10 +22,6 @@ class TaskComment extends Model
         'is_internal' => 'boolean',
     ];
 
-    // public function attachments(): HasMany
-    // {
-    //     return $this->hasMany(TaskCommentAttachment::class, 'comment_id');
-    // }
     public function attachments()
     {
         return $this->morphMany(TaskCommentAttachment::class, 'comment');
@@ -64,6 +59,7 @@ class TaskComment extends Model
         if ($this->commented_by_type === 'user') {
             return $this->user;
         }
+
         return $this->organizationUser;
     }
 

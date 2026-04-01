@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\ValidateUserSession;
 use App\Models\Client;
+use App\Models\Department;
+use App\Models\Employee;
 use App\Models\OrganizationUser;
 use App\Models\Permission;
 use App\Models\Role;
@@ -18,6 +21,8 @@ class AdminTicketAssignmentExternalNotificationTest extends TestCase
 
     public function test_assign_ticket_sends_external_notification_to_assigned_user(): void
     {
+        $this->withoutMiddleware(ValidateUserSession::class);
+
         $admin = $this->createAdminUserWithTicketAssignPermission();
         $assignee = User::factory()->create();
 
@@ -76,6 +81,70 @@ class AdminTicketAssignmentExternalNotificationTest extends TestCase
         $this->assertSame($ticket->title, $notificationService->externalTicketAssignmentCalls[0]['ticket_title']);
         $this->assertSame($assignee->id, $notificationService->externalTicketAssignmentCalls[0]['assigned_user_id']);
         $this->assertSame($admin->id, $notificationService->externalTicketAssignmentCalls[0]['assigned_by_user_id']);
+    }
+
+    public function test_ticket_assignment_whatsapp_uses_employee_phone_number(): void
+    {
+        $admin = User::factory()->create();
+        $assignee = User::factory()->create();
+
+        $department = Department::create([
+            'name' => 'Support',
+            'slug' => 'support',
+            'status' => 'active',
+        ]);
+
+        Employee::create([
+            'name' => $assignee->name,
+            'email' => 'employee@example.com',
+            'phone' => '9876543210',
+            'department_id' => $department->id,
+            'user_id' => $assignee->id,
+        ]);
+
+        $notificationService = new class extends NotificationService
+        {
+            /** @var array<int, array<string, mixed>> */
+            public array $unifiedNotificationCalls = [];
+
+            /** @var array<int, array<string, mixed>> */
+            public array $whatsAppCalls = [];
+
+            public function sendUnifiedNotification(
+                int $userId,
+                string $type,
+                string $title,
+                string $message,
+                array $data = []
+            ): array {
+                $this->unifiedNotificationCalls[] = [
+                    'user_id' => $userId,
+                    'type' => $type,
+                    'title' => $title,
+                    'message' => $message,
+                    'data' => $data,
+                ];
+
+                return ['pusher' => ['success' => true]];
+            }
+
+            public function sendWhatsApp(string $phone, string $message): bool
+            {
+                $this->whatsAppCalls[] = [
+                    'phone' => $phone,
+                    'message' => $message,
+                ];
+
+                return true;
+            }
+        };
+
+        $notificationService->sendTicketAssignmentExternalNotification(42, 'Broken printer', $assignee->id, $admin->id);
+
+        $this->assertCount(1, $notificationService->unifiedNotificationCalls);
+        $this->assertCount(1, $notificationService->whatsAppCalls);
+        $this->assertSame('9876543210', $notificationService->whatsAppCalls[0]['phone']);
+        $this->assertStringContainsString('Broken printer', $notificationService->whatsAppCalls[0]['message']);
     }
 
     private function createAdminUserWithTicketAssignPermission(): User

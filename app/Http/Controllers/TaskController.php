@@ -485,6 +485,7 @@ class TaskController extends Controller
                     ])->orderBy('event_date', 'asc');
                 },
             ])->withCount('comments')
+            ->orderByDesc('created_at')
             ->select(['tasks.*']);
 
         // If recent=true is passed, only return tasks completed in the last 2 days

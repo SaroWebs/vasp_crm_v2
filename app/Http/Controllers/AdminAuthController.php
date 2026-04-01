@@ -41,8 +41,7 @@ class AdminAuthController extends Controller
         if (Auth::guard('web')->attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
 
-            // Store the session ID in the user record
-            $user = Auth::user();
+            $user = Auth::guard('web')->user();
             $user->setCurrentSessionId($request->session()->getId());
 
             return redirect('/admin/dashboard');
@@ -55,7 +54,7 @@ class AdminAuthController extends Controller
 
     public function logout(Request $request)
     {
-        $user = Auth::user();
+        $user = Auth::guard('web')->user();
         if ($user) {
             $user->clearSessionId();
         }

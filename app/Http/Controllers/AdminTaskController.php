@@ -2,25 +2,25 @@
 
 namespace App\Http\Controllers;
 
-use Carbon\Carbon;
-use App\Models\Task;
-use App\Models\User;
-use Inertia\Inertia;
-use App\Models\Ticket;
-use App\Models\Project;
-use App\Models\TaskType;
-use App\Models\SlaPolicy;
 use App\Models\Department;
+use App\Models\Project;
 use App\Models\ProjectPhase;
-use App\Models\TaskHistory;
-use App\Services\NotificationService;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
+use App\Models\SlaPolicy;
+use App\Models\Task;
 use App\Models\TaskAttachment;
 use App\Models\TaskAuditEvent;
-use Illuminate\Support\Facades\DB;
+use App\Models\TaskHistory;
+use App\Models\TaskType;
+use App\Models\Ticket;
+use App\Models\User;
+use App\Services\NotificationService;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
 
 class AdminTaskController extends Controller
 {
@@ -36,6 +36,20 @@ class AdminTaskController extends Controller
      */
     public function index(Request $request)
     {
+        $users = User::select('id', 'name')->where('status', 'active')->get();
+        $departments = Department::select('id', 'name')->where('status', 'active')->get();
+
+        return Inertia::render('admin/tasks/Index', [
+            'filters' => $request->only(['state', 'priority', 'assigned_department_id', 'search', 'assigned_to']),
+            'users' => $users,
+            'departments' => $departments,
+        ]);
+    }
+
+    public function getData(Request $request)
+    {
+
+        $perPage = $request->get('per_page', 5);
         $query = Task::withTrashed()
             ->with([
                 'createdBy:id,name',
@@ -46,7 +60,7 @@ class AdminTaskController extends Controller
                 'slaPolicy:id,name,priority',
                 'parentTask:id,title,task_code',
                 'childTasks:id,title,task_code',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ]);
 
         if ($request->has('state') && $request->state !== 'all') {
@@ -59,18 +73,17 @@ class AdminTaskController extends Controller
             });
         }
 
-
         if ($request->has('assigned_department_id') && $request->assigned_department_id !== 'all') {
             $query->where('assigned_department_id', $request->assigned_department_id);
         }
 
         if ($request->has('assigned_to') && $request->assigned_to !== 'all') {
-            $query->whereHas('assignedUsers', function($q) use ($request) {
+            $query->whereHas('assignedUsers', function ($q) use ($request) {
                 $q->where('user_id', $request->assigned_to);
             });
         }
 
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
@@ -90,18 +103,9 @@ class AdminTaskController extends Controller
             });
         }
 
-        $tasks = $query->latest('created_at')->paginate(5);
+        $tasks = $query->latest('created_at')->paginate($perPage);
 
-        // Get data for filter dropdowns
-        $users = User::select('id', 'name')->where('status', 'active')->get();
-        $departments = Department::select('id', 'name')->where('status', 'active')->get();
-
-        return Inertia::render('admin/tasks/Index', [
-            'tasks' => $tasks,
-            'filters' => $request->only(['state', 'priority', 'assigned_department_id', 'search', 'assigned_to']),
-            'users' => $users,
-            'departments' => $departments
-        ]);
+        return response()->json($tasks);
     }
 
     /**
@@ -132,11 +136,11 @@ class AdminTaskController extends Controller
                 'timeEntries',
                 'taskAssignments',
                 'dependencies',
-                'timelineEvents'
+                'timelineEvents',
             ])
             ->find($task);
 
-        if (!$tsk) {
+        if (! $tsk) {
             abort(404, 'Task not found');
         }
 
@@ -160,12 +164,12 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $taskType = TaskType::find($taskTypeId);
-        if (!$taskType) {
+        if (! $taskType) {
             return response()->json(['message' => 'Task type not found'], 404);
         }
 
@@ -175,7 +179,7 @@ class AdminTaskController extends Controller
             ->get();
 
         return response()->json([
-            'sla_policies' => $slaPolicies
+            'sla_policies' => $slaPolicies,
         ]);
     }
 
@@ -185,7 +189,7 @@ class AdminTaskController extends Controller
     public function create()
     {
         $user = User::find(Auth::id());
-        if (!$user || !$user->hasPermission('task.create')) {
+        if (! $user || ! $user->hasPermission('task.create')) {
             abort(403, 'Insufficient permissions to create tasks.');
         }
 
@@ -204,7 +208,7 @@ class AdminTaskController extends Controller
 
         $departments = Department::where('status', 'active')->get();
 
-        $managers = User::whereHas('roles', function($q) {
+        $managers = User::whereHas('roles', function ($q) {
             $q->whereIn('slug', ['admin', 'manager', 'team-lead']);
         })->get();
 
@@ -214,10 +218,11 @@ class AdminTaskController extends Controller
             'taskTypes' => $taskTypes,
             'slaPolicies' => $slaPolicies,
             'projects' => $projects,
-            'departments'=> $departments,
-            'managers'=> $managers
+            'departments' => $departments,
+            'managers' => $managers,
         ]);
     }
+
     /**
      * Generate a unique task code
      */
@@ -226,6 +231,7 @@ class AdminTaskController extends Controller
         $prefix = 'TASK';
         $timestamp = now()->format('YmdHis');
         $random = Str::upper(Str::random(4));
+
         return "{$prefix}-{$timestamp}-{$random}";
     }
 
@@ -235,7 +241,7 @@ class AdminTaskController extends Controller
     public function store(Request $request)
     {
         $user = User::find(Auth::id());
-        if (!$user || !$user->hasPermission('task.create')) {
+        if (! $user || ! $user->hasPermission('task.create')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -245,7 +251,7 @@ class AdminTaskController extends Controller
         // Parse tags if it's a JSON string
         if ($request->has('tags') && is_string($request->input('tags'))) {
             $tagsValue = $request->input('tags');
-            if (!empty($tagsValue)) {
+            if (! empty($tagsValue)) {
                 $decodedTags = json_decode($tagsValue, true);
                 if (json_last_error() === JSON_ERROR_NONE) {
                     $requestData['tags'] = $decodedTags;
@@ -260,7 +266,7 @@ class AdminTaskController extends Controller
         // Parse metadata if it's a JSON string
         if ($request->has('metadata') && is_string($request->input('metadata'))) {
             $metadataValue = $request->input('metadata');
-            if (!empty($metadataValue)) {
+            if (! empty($metadataValue)) {
                 $decodedMetadata = json_decode($metadataValue, true);
                 if (json_last_error() === JSON_ERROR_NONE) {
                     $requestData['metadata'] = $decodedMetadata;
@@ -271,7 +277,6 @@ class AdminTaskController extends Controller
                 $requestData['metadata'] = [];
             }
         }
-
 
         // Merge parsed data back into request
         $request->merge($requestData);
@@ -327,10 +332,10 @@ class AdminTaskController extends Controller
             $validated['metadata'] = $validated['metadata'] ?? [];
 
             // Keep phase and project aligned for project-task creation workflows.
-            if (!empty($validated['phase_id'])) {
+            if (! empty($validated['phase_id'])) {
                 $phase = ProjectPhase::find($validated['phase_id']);
 
-                if ($phase && !empty($validated['project_id']) && (int) $phase->project_id !== (int) $validated['project_id']) {
+                if ($phase && ! empty($validated['project_id']) && (int) $phase->project_id !== (int) $validated['project_id']) {
                     return response()->json([
                         'message' => 'Selected phase does not belong to the selected project.',
                     ], 422);
@@ -341,7 +346,7 @@ class AdminTaskController extends Controller
                 }
             }
 
-            if (empty($validated['sla_policy_id']) && !empty($validated['task_type_id'])) {
+            if (empty($validated['sla_policy_id']) && ! empty($validated['task_type_id'])) {
                 $taskType = TaskType::find($validated['task_type_id']);
                 if ($taskType) {
                     // Find the highest priority SLA policy for this task type
@@ -357,7 +362,7 @@ class AdminTaskController extends Controller
             }
 
             // Auto-assign project based on task type if required
-            if (empty($validated['project_id']) && !empty($validated['task_type_id'])) {
+            if (empty($validated['project_id']) && ! empty($validated['task_type_id'])) {
                 $taskType = TaskType::find($validated['task_type_id']);
                 if ($taskType && $taskType->requires_project) {
                     // Find a default project for this task type
@@ -384,14 +389,14 @@ class AdminTaskController extends Controller
             if ($request->hasFile('attachments')) {
                 $attachmentsData = $request->file('attachments');
             }
-            
+
             $assignmentsData = $validated['assignments'] ?? [];
             unset($validated['attachments']);
 
             $task = Task::create($validated);
 
             // Handle task assignments if provided
-            if (!empty($assignmentsData)) {
+            if (! empty($assignmentsData)) {
                 foreach ($assignmentsData as $assignment) {
                     $task->assignUser(
                         $assignment['user_id'],
@@ -412,7 +417,7 @@ class AdminTaskController extends Controller
             }
 
             // Handle task attachments using Storage facade
-            if (!empty($attachmentsData)) {
+            if (! empty($attachmentsData)) {
                 foreach ($attachmentsData as $idx => $attachment) {
                     $originalName = $attachment->getClientOriginalName();
                     $fileExtension = $attachment->getClientOriginalExtension();
@@ -421,7 +426,7 @@ class AdminTaskController extends Controller
                     $taskCode = $task->task_code ?? 'TASK';
 
                     $baseName = "{$taskCode}_{$timestamp}_{$index}";
-                    $uniqueName = $baseName . ($fileExtension ? '.' . $fileExtension : '');
+                    $uniqueName = $baseName.($fileExtension ? '.'.$fileExtension : '');
 
                     $filePath = Storage::disk('public')->putFileAs('task_attachments', $attachment, $uniqueName);
 
@@ -434,8 +439,8 @@ class AdminTaskController extends Controller
                         'uploaded_by' => Auth::user()->id,
                         'metadata' => [
                             'original_name' => $originalName,
-                            'extension' => $fileExtension
-                        ]
+                            'extension' => $fileExtension,
+                        ],
                     ]);
                 }
             }
@@ -446,7 +451,7 @@ class AdminTaskController extends Controller
                 'old_status' => null,
                 'new_status' => $task->state,
                 'changed_by' => Auth::user()->id,
-                'created_at' => Carbon::now()
+                'created_at' => Carbon::now(),
             ]);
 
             // Create initial audit event
@@ -460,7 +465,7 @@ class AdminTaskController extends Controller
                 $task->current_owner_kind,
                 $task->current_owner_id,
                 null,
-                'Task created by ' . Auth::user()->name,
+                'Task created by '.Auth::user()->name,
                 null,
                 Auth::user()->id
             );
@@ -476,8 +481,8 @@ class AdminTaskController extends Controller
                     'ticket:id,ticket_number,title',
                     'taskType:id,name,code',
                     'slaPolicy:id,name,priority',
-                    'attachments:id,task_id,file_path,file_type,uploaded_by,created_at'
-                ])
+                    'attachments:id,task_id,file_path,file_type,uploaded_by,created_at',
+                ]),
             ], 201);
 
         } catch (\Exception $e) {
@@ -499,10 +504,10 @@ class AdminTaskController extends Controller
     {
         $task = Task::with([
             'ticket:id,ticket_number,title,client_id',
-            'ticket.client:id,name'
+            'ticket.client:id,name',
         ])->find($task_id);
 
-        if (!$task) {
+        if (! $task) {
             abort(404, 'Task not found');
         }
 
@@ -526,7 +531,7 @@ class AdminTaskController extends Controller
             'parentTasks' => $parentTasks,
             'taskTypes' => $taskTypes,
             'slaPolicies' => $slaPolicies,
-            'projects' => $projects
+            'projects' => $projects,
         ]);
     }
 
@@ -536,7 +541,7 @@ class AdminTaskController extends Controller
     public function update(Request $request, $task_id)
     {
         $task = Task::find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
@@ -546,7 +551,7 @@ class AdminTaskController extends Controller
         // Parse tags if it's a JSON string
         if ($request->has('tags') && is_string($request->input('tags'))) {
             $tagsValue = $request->input('tags');
-            if (!empty($tagsValue)) {
+            if (! empty($tagsValue)) {
                 $decodedTags = json_decode($tagsValue, true);
                 if (json_last_error() === JSON_ERROR_NONE) {
                     $requestData['tags'] = $decodedTags;
@@ -561,7 +566,7 @@ class AdminTaskController extends Controller
         // Parse metadata if it's a JSON string
         if ($request->has('metadata') && is_string($request->input('metadata'))) {
             $metadataValue = $request->input('metadata');
-            if (!empty($metadataValue)) {
+            if (! empty($metadataValue)) {
                 $decodedMetadata = json_decode($metadataValue, true);
                 if (json_last_error() === JSON_ERROR_NONE) {
                     $requestData['metadata'] = $decodedMetadata;
@@ -579,7 +584,7 @@ class AdminTaskController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'task_code' => ['required', 'string', 'unique:tasks,task_code,' . $task_id],
+            'task_code' => ['required', 'string', 'unique:tasks,task_code,'.$task_id],
             'ticket_id' => ['nullable', 'exists:tickets,id'],
             'parent_task_id' => ['nullable', 'exists:tasks,id'],
             'department_id' => ['nullable', 'exists:departments,id'],
@@ -601,14 +606,14 @@ class AdminTaskController extends Controller
         // Prevent circular reference in parent task
         if ($validated['parent_task_id'] == $task_id) {
             return response()->json([
-                'message' => 'Task cannot be parent of itself'
+                'message' => 'Task cannot be parent of itself',
             ], 422);
         }
 
-        if (!empty($validated['phase_id'])) {
+        if (! empty($validated['phase_id'])) {
             $phase = ProjectPhase::find($validated['phase_id']);
 
-            if ($phase && !empty($validated['project_id']) && (int) $phase->project_id !== (int) $validated['project_id']) {
+            if ($phase && ! empty($validated['project_id']) && (int) $phase->project_id !== (int) $validated['project_id']) {
                 return response()->json([
                     'message' => 'Selected phase does not belong to the selected project.',
                 ], 422);
@@ -632,8 +637,8 @@ class AdminTaskController extends Controller
                 'ticket:id,ticket_number,title',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
-            ])
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
+            ]),
         ], 200);
     }
 
@@ -643,7 +648,7 @@ class AdminTaskController extends Controller
     public function updateDates(Request $request, $task_id)
     {
         $task = Task::find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
@@ -664,7 +669,7 @@ class AdminTaskController extends Controller
 
         return response()->json([
             'message' => 'Task dates updated successfully',
-            'task' => $task
+            'task' => $task,
         ], 200);
     }
 
@@ -674,21 +679,21 @@ class AdminTaskController extends Controller
     public function destroy(Request $request, $task_id)
     {
         $task = Task::with('childTasks')->find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
         // Check if task has child tasks that are not deleted
         if ($task->childTasks()->whereNull('deleted_at')->count() > 0) {
             return response()->json([
-                'message' => 'Cannot delete task with active child tasks. Please delete or reassign child tasks first.'
+                'message' => 'Cannot delete task with active child tasks. Please delete or reassign child tasks first.',
             ], 422);
         }
 
         $task->delete();
 
         return response()->json([
-            'message' => 'Task permanently deleted successfully'
+            'message' => 'Task permanently deleted successfully',
         ]);
     }
 
@@ -698,10 +703,11 @@ class AdminTaskController extends Controller
     public function restore(Request $request, $task_id)
     {
         $task = Task::onlyTrashed()->find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
         $task->restore();
+
         return $this->show($task->id);
     }
 
@@ -711,21 +717,21 @@ class AdminTaskController extends Controller
     public function forceDelete(Request $request, $task_id)
     {
         $task = Task::onlyTrashed()->find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
         // Check if task has child tasks
         if ($task->childTasks()->count() > 0) {
             return response()->json([
-                'message' => 'Cannot force delete task with child tasks. Please delete or reassign child tasks first.'
+                'message' => 'Cannot force delete task with child tasks. Please delete or reassign child tasks first.',
             ], 422);
         }
 
         $task->forceDelete();
 
         return response()->json([
-            'message' => 'Task permanently deleted successfully'
+            'message' => 'Task permanently deleted successfully',
         ]);
     }
 
@@ -736,12 +742,12 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.update')) {
+        if (! $user->hasPermission('task.update')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $task = Task::find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
@@ -760,7 +766,7 @@ class AdminTaskController extends Controller
             'old_status' => $oldState,
             'new_status' => $validated['state'],
             'changed_by' => $user->id,
-            'created_at' => Carbon::now()
+            'created_at' => Carbon::now(),
         ]);
 
         // Create audit event
@@ -774,14 +780,14 @@ class AdminTaskController extends Controller
             $task->current_owner_kind,
             $task->current_owner_id,
             null,
-            'Status changed from ' . $oldState . ' to ' . $validated['state'],
+            'Status changed from '.$oldState.' to '.$validated['state'],
             null,
             $user->id
         );
 
         return response()->json([
             'message' => 'Task status updated successfully',
-            'task' => $task->load(['createdBy:id,name'])
+            'task' => $task->load(['createdBy:id,name']),
         ]);
     }
 
@@ -791,7 +797,7 @@ class AdminTaskController extends Controller
     public function getTaskHistory($task_id)
     {
         $task = Task::find($task_id);
-        if (!$task) {
+        if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
@@ -799,7 +805,7 @@ class AdminTaskController extends Controller
             ->with([
                 'changedBy' => function ($query) {
                     $query->select('id', 'name', 'email');
-                }
+                },
             ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -808,7 +814,7 @@ class AdminTaskController extends Controller
             ->with([
                 'actorUser' => function ($query) {
                     $query->select('id', 'name', 'email');
-                }
+                },
             ])
             ->orderBy('occurred_at', 'desc')
             ->get();
@@ -816,7 +822,7 @@ class AdminTaskController extends Controller
         return response()->json([
             'task_id' => $task_id,
             'history' => $history,
-            'audit_events' => $auditEvents
+            'audit_events' => $auditEvents,
         ], 200);
     }
 
@@ -827,7 +833,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -842,13 +848,13 @@ class AdminTaskController extends Controller
                 'ticket:id,ticket_number,title',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest()
             ->paginate(10);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
@@ -859,7 +865,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             abort(403, 'Insufficient permissions');
         }
 
@@ -874,7 +880,7 @@ class AdminTaskController extends Controller
                 'ticket:id,ticket_number,title',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest()
             ->paginate(5);
@@ -891,13 +897,13 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $validStatuses = ['Draft', 'Assigned', 'InProgress', 'Blocked', 'InReview', 'Done', 'Cancelled', 'Rejected'];
 
-        if (!in_array($status, $validStatuses)) {
+        if (! in_array($status, $validStatuses)) {
             return response()->json(['message' => 'Invalid status'], 422);
         }
 
@@ -907,21 +913,20 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get tasks by department.
      *
-     * @param Request $request
-     * @param int $departmentId
+     * @param  int  $departmentId
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -930,7 +935,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -940,21 +945,20 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get tasks by task type.
      *
-     * @param Request $request
-     * @param int $taskTypeId
+     * @param  int  $taskTypeId
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -963,7 +967,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -973,21 +977,20 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get tasks by SLA policy.
      *
-     * @param Request $request
-     * @param int $slaPolicyId
+     * @param  int  $slaPolicyId
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -996,7 +999,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -1006,20 +1009,19 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get overdue tasks.
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1028,7 +1030,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -1041,20 +1043,19 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get tasks due today.
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1063,7 +1064,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -1076,20 +1077,19 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get tasks due this week.
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1098,7 +1098,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -1111,20 +1111,19 @@ class AdminTaskController extends Controller
                 'assignedDepartment:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
-                'auditEvents:id,task_id,action,actor_user_id,occurred_at'
+                'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ])
             ->latest('created_at')
             ->paginate(15);
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get high priority overdue tasks.
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1133,7 +1132,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -1142,14 +1141,13 @@ class AdminTaskController extends Controller
         $tasks = $query->limit(20)->get();
 
         return response()->json([
-            'tasks' => $tasks
+            'tasks' => $tasks,
         ]);
     }
 
     /**
      * Get task summary.
      *
-     * @param Task $task
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1158,19 +1156,18 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         return response()->json([
-            'data' => $task->getSummary()
+            'data' => $task->getSummary(),
         ]);
     }
 
     /**
      * Get task SLA status.
      *
-     * @param Task $task
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1179,7 +1176,7 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -1188,15 +1185,13 @@ class AdminTaskController extends Controller
             'is_overdue' => $task->isOverdue(),
             'completion_percentage' => $task->getCompletionPercentage(),
             'time_remaining' => $task->getTimeRemaining(),
-            'urgency_score' => $task->getUrgencyScore()
+            'urgency_score' => $task->getUrgencyScore(),
         ]);
     }
-
 
     /**
      * Get task user skills.
      *
-     * @param Task $task
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -1205,14 +1200,14 @@ class AdminTaskController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $skills = $task->userSkills()->with('user:id,name')->get();
 
         return response()->json([
-            'skills' => $skills
+            'skills' => $skills,
         ]);
     }
 }
