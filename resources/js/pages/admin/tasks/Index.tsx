@@ -1,14 +1,13 @@
 import AppLayout from '@/layouts/app-layout';
 import { Task, type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import {
     Plus,
     Search,
     Calendar,
     User,
-    Building2,
     TicketIcon,
     AlertCircle,
     CheckCircle,
@@ -62,6 +61,33 @@ interface PaginatedTasks {
         label: string;
         active: boolean;
     }>;
+}
+
+interface TaskOverviewStats {
+    total: number;
+    draft: number;
+    assigned: number;
+    inProgress: number;
+    blocked: number;
+    inReview: number;
+    done: number;
+    cancelled: number;
+    rejected: number;
+}
+
+interface TasksDataResponse {
+    tasks: PaginatedTasks;
+    stats: {
+        total: number;
+        draft: number;
+        assigned: number;
+        in_progress: number;
+        blocked: number;
+        in_review: number;
+        done: number;
+        cancelled: number;
+        rejected: number;
+    };
 }
 
 interface TasksIndexProps {
@@ -136,21 +162,21 @@ const getStatusIcon = (status: string) => {
 
 const getPriorityCheck = (priority?: string) => {
     const map = {
-      P1: 'Critical',
-      P2: 'High',
-      P3: 'Medium',
-      P4: 'Low',
+        P1: 'Critical',
+        P2: 'High',
+        P3: 'Medium',
+        P4: 'Low',
     };
-  
-    if(priority){
+
+    if (priority) {
         return priority in map
-          ? map[priority as keyof typeof map]
-          : map.P4;
-    }else{
+            ? map[priority as keyof typeof map]
+            : map.P4;
+    } else {
         return map.P4;
     }
-  };
-  
+};
+
 
 export default function TasksIndex({
     filters = {},
@@ -158,7 +184,7 @@ export default function TasksIndex({
     departments,
 }: TasksIndexProps) {
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [, setIsDeleting] = useState(false);
     const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<number | null>(null);
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
     const [tasksData, setTasksData] = useState<PaginatedTasks>({
@@ -175,29 +201,20 @@ export default function TasksIndex({
         assigned_department_id: filters.assigned_department_id || 'all',
         search: filters.search || '',
     });
+    const [taskStats, setTaskStats] = useState<TaskOverviewStats>({
+        total: 0,
+        draft: 0,
+        assigned: 0,
+        inProgress: 0,
+        blocked: 0,
+        inReview: 0,
+        done: 0,
+        cancelled: 0,
+        rejected: 0,
+    });
     const [isTasksLoading, setIsTasksLoading] = useState(false);
 
     const filteredTasks = tasksData.data;
-
-    const stats = useMemo(() => {
-        const allTasks: Task[] = tasksData.data;
-        return {
-            total: allTasks.length,
-            draft: allTasks.filter((t: Task) => t.state === 'Draft').length,
-            assigned: allTasks.filter((t: Task) => t.state === 'Assigned')
-                .length,
-            inProgress: allTasks.filter((t: Task) => t.state === 'InProgress')
-                .length,
-            blocked: allTasks.filter((t: Task) => t.state === 'Blocked').length,
-            inReview: allTasks.filter((t: Task) => t.state === 'InReview')
-                .length,
-            done: allTasks.filter((t: Task) => t.state === 'Done').length,
-            cancelled: allTasks.filter((t: Task) => t.state === 'Cancelled')
-                .length,
-            rejected: allTasks.filter((t: Task) => t.state === 'Rejected')
-                .length,
-        };
-    }, [tasksData.data]);
 
     const loadTasksData = async (
         overrides: Partial<{
@@ -243,7 +260,19 @@ export default function TasksIndex({
             const response = await axios.get('/admin/data/tasks', {
                 params: requestParams,
             });
-            setTasksData(response.data);
+            const responseData: TasksDataResponse = response.data;
+            setTasksData(responseData.tasks);
+            setTaskStats({
+                total: responseData.stats.total,
+                draft: responseData.stats.draft,
+                assigned: responseData.stats.assigned,
+                inProgress: responseData.stats.in_progress,
+                blocked: responseData.stats.blocked,
+                inReview: responseData.stats.in_review,
+                done: responseData.stats.done,
+                cancelled: responseData.stats.cancelled,
+                rejected: responseData.stats.rejected,
+            });
             setActiveFilters(mergedFilters);
         } catch (error) {
             console.error('Error loading tasks data:', error);
@@ -267,7 +296,7 @@ export default function TasksIndex({
         });
     };
 
-    const handleDeleteTask = (task: any) => {
+    const handleDeleteTask = (task: Task) => {
         if (
             confirm(
                 'Are you sure you want to delete this task? It will be moved to trash and can be restored later.',
@@ -289,6 +318,10 @@ export default function TasksIndex({
                 });
         }
     };
+
+    useEffect(() => {
+        loadTasksData();
+    }, []);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -337,7 +370,7 @@ export default function TasksIndex({
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {stats.total}
+                                {taskStats.total}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 All tasks in system
@@ -354,7 +387,7 @@ export default function TasksIndex({
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {stats.draft}
+                                {taskStats.draft}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 New tasks being prepared
@@ -371,7 +404,7 @@ export default function TasksIndex({
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {stats.inProgress}
+                                {taskStats.inProgress}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 Currently being worked on
@@ -388,7 +421,7 @@ export default function TasksIndex({
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {stats.done}
+                                {taskStats.done}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 Completed tasks

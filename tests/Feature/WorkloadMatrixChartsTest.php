@@ -76,13 +76,14 @@ class WorkloadMatrixChartsTest extends TestCase
         $result = app(WorkloadMatrixService::class)->build();
         $distribution = collect($result['charts']['taskStatusDistribution'])->keyBy('name');
 
-        $this->assertSame(4, $distribution['Pending']['value']);
+        $this->assertSame(1, $distribution['Pending']['value']);
         $this->assertSame(1, $distribution['In Progress']['value']);
         $this->assertSame(1, $distribution['Completed']['value']);
         $this->assertSame(2, $distribution['Other']['value']);
 
         $workloadByEmployee = $result['charts']['workloadByEmployee'][0] ?? [];
         $this->assertSame(1, $workloadByEmployee['completed'] ?? null);
+        $this->assertSame(2, $workloadByEmployee['other'] ?? null);
     }
 
     public function test_filters_limit_tasks_by_due_date_range(): void

@@ -15,6 +15,8 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\NotificationService;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -48,14 +50,14 @@ class AdminTaskController extends Controller
 
     public function getData(Request $request)
     {
-
         $perPage = $request->get('per_page', 5);
         $query = Task::withTrashed()
             ->with([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
                 'assignedUsers:id,name',
-                'ticket:id,ticket_number,title',
+                'ticket:id,ticket_number,title,client_id',
+                'ticket.client:id,name',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
                 'parentTask:id,title,task_code',
@@ -104,8 +106,27 @@ class AdminTaskController extends Controller
         }
 
         $tasks = $query->latest('created_at')->paginate($perPage);
+        $stateCounts = Task::withTrashed()
+            ->selectRaw('state, COUNT(*) as total')
+            ->groupBy('state')
+            ->pluck('total', 'state');
 
-        return response()->json($tasks);
+        $stats = [
+            'total' => (int) $stateCounts->sum(),
+            'draft' => (int) ($stateCounts->get('Draft') ?? 0),
+            'assigned' => (int) ($stateCounts->get('Assigned') ?? 0),
+            'in_progress' => (int) ($stateCounts->get('InProgress') ?? 0),
+            'blocked' => (int) ($stateCounts->get('Blocked') ?? 0),
+            'in_review' => (int) ($stateCounts->get('InReview') ?? 0),
+            'done' => (int) ($stateCounts->get('Done') ?? 0),
+            'cancelled' => (int) ($stateCounts->get('Cancelled') ?? 0),
+            'rejected' => (int) ($stateCounts->get('Rejected') ?? 0),
+        ];
+
+        return response()->json([
+            'tasks' => $tasks,
+            'stats' => $stats,
+        ]);
     }
 
     /**
@@ -927,9 +948,9 @@ class AdminTaskController extends Controller
      * Get tasks by department.
      *
      * @param  int  $departmentId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksByDepartment(Request $request, $departmentId)
     {
@@ -959,9 +980,9 @@ class AdminTaskController extends Controller
      * Get tasks by task type.
      *
      * @param  int  $taskTypeId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksByTaskType(Request $request, $taskTypeId)
     {
@@ -991,9 +1012,9 @@ class AdminTaskController extends Controller
      * Get tasks by SLA policy.
      *
      * @param  int  $slaPolicyId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksBySlaPolicy(Request $request, $slaPolicyId)
     {
@@ -1022,9 +1043,9 @@ class AdminTaskController extends Controller
     /**
      * Get overdue tasks.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getOverdueTasks(Request $request)
     {
@@ -1056,9 +1077,9 @@ class AdminTaskController extends Controller
     /**
      * Get tasks due today.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksDueToday(Request $request)
     {
@@ -1090,9 +1111,9 @@ class AdminTaskController extends Controller
     /**
      * Get tasks due this week.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksDueThisWeek(Request $request)
     {
@@ -1124,9 +1145,9 @@ class AdminTaskController extends Controller
     /**
      * Get high priority overdue tasks.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getHighPriorityOverdueTasks(Request $request)
     {
@@ -1148,9 +1169,9 @@ class AdminTaskController extends Controller
     /**
      * Get task summary.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTaskSummary(Task $task)
     {
@@ -1168,9 +1189,9 @@ class AdminTaskController extends Controller
     /**
      * Get task SLA status.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTaskSlaStatus(Task $task)
     {
@@ -1192,9 +1213,9 @@ class AdminTaskController extends Controller
     /**
      * Get task user skills.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTaskUserSkills(Task $task)
     {

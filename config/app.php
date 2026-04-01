@@ -73,7 +73,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | This value is used to specify the PHP binary path for running Artisan
-    | commands from the web interface (e.g., Reverb server management).
+    | commands from the web interface.
     | Defaults to the current PHP binary.
     |
     */

@@ -11,6 +11,10 @@ class WorkloadMatrixService
 {
     private const TERMINAL_TASK_STATES = ['Done', 'Cancelled', 'Rejected'];
 
+    private const PENDING_TASK_STATES = ['Draft', 'Assigned', 'Blocked'];
+
+    private const IN_PROGRESS_TASK_STATES = ['InProgress', 'InReview'];
+
     public function __construct(private readonly WorkingHoursService $workingHoursService) {}
 
     public function build(array $filters = []): array
@@ -114,8 +118,10 @@ class WorkloadMatrixService
             if (! in_array($taskState, self::TERMINAL_TASK_STATES, true)) {
                 $stats['active_task_ids'][$taskId] = true;
 
-                if ($taskState === 'InProgress' || $assignmentState === 'in_progress') {
+                if (in_array($taskState, self::IN_PROGRESS_TASK_STATES, true)) {
                     $stats['in_progress_task_ids'][$taskId] = true;
+                } elseif (in_array($taskState, self::PENDING_TASK_STATES, true)) {
+                    $stats['pending_task_ids'][$taskId] = true;
                 } else {
                     $stats['pending_task_ids'][$taskId] = true;
                 }
@@ -250,37 +256,11 @@ class WorkloadMatrixService
 
     private function buildChartData($rows, array $summary): array
     {
-        // Calculate aggregated task states from assignment_state_counts
-        $totalPending = 0;
-        $totalInProgress = 0;
-        $totalCompleted = 0;
-        $totalOther = 0;
+        $pending = (int) $rows->sum('pending_task_count');
+        $inProgress = (int) $rows->sum('in_progress_task_count');
+        $completed = (int) $rows->sum('completed_task_count');
+        $other = (int) $rows->sum('other_task_count');
 
-        foreach ($rows as $row) {
-            $stateCounts = $row['assignment_state_counts'] ?? [];
-
-            // Pending: pending + accepted assignments (Draft, Assigned, Blocked tasks that are not terminal)
-            $totalPending += ($stateCounts['pending'] ?? 0) + ($stateCounts['accepted'] ?? 0);
-
-            // In Progress: in_progress assignments (InProgress, InReview)
-            $totalInProgress += ($stateCounts['in_progress'] ?? 0);
-
-            // Completed: task state Done
-            $totalCompleted += (int) ($row['completed_task_count'] ?? 0);
-
-            // Other: task state Cancelled + Rejected
-            $totalOther += (int) ($row['other_task_count'] ?? 0);
-        }
-
-        // Add non-terminal pending/in-progress tasks from the row counts
-        $activePending = (int) $rows->sum('pending_task_count');
-        $activeInProgress = (int) $rows->sum('in_progress_task_count');
-
-        // Use the larger value between calculated and row-based counts
-        $pending = max($totalPending, $activePending);
-        $inProgress = max($totalInProgress, $activeInProgress);
-
-        // Bar chart data: Workload by employee - remove overdue
         $workloadByEmployee = $rows->map(function ($row) {
             return [
                 'name' => explode(' ', $row['name'])[0], // First name only for shorter labels
@@ -288,22 +268,18 @@ class WorkloadMatrixService
                 'pending' => $row['pending_task_count'],
                 'inProgress' => $row['in_progress_task_count'],
                 'completed' => $row['completed_task_count'],
+                'other' => $row['other_task_count'],
                 'estimatedHours' => $row['open_estimated_hours'],
                 'loggedHours' => $row['logged_hours'],
                 'capacityHours' => $row['capacity_hours'],
             ];
         })->values()->all();
 
-        // Pie chart data: Task status distribution with new grouping
-        // 1. Draft, Assigned, Blocked -> Pending
-        // 2. InProgress, InReview -> InProgress
-        // 3. Done -> Completed
-        // 4. Cancelled, Rejected -> Other
         $taskStatusDistribution = [
             ['name' => 'Pending', 'value' => $pending, 'color' => '#f59e0b'],
             ['name' => 'In Progress', 'value' => $inProgress, 'color' => '#3b82f6'],
-            ['name' => 'Completed', 'value' => $totalCompleted, 'color' => '#10b981'],
-            ['name' => 'Other', 'value' => $totalOther, 'color' => '#6b7280'],
+            ['name' => 'Completed', 'value' => $completed, 'color' => '#10b981'],
+            ['name' => 'Other', 'value' => $other, 'color' => '#6b7280'],
         ];
 
         // Utilization gauge data

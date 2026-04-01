@@ -34,7 +34,7 @@ class AdminMiddleware
         }
 
         // Check if user has internal role (allow all internal roles)
-        $internalRoles = ['super-admin', 'admin', 'manager', 'team-lead', 'developer', 'support-agent'];
+        $internalRoles = ['super-admin', 'admin', 'manager', 'team-lead', 'developer', 'support-agent','hr','sales'];
         if (!$user->hasRole($internalRoles)) {
             return redirect('/')->with('error', 'You do not have permission to access the admin area.');
         }

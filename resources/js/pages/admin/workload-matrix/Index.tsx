@@ -78,6 +78,7 @@ interface ChartData {
         pending: number;
         inProgress: number;
         completed: number;
+        other: number;
         estimatedHours: number;
         loggedHours: number;
         capacityHours: number;
@@ -556,11 +557,29 @@ export default function WorkloadMatrixIndex({
                                         <Bar
                                             dataKey="completed"
                                             name="Completed"
+                                            stackId="a"
                                             fill="#10b981"
                                             radius={[0, 4, 4, 0]}
                                         >
                                             <LabelList
                                                 dataKey="completed"
+                                                position="center"
+                                                fill="#fff"
+                                                fontSize={11}
+                                                formatter={(value) =>
+                                                    value === 0 ? '' : value
+                                                }
+                                            />
+                                        </Bar>
+                                        <Bar
+                                            dataKey="other"
+                                            name="Other"
+                                            stackId="a"
+                                            fill="#6b7280"
+                                            radius={[0, 4, 4, 0]}
+                                        >
+                                            <LabelList
+                                                dataKey="other"
                                                 position="center"
                                                 fill="#fff"
                                                 fontSize={11}

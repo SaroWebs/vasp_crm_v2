@@ -20,10 +20,31 @@ class ClientController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        // Build query with relationships
+        $canCreate = $user->hasPermission('client.create') || $user->isSuperAdmin();
+        $canEdit = true;
+        $canDelete = $user->hasPermission('client.delete') || $user->isSuperAdmin();
+        $canRead = $user->hasPermission('client.read') || $user->isSuperAdmin();
+
+        return Inertia::render('admin/clients/Index', [
+            'filters' => [
+                'search' => $request->search,
+                'status' => $request->status,
+            ],
+            'userPermissions' => $user->getAllPermissions()->pluck('slug')->toArray(),
+            'canCreate' => $canCreate,
+            'canEdit' => $canEdit,
+            'canDelete' => $canDelete,
+            'canRead' => $canRead,
+        ]);
+    }
+
+    /**
+     * Return paginated clients data for on-demand loading.
+     */
+    public function getData(Request $request)
+    {
         $query = Client::withTrashed()->with(['organizationUsers', 'tickets', 'product']);
 
-        // Apply filters
         if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -36,14 +57,10 @@ class ClientController extends Controller
             $query->where('status', $request->status);
         }
 
-        // Get pagination parameters
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
-
-        // Get paginated results
         $clients = $query->paginate($perPage, ['*'], 'page', $page);
 
-        // Transform for frontend
         $clientsData = $clients->getCollection()->map(function ($client) {
             return [
                 'id' => $client->id,
@@ -83,12 +100,7 @@ class ClientController extends Controller
             ];
         });
 
-        $canCreate = $user->hasPermission('client.create') || $user->isSuperAdmin();
-        $canEdit = true;
-        $canDelete = $user->hasPermission('client.delete') || $user->isSuperAdmin();
-        $canRead = $user->hasPermission('client.read') || $user->isSuperAdmin();
-
-        return Inertia::render('admin/clients/Index', [
+        return response()->json([
             'clients' => $clientsData,
             'pagination' => [
                 'current_page' => $clients->currentPage(),
@@ -100,11 +112,6 @@ class ClientController extends Controller
                 'search' => $request->search,
                 'status' => $request->status,
             ],
-            'userPermissions' => $user->getAllPermissions()->pluck('slug')->toArray(),
-            'canCreate' => $canCreate,
-            'canEdit' => $canEdit,
-            'canDelete' => $canDelete,
-            'canRead' => $canRead,
         ]);
     }
 

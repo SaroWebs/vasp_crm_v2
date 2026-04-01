@@ -3,8 +3,11 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\ValidateUserSession;
+use App\Models\Client;
+use App\Models\OrganizationUser;
 use App\Models\Role;
 use App\Models\Task;
+use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -54,14 +57,70 @@ class AdminTasksOnDemandLoadingTest extends TestCase
             ->getJson('/admin/data/tasks?per_page=5')
             ->assertOk()
             ->assertJsonStructure([
-                'data',
-                'current_page',
-                'last_page',
-                'per_page',
-                'total',
-                'links',
+                'tasks' => [
+                    'data',
+                    'current_page',
+                    'last_page',
+                    'per_page',
+                    'total',
+                    'links',
+                ],
+                'stats' => [
+                    'total',
+                    'draft',
+                    'assigned',
+                    'in_progress',
+                    'blocked',
+                    'in_review',
+                    'done',
+                    'cancelled',
+                    'rejected',
+                ],
             ])
-            ->assertJsonPath('total', 2);
+            ->assertJsonPath('tasks.total', 2)
+            ->assertJsonPath('stats.total', 2)
+            ->assertJsonPath('stats.draft', 2);
+    }
+
+    public function test_tasks_data_endpoint_includes_ticket_client_relation(): void
+    {
+        $this->withoutMiddleware(ValidateUserSession::class);
+        $admin = $this->createAdminUser();
+
+        $client = Client::query()->create([
+            'name' => 'Acme Client',
+            'email' => 'acme-client@example.com',
+            'status' => 'active',
+        ]);
+
+        $organizationUser = OrganizationUser::query()->create([
+            'client_id' => $client->id,
+            'name' => 'Acme Org User',
+            'email' => 'acme-org@example.com',
+            'status' => 'active',
+        ]);
+
+        $ticket = Ticket::query()->create([
+            'client_id' => $client->id,
+            'organization_user_id' => $organizationUser->id,
+            'ticket_number' => 'TKT-CLIENT-001',
+            'title' => 'Client linked ticket',
+            'status' => 'approved',
+        ]);
+
+        Task::query()->create([
+            'title' => 'Task with ticket client',
+            'task_code' => 'TASK-CLIENT-001',
+            'state' => 'Draft',
+            'created_by' => $admin->id,
+            'ticket_id' => $ticket->id,
+        ]);
+
+        $this->actingAs($admin, 'web')
+            ->getJson('/admin/data/tasks?per_page=5')
+            ->assertOk()
+            ->assertJsonPath('tasks.data.0.ticket.ticket_number', 'TKT-CLIENT-001')
+            ->assertJsonPath('tasks.data.0.ticket.client.name', 'Acme Client');
     }
 
     private function createAdminUser(): User

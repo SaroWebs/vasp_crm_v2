@@ -116,6 +116,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         // Client routes (used in frontend)
         Route::controller(ClientController::class)->group(function () {
             Route::get('/clients', 'index');
+            Route::get('/data/clients', 'getData')->name('clients.data');
             Route::get('/clients/create', 'create')->name('clients.create');
             Route::post('/clients', 'store');
             Route::get('/clients/{client}', 'show');

@@ -144,7 +144,7 @@ export default function ClientsIndex(props: ClientsIndexProps) {
         }
 
         axios
-            .get(`/admin/clients?${params.toString()}`)
+            .get(`/admin/data/clients?${params.toString()}`)
             .then((res) => {
                 setClients(res.data.clients || []);
                 setPagination(res.data.pagination || {

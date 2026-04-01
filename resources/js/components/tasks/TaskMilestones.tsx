@@ -382,7 +382,7 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                             </Button>
                         )}
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[700px]">
+                    <DialogContent className="sm:max-w-[700px] overflow-y-auto max-h-[85vh]">
                         <DialogHeader>
                             <DialogTitle>Add New Milestone</DialogTitle>
                             <DialogDescription>
