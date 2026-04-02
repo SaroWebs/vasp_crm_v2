@@ -653,7 +653,7 @@ class NotificationService
 
         if ($this->sendWhatsApp($phone, $message)) {
             // a copy shall be sent to the user(who has manager role) if the user is not a manager
-            if (! $user->hasRole('manager')) {
+            if (!$user->hasRole('manager')) {
                 $this->sendNotificationToManager($userId, $subject, $message);
             }
 
@@ -672,7 +672,7 @@ class NotificationService
 
         foreach ($managers as $manager) {
             $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
-            $header = "Manager Copy - This message has been sent to {$user->name}";
+            $header = "Copy - This message has been sent to {$user->name}\n\n";
             if ($managerPhone) {
                 $this->sendWhatsApp($managerPhone, "{$header}\n{$subject}: {$message}");
             }
@@ -918,6 +918,11 @@ class NotificationService
         } else {
             try {
                 $whatsappSent = $this->sendWhatsApp($phone, "{$title}\n\n{$message}");
+                // a copy shall be sent to the user(who has manager role) if the user is not a manager
+                if (!$user->hasRole('manager')) {
+                    $this->sendNotificationToManager($userId, $title, $message);
+                }
+
                 $results['whatsapp'] = ['success' => $whatsappSent, 'message' => $whatsappSent ? 'Sent' : 'Failed'];
 
                 if (! $whatsappSent) {
