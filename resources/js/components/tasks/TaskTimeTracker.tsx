@@ -1,43 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Group, Text, Paper, Badge, Loader, Progress, Tooltip, ActionIcon } from '@mantine/core';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Text, Paper, Loader, Progress, Tooltip, ActionIcon } from '@mantine/core';
 import { Play, Pause, Square, SkipForward } from 'lucide-react';
 import { TimeEntry } from '@/types';
 import { useTimeTracking } from '@/context/TimeTrackingContext';
 import { OverdueWarningDialog } from './OverdueWarningDialog';
 import axios from 'axios';
+import { HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from '@/utils/workingHours';
 
 interface TaskTimeTrackerProps {
   taskId: number;
   taskState?: string;
   onTimeUpdate: () => void;
   onTaskAction?: (action: 'start' | 'resume' | 'pause' | 'end', taskId: number) => void;
-}
-
-interface TaskData {
-  id: number;
-  title: string;
-  estimate_hours?: number;
-  time_entries: TimeEntry[];
-}
-
-interface WorkingHoursConfig {
-  workdays: Array<{
-    day: string;
-    start: string;
-    end: string;
-    break_start: string;
-    break_end: string;
-  }>;
-  timezone: string;
-}
-
-interface HolidaysConfig {
-  holidays: Array<{
-    date: string;
-    name: string;
-    type: string;
-  }>;
-  year: number;
 }
 
 const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, onTimeUpdate, onTaskAction }) => {
@@ -117,57 +91,29 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     fetchConfig();
   }, []);
 
-  // Check if current time is within working hours
   const isWorkingTime = () => {
-    if (!configLoaded || !workingHoursConfig) {
-      return true; // Assume working time if config not loaded yet
+    if (!configLoaded) {
+      return true;
     }
 
-    const now = new Date();
-    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    const workdayConfig = workingHoursConfig.workdays.find(wd => wd.day === dayName);
-
-    // Check if it's a holiday
-    const todayStr = now.toISOString().split('T')[0];
-    if (holidaysConfig?.holidays.some(holiday => holiday.date === todayStr)) {
-      return false;
-    }
-
-    // Check if it's a working day
-    if (!workdayConfig || !workdayConfig.start || !workdayConfig.end) {
-      return false;
-    }
-
-    // Convert time to minutes since midnight for easier comparison
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    
-    // Parse working hours
-    const [startHours, startMinutes] = workdayConfig.start.split(':').map(Number);
-    const [endHours, endMinutes] = workdayConfig.end.split(':').map(Number);
-    
-    const startTotalMinutes = startHours * 60 + startMinutes;
-    const endTotalMinutes = endHours * 60 + endMinutes;
-
-    // Check if current time is within working hours
-    if (currentMinutes < startTotalMinutes || currentMinutes > endTotalMinutes) {
-      return false;
-    }
-
-    // Check if current time is during break (though users take different break times)
-    if (workdayConfig.break_start && workdayConfig.break_end) {
-      const [breakStartHours, breakStartMinutes] = workdayConfig.break_start.split(':').map(Number);
-      const [breakEndHours, breakEndMinutes] = workdayConfig.break_end.split(':').map(Number);
-      
-      const breakStartTotalMinutes = breakStartHours * 60 + breakStartMinutes;
-      const breakEndTotalMinutes = breakEndHours * 60 + breakEndMinutes;
-      
-      if (currentMinutes >= breakStartTotalMinutes && currentMinutes <= breakEndTotalMinutes) {
-        return false;
-      }
-    }
-
-    return true;
+    return isWithinWorkingHours(new Date(), workingHoursConfig, holidaysConfig);
   };
+
+  const pauseTaskAndRefresh = useCallback(async () => {
+    await pauseTask(taskId);
+    onTimeUpdate();
+
+    if (onTaskAction) {
+      onTaskAction('pause', taskId);
+    }
+
+    try {
+      const data = await getWorkingTimeSpent(taskId);
+      setWorkingTimeData(data);
+    } catch (err) {
+      console.error('Failed to fetch working time data:', err);
+    }
+  }, [pauseTask, taskId, onTimeUpdate, onTaskAction, getWorkingTimeSpent]);
 
   // Initialize with working time from task data
   useEffect(() => {
@@ -220,7 +166,33 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     };
   }, [timeData.isActive]);
 
-  // Sync with backend every minute
+  // Auto-pause when the running entry leaves working hours
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (timeData.isActive && configLoaded && workingHoursConfig) {
+      const checkWorkingHours = async () => {
+        if (!isWithinWorkingHours(new Date(), workingHoursConfig, holidaysConfig)) {
+          try {
+            await pauseTaskAndRefresh();
+          } catch (err) {
+            console.error('Failed to auto-pause task outside working hours:', err);
+          }
+        }
+      };
+
+      void checkWorkingHours();
+      interval = setInterval(() => {
+        void checkWorkingHours();
+      }, 60000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [timeData.isActive, configLoaded, workingHoursConfig, holidaysConfig, pauseTaskAndRefresh]);
+
+  // Sync with backend every 5 minutes
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
@@ -296,14 +268,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   const handlePause = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    await pauseTask(taskId);
-    onTimeUpdate();
-    try {
-      const data = await getWorkingTimeSpent(taskId);
-      setWorkingTimeData(data);
-    } catch (err) {
-      console.error('Failed to fetch working time data:', err);
-    }
+    await pauseTaskAndRefresh();
   };
 
   const handleResume = async (e: React.MouseEvent) => {

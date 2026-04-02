@@ -266,7 +266,7 @@ class TimelineEventController extends Controller
 
         $timelineEvent->update($validated);
 
-        return response()->json($timelineEvent);
+        return response()->json($timelineEvent->fresh()->load('task'));
     }
 
     /**

@@ -3,12 +3,10 @@ import {
     Drawer,
     TextInput,
     Textarea,
-    Select,
     Button,
     Group,
     Box,
     Alert,
-    NumberInput,
     Text,
     Stack,
     Badge,
@@ -18,18 +16,16 @@ import {
 } from '@mantine/core';
 import {
     AlertCircle,
-    Check,
-    X,
-    Clock,
     FileText,
     Plus,
     Save,
     RefreshCw,
-    Loader2
+    Loader2,
+    X
 } from 'lucide-react';
 import axios from 'axios';
 import { useDisclosure } from '@mantine/hooks';
-import { Task } from '@/types';
+import TaskDurationPicker from '@/components/tasks/TaskDurationPicker';
 
 interface TaskCreateDrawerProps {
     onSuccess?: () => void;
@@ -64,7 +60,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
             state: 'Draft',
             start_at: today,
             due_at: today,
-            estimate_hours: undefined as number | undefined,
+            estimate_hours: '' as string,
             task_type_id: '',
             sla_policy_id: ''
         };
@@ -75,8 +71,9 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
 
     // Calculate min due date using API based on working hours and holidays
     // If minimum due date is found then set default due date in formData
-    const fetchMinDueDate = async (estimateHours?: number, startAt?: string) => {
-        if (!estimateHours || estimateHours <= 0) {
+    const fetchMinDueDate = async (estimateHours?: string, startAt?: string) => {
+        const hours = Number.parseFloat(estimateHours || '0');
+        if (!hours || hours <= 0) {
             const baseDate = startAt ? new Date(startAt) : new Date();
             const now = baseDate.toISOString().slice(0, 16);
             setMinDueDate(now);
@@ -92,7 +89,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
             const baseDate = startAt ? new Date(startAt) : undefined;
             const res = await axios.get('/data/tasks/calculate-min-due-date', {
                 params: { 
-                    estimate_hours: estimateHours,
+                    estimate_hours: hours,
                     start_at: baseDate ? baseDate.toISOString() : undefined
                 }
             });
@@ -104,11 +101,11 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
                     due_at: (!prev.due_at || new Date(prev.due_at).getTime() < new Date(minDate).getTime()) ? minDate : prev.due_at
                 }));
             }
-        } catch (err) {
+        } catch {
             // Fallback to simple calculation if API fails
             console.warn('Failed to calculate min due date from API, using fallback');
             const baseDate = startAt ? new Date(startAt) : new Date();
-            const fallbackDate = new Date(baseDate.getTime() + (estimateHours * 60 * 60 * 1000));
+            const fallbackDate = new Date(baseDate.getTime() + (hours * 60 * 60 * 1000));
             const minDate = fallbackDate.toISOString().slice(0, 16);
             setMinDueDate(minDate);
             setFormData(prev => ({
@@ -122,7 +119,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
 
     // Update minimum due date when estimate hours or start_at change, with 2s debounce
     useEffect(() => {
-        if (formData.estimate_hours !== undefined && formData.estimate_hours !== null) {
+        if (formData.estimate_hours) {
             const handler = setTimeout(() => {
                 fetchMinDueDate(formData.estimate_hours, formData.start_at);
             }, 2000);
@@ -231,7 +228,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
         formDataObj.append('state', formData.state);
         formDataObj.append('start_at', formData.start_at);
         formDataObj.append('due_at', formData.due_at);
-        formDataObj.append('estimate_hours', formData.estimate_hours?.toString() || '');
+        formDataObj.append('estimate_hours', formData.estimate_hours || '');
         formDataObj.append('tags', JSON.stringify([]));
         formDataObj.append('metadata', '');
 
@@ -254,7 +251,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
                     state: 'Draft',
                     start_at: today,
                     due_at: today,
-                    estimate_hours: undefined,
+                    estimate_hours: '',
                     task_type_id: '',
                     sla_policy_id: ''
                 });
@@ -378,15 +375,14 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
                                 disabled={loading}
                             />
 
-                            {/* Estimated Hours */}
-                            <NumberInput
-                                label="Estimated Hours"
-                                placeholder="Enter estimated hours"
+                            <TaskDurationPicker
+                                id="estimate_hours"
+                                label="Estimated Duration"
                                 value={formData.estimate_hours}
                                 onChange={(value) => handleInputChange('estimate_hours', value)}
-                                leftSection={<Clock size={16} />}
-                                disabled={loading}
                                 required
+                                disabled={loading}
+                                helperText="Choose a duration using days, hours, and minutes."
                             />
 
                             {/* Start Time */}
@@ -410,7 +406,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
                                     min={minDueDate}
                                     disabled={loading}
                                 />
-                                {formData.estimate_hours && formData.estimate_hours > 0 && (
+                                {formData.estimate_hours && Number.parseFloat(formData.estimate_hours) > 0 && (
                                     <Text size="xs" c="dimmed">
                                         {loadingMinDueDate ? 'Calculating...' : `Minimum due date based on ${formData.estimate_hours} hours: ${minDueDate ? new Date(minDueDate).toLocaleString() : 'N/A'}`}
                                     </Text>

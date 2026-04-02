@@ -345,7 +345,7 @@ class AdminTaskController extends Controller
 
             $validated['version'] = $validated['version'] ?? 1;
 
-            $validated['state'] = 'Draft';
+            $validated['state'] = ! empty($validated['assignments'] ?? []) ? 'Assigned' : 'Draft';
 
             $validated['current_owner_kind'] = $validated['current_owner_kind'] ?? 'UNASSIGNED';
 

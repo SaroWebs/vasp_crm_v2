@@ -14,6 +14,11 @@ class Task extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $appends = [
+        'overdue_time',
+        'is_overdue',
+    ];
+
     protected $fillable = [
         'task_code',
         'title',
@@ -586,7 +591,7 @@ class Task extends Model
      */
     public function isOverdue(): bool
     {
-        return $this->due_at && $this->due_at->isPast() && ! in_array($this->state, ['Done', 'Cancelled', 'Rejected']);
+        return $this->getOverdueTimeSeconds() !== null;
     }
 
     /**
@@ -595,15 +600,15 @@ class Task extends Model
      */
     public function getOverdueTime(): ?string
     {
-        if (! $this->due_at || ! $this->isOverdue()) {
+        $overdueSeconds = $this->getOverdueTimeSeconds();
+
+        if ($overdueSeconds === null || $overdueSeconds <= 0) {
             return null;
         }
 
-        $overdueDuration = $this->due_at->diff(now());
-
-        $days = $overdueDuration->d;
-        $hours = $overdueDuration->h;
-        $minutes = $overdueDuration->i;
+        $days = intdiv($overdueSeconds, 86400);
+        $hours = intdiv($overdueSeconds % 86400, 3600);
+        $minutes = intdiv($overdueSeconds % 3600, 60);
 
         $parts = [];
 
@@ -626,11 +631,30 @@ class Task extends Model
      */
     public function getOverdueTimeSeconds(): ?int
     {
-        if (! $this->due_at || ! $this->isOverdue()) {
+        if (! $this->due_at || ! $this->due_at->isPast() || in_array($this->state, ['Done', 'Cancelled', 'Rejected'], true)) {
             return null;
         }
 
-        return now()->diffInSeconds($this->due_at, false);
+        $timeCalculator = app(TimeCalculatorService::class);
+        $overdueSeconds = (int) round($timeCalculator->calculateWorkingDuration($this->due_at, now()));
+
+        return $overdueSeconds > 0 ? $overdueSeconds : null;
+    }
+
+    /**
+     * Accessor for the appended overdue_time attribute.
+     */
+    public function getOverdueTimeAttribute(): ?string
+    {
+        return $this->getOverdueTime();
+    }
+
+    /**
+     * Accessor for the appended is_overdue attribute.
+     */
+    public function getIsOverdueAttribute(): bool
+    {
+        return $this->isOverdue();
     }
 
     /**

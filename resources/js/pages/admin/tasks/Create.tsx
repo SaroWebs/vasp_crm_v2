@@ -28,8 +28,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import TaskDurationPicker from '@/components/tasks/TaskDurationPicker';
+import TaskAssigneeSelect from '@/components/tasks/TaskAssigneeSelect';
 import { FiRefreshCcw } from "react-icons/fi";
-import UserAssignmentForm from '@/components/UserAssignmentForm';
 import { useDisclosure } from '@mantine/hooks';
 import { Modal } from '@mantine/core';
 
@@ -78,6 +79,7 @@ export default function TasksCreate({ tickets, parentTasks, taskTypes, slaPolici
         due_at: today, // Default due_at to same as start_at, will be updated based on estimate_hours
         completed_at: '',
         estimate_hours: '',
+        assigned_user_id: '',
         tags: [] as string[],
         version: 1,
         metadata: '',
@@ -225,6 +227,9 @@ export default function TasksCreate({ tickets, parentTasks, taskTypes, slaPolici
         formData.append('due_at', data.due_at);
         formData.append('completed_at', data.completed_at);
         formData.append('estimate_hours', data.estimate_hours || '');
+        if (data.assigned_user_id) {
+            formData.append('assignments[0][user_id]', data.assigned_user_id);
+        }
         formData.append('tags', JSON.stringify(data.tags || []));
         formData.append('version', data.version.toString());
         formData.append('metadata', JSON.stringify(metadataObj));
@@ -377,21 +382,15 @@ export default function TasksCreate({ tickets, parentTasks, taskTypes, slaPolici
                                             )}
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="estimate_hours">Estimated Hours</Label>
-                                            <Input
-                                                id="estimate_hours"
-                                                type="number"
-                                                step="0.5"
-                                                value={data.estimate_hours || ''}
-                                                onChange={(e) => setData('estimate_hours', e.target.value)}
-                                                placeholder="Enter estimated hours"
-                                                required
-                                            />
-                                            {errors.estimate_hours && (
-                                                <p className="text-sm text-red-600">{errors.estimate_hours}</p>
-                                            )}
-                                        </div>
+                                        <TaskDurationPicker
+                                            id="estimate_hours"
+                                            label="Estimated Duration"
+                                            value={data.estimate_hours}
+                                            onChange={(value) => setData('estimate_hours', value)}
+                                            required
+                                            error={errors.estimate_hours}
+                                            helperText="Choose a duration using days, hours, and minutes."
+                                        />
 
                                         <div className="space-y-2">
                                             <Label htmlFor="due_at">Due Date</Label>
@@ -419,6 +418,13 @@ export default function TasksCreate({ tickets, parentTasks, taskTypes, slaPolici
                                             )}
                                         </div>
                                     </div>
+
+                                    <TaskAssigneeSelect
+                                        value={data.assigned_user_id}
+                                        onChange={(value) => setData('assigned_user_id', value)}
+                                        error={errors.assigned_user_id}
+                                        helperText="Optional. Select an employee to assign the task at creation time."
+                                    />
 
                                     {/* Advanced Options Toggle */}
                                     <div className="flex items-center space-x-2 py-2">

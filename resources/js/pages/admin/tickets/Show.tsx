@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import TaskDurationPicker from '@/components/tasks/TaskDurationPicker';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -1767,22 +1768,13 @@ const UserAssignmentForm = ({
                         )}
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="task-estimate-hours">
-                            Estimated Hours
-                        </Label>
-                        <Input
-                            id="task-estimate-hours"
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={taskEstimateHours}
-                            onChange={(e) =>
-                                setTaskEstimateHours(e.target.value)
-                            }
-                            placeholder="Optional"
-                        />
-                    </div>
+                    <TaskDurationPicker
+                        id="task-estimate-hours"
+                        label="Estimated Duration"
+                        value={taskEstimateHours}
+                        onChange={(value) => setTaskEstimateHours(value)}
+                        helperText="Optional. Choose a duration using days, hours, and minutes."
+                    />
                 </div>
 
                 <div className="space-y-2">

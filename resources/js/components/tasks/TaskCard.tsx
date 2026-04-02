@@ -5,10 +5,11 @@ import TaskTimeTracker from "./TaskTimeTracker";
 import { Modal, Menu, MenuTarget, MenuDropdown, MenuItem, Badge } from "@mantine/core";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { Eye, Forward, MessageSquare, History, MessageCircleMore, Clock, AlertTriangle } from "lucide-react";
+import { Eye, Forward, MessageSquare, History, AlertTriangle } from "lucide-react";
 import { Link } from "@inertiajs/react";
 import { useTimeTracking } from "@/context/TimeTrackingContext";
 import TaskComments from "./task-comments";
+import { HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from "@/utils/workingHours";
 
 const statusColorMap: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-700',
@@ -21,41 +22,8 @@ const statusColorMap: Record<string, string> = {
     Rejected: 'bg-rose-100 text-rose-700',
 };
 
-// Calculate overdue time and return formatted string
-const getOverdueTime = (dueAt: string | null | undefined): { text: string; isOverdue: boolean; className: string } | null => {
-    if (!dueAt) return null;
-    
-    const now = new Date();
-    const dueDate = new Date(dueAt);
-    const diffMs = now.getTime() - dueDate.getTime();
-    
-    // If not overdue (due date is in the future)
-    if (diffMs < 0) return null;
-    
-    // Calculate different time units
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    let text: string;
-    let className: string;
-    
-    if (diffDays >= 1) {
-        text = `${diffDays}d overdue`;
-        className = 'bg-red-100 text-red-700 border-red-200';
-    } else if (diffHours >= 1) {
-        text = `${diffHours}h overdue`;
-        className = 'bg-orange-100 text-orange-700 border-orange-200';
-    } else {
-        text = `${diffMinutes}m overdue`;
-        className = 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    }
-    
-    return { text, isOverdue: true, className };
-};
-
 // Component definitions moved before TaskCard to avoid hoisting issues
-const TaskForwarding = ({ task, onClose }: { task: Task; onClose: () => void }) => {
+const TaskForwarding = ({ task}: { task: Task }) => {
     const [forwardings, setForwardings] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -183,12 +151,12 @@ const TaskCard: React.FC<{
     moveTask: (id: number, newStatus: string) => void;
     onTaskAction?: (action: 'start' | 'resume' | 'pause' | 'end', taskId: number) => void;
     id?: string;
-}> = ({ task, index, moveTask, onTaskAction, id }) => {
+}> = ({ task, moveTask, onTaskAction, id }) => {
     const [forwardingOpened, { open: openForwarding, close: closeForwarding }] = useDisclosure(false);
     const [commentsOpened, { open: openComments, close: closeComments }] = useDisclosure(false);
     const [historiesOpened, { open: openHistories, close: closeHistories }] = useDisclosure(false);
-    const [workingHoursConfig, setWorkingHoursConfig] = useState<any>(null);
-    const [holidaysConfig, setHolidaysConfig] = useState<any>(null);
+    const [workingHoursConfig, setWorkingHoursConfig] = useState<WorkingHoursConfig | null>(null);
+    const [holidaysConfig, setHolidaysConfig] = useState<HolidaysConfig | null>(null);
     const [configLoaded, setConfigLoaded] = useState(false);
 
     // Fetch working hours and holidays configuration
@@ -222,56 +190,12 @@ const TaskCard: React.FC<{
         fetchConfig();
     }, []);
 
-    // Check if current time is within working hours
     const isWorkingTime = () => {
-        if (!configLoaded || !workingHoursConfig) {
-            return true; // Assume working time if config not loaded yet
+        if (!configLoaded) {
+            return true;
         }
 
-        const now = new Date();
-        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-        const workdayConfig = workingHoursConfig.workdays.find((wd: any) => wd.day === dayName);
-
-        // Check if it's a holiday
-        const todayStr = now.toISOString().split('T')[0];
-        if (holidaysConfig?.holidays.some((holiday: any) => holiday.date === todayStr)) {
-            return false;
-        }
-
-        // Check if it's a working day
-        if (!workdayConfig || !workdayConfig.start || !workdayConfig.end) {
-            return false;
-        }
-
-        // Convert time to minutes since midnight for easier comparison
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        
-        // Parse working hours
-        const [startHours, startMinutes] = workdayConfig.start.split(':').map(Number);
-        const [endHours, endMinutes] = workdayConfig.end.split(':').map(Number);
-        
-        const startTotalMinutes = startHours * 60 + startMinutes;
-        const endTotalMinutes = endHours * 60 + endMinutes;
-
-        // Check if current time is within working hours
-        if (currentMinutes < startTotalMinutes || currentMinutes > endTotalMinutes) {
-            return false;
-        }
-
-        // Check if current time is during break (though users take different break times)
-        if (workdayConfig.break_start && workdayConfig.break_end) {
-            const [breakStartHours, breakStartMinutes] = workdayConfig.break_start.split(':').map(Number);
-            const [breakEndHours, breakEndMinutes] = workdayConfig.break_end.split(':').map(Number);
-            
-            const breakStartTotalMinutes = breakStartHours * 60 + breakStartMinutes;
-            const breakEndTotalMinutes = breakEndHours * 60 + breakEndMinutes;
-            
-            if (currentMinutes >= breakStartTotalMinutes && currentMinutes <= breakEndTotalMinutes) {
-                return false;
-            }
-        }
-
-        return true;
+        return isWithinWorkingHours(new Date(), workingHoursConfig, holidaysConfig);
     };
 
     const [{ isDragging }, drag] = useDrag({
@@ -329,18 +253,12 @@ const TaskCard: React.FC<{
                                 <p className="font-medium text-sm pt-2">{task.title}</p>
                                 <p className="text-xs text-gray-500 mt-1">{task.task_code}</p>
                                 {/* Overdue Time Display */}
-                                {(() => {
-                                    const overdueInfo = getOverdueTime(task.due_at);
-                                    if (overdueInfo && task.state !== 'Done' && task.state !== 'Cancelled' && task.state !== 'Rejected') {
-                                        return (
-                                            <div className={`inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium border ${overdueInfo.className}`}>
-                                                <AlertTriangle className="h-3 w-3" />
-                                                {overdueInfo.text}
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
+                                {task.overdue_time && task.state !== 'Done' && task.state !== 'Cancelled' && task.state !== 'Rejected' && (
+                                    <div className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium border bg-orange-100 text-orange-700 border-orange-200">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        {task.overdue_time}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex gap-2"></div>
                         </div>
@@ -389,7 +307,7 @@ const TaskCard: React.FC<{
                 size={'lg'}
                 title="Task Forwarding"
             >
-                <TaskForwarding task={task} onClose={closeForwarding} />
+                <TaskForwarding task={task}/>
             </Modal>
 
             {/* Comments Modal */}

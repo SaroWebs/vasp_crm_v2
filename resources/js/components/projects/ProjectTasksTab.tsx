@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import TaskDurationPicker from '@/components/tasks/TaskDurationPicker';
 import { ProjectPhase, ProjectTask, UserOption } from './types';
 import { formatDate, formatDateTime } from './utils';
 
@@ -278,15 +279,13 @@ export default function ProjectTasksTab({
                                     onChange={(e) => setQuickTaskForm({ ...quickTaskForm, due_at: e.target.value })}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Estimate Hours</Label>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    step={0.5}
+                            <div className="md:col-span-3">
+                                <TaskDurationPicker
+                                    id="project-task-estimate-hours"
+                                    label="Estimated Duration"
                                     value={quickTaskForm.estimate_hours}
-                                    onChange={(e) => setQuickTaskForm({ ...quickTaskForm, estimate_hours: e.target.value })}
-                                    placeholder="e.g. 4"
+                                    onChange={(value) => setQuickTaskForm({ ...quickTaskForm, estimate_hours: value })}
+                                    helperText="Choose a duration using days, hours, and minutes."
                                 />
                             </div>
                             <div className="flex flex-wrap gap-2 md:col-span-3">

@@ -769,7 +769,6 @@ const CreateTaskToEmployee = ({
     onTaskCreated: () => void;
 }) => {
     const [opened, { open, close }] = useDisclosure(false);
-    console.log(employees);
     
     const getDefaultStartDateTime = () => {
         const selectedDate = new Date(date);
@@ -777,7 +776,6 @@ const CreateTaskToEmployee = ({
         const isToday = format(selectedDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
         
         if (isToday) {
-            // Use current time rounded to nearest 15 minutes
             const now = new Date();
             const minutes = Math.round(now.getMinutes() / 15) * 15;
             now.setMinutes(minutes, 0, 0);

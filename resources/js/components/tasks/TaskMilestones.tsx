@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -37,6 +37,8 @@ import {
     AlertCircle,
     Calendar,
     Trash2,
+    Loader,
+    Edit,
 } from 'lucide-react';
 
 interface Milestone {
@@ -53,6 +55,15 @@ interface Milestone {
     progress_percentage?: number;
     created_at: string;
     updated_at: string;
+}
+
+interface MilestoneFormData {
+    event_name: string;
+    event_description: string;
+    milestone_type: string;
+    target_date: Date | null;
+    event_date: Date | null;
+    progress_percentage: number;
 }
 
 interface TaskMilestonesProps {
@@ -75,9 +86,20 @@ const milestoneTypes = [
 export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMilestones = [], isOwnTask = false, isSuperAdmin = false, taskState }: TaskMilestonesProps) {
     const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
     const [isOpen, setIsOpen] = useState(false);
+    const [isEditOpen, setIsEditOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isEditSubmitting, setIsEditSubmitting] = useState(false);
     const [deletingMilestoneId, setDeletingMilestoneId] = useState<number | null>(null);
-    const [formData, setFormData] = useState({
+    const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+    const [formData, setFormData] = useState<MilestoneFormData>({
+        event_name: '',
+        event_description: '',
+        milestone_type: 'checkpoint',
+        target_date: null as Date | null,
+        event_date: null as Date | null,
+        progress_percentage: 0,
+    });
+    const [editFormData, setEditFormData] = useState<MilestoneFormData>({
         event_name: '',
         event_description: '',
         milestone_type: 'checkpoint',
@@ -86,8 +108,11 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
         progress_percentage: 0,
     });
     const [dateError, setDateError] = useState<string | null>(null);
+    const [editDateError, setEditDateError] = useState<string | null>(null);
     const [eventDateInput, setEventDateInput] = useState('');
     const [targetDateInput, setTargetDateInput] = useState('');
+    const [editEventDateInput, setEditEventDateInput] = useState('');
+    const [editTargetDateInput, setEditTargetDateInput] = useState('');
 
     const toDateTimeLocalValue = (value?: string | Date | null) => {
         if (!value) return '';
@@ -115,6 +140,30 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
 
     const addMinutes = (date: Date, minutes: number): Date =>
         new Date(date.getTime() + minutes * 60 * 1000);
+
+    const createMilestoneFormData = (milestone?: Milestone): MilestoneFormData => {
+        if (milestone) {
+            return {
+                event_name: milestone.event_name,
+                event_description: milestone.event_description ?? '',
+                milestone_type: milestone.milestone_type ?? 'checkpoint',
+                target_date: milestone.target_date ? new Date(milestone.target_date) : null,
+                event_date: milestone.event_date ? new Date(milestone.event_date) : null,
+                progress_percentage: milestone.progress_percentage ?? 0,
+            };
+        }
+
+        const defaultSlot = getDefaultTimeSlot();
+
+        return {
+            event_name: '',
+            event_description: '',
+            milestone_type: 'checkpoint',
+            event_date: defaultSlot?.eventDate ?? null,
+            target_date: defaultSlot?.targetDate ?? null,
+            progress_percentage: 0,
+        };
+    };
 
     const getDefaultTimeSlot = (): { eventDate: Date; targetDate: Date } | null => {
         const now = new Date();
@@ -154,18 +203,11 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
     };
 
     const resetMilestoneForm = () => {
-        const defaultSlot = getDefaultTimeSlot();
+        const defaultFormData = createMilestoneFormData();
 
-        setFormData({
-            event_name: '',
-            event_description: '',
-            milestone_type: 'checkpoint',
-            event_date: defaultSlot?.eventDate ?? null,
-            target_date: defaultSlot?.targetDate ?? null,
-            progress_percentage: 0,
-        });
-        setEventDateInput(defaultSlot ? toDateTimeLocalValue(defaultSlot.eventDate) : '');
-        setTargetDateInput(defaultSlot ? toDateTimeLocalValue(defaultSlot.targetDate) : '');
+        setFormData(defaultFormData);
+        setEventDateInput(defaultFormData.event_date ? toDateTimeLocalValue(defaultFormData.event_date) : '');
+        setTargetDateInput(defaultFormData.target_date ? toDateTimeLocalValue(defaultFormData.target_date) : '');
         setDateError(null);
     };
 
@@ -173,6 +215,15 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
         setIsOpen(open);
         if (open) {
             resetMilestoneForm();
+        }
+    };
+
+    const handleEditDialogOpenChange = (open: boolean) => {
+        setIsEditOpen(open);
+        if (!open) {
+            setEditingMilestone(null);
+            setEditDateError(null);
+            setIsEditSubmitting(false);
         }
     };
 
@@ -208,34 +259,31 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
         return null;
     };
 
-    // Determine if user can add milestones (own task or super admin, and task not completed)
-    const isTaskCompleted = taskState === 'Done' || taskState === 'Cancelled' || taskState === 'Rejected';
-    const canManageMilestones = isOwnTask || isSuperAdmin;
-    const canAddMilestone = canManageMilestones && !isTaskCompleted;
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        setDateError(null);
-
-        // Validate dates
-        const eventDate = formData.event_date;
-        const targetDate = formData.target_date;
+    const validateMilestoneForm = (
+        currentFormData: MilestoneFormData,
+        currentMilestoneId?: number,
+        actionLabel: 'create' | 'update' = 'create',
+    ): string | null => {
+        const eventDate = currentFormData.event_date;
+        const targetDate = currentFormData.target_date;
 
         const dateValidationError = validateDateBounds(eventDate, targetDate);
         if (dateValidationError) {
-            setDateError(dateValidationError);
-            setIsSubmitting(false);
-            return;
-        }
-        if (!eventDate || !targetDate) {
-            setDateError('Please select both event date and target date');
-            setIsSubmitting(false);
-            return;
+            return dateValidationError;
         }
 
-        // Validate no overlap with existing milestone time slots.
-        const existingMilestones = milestones.filter((m) => m.event_date && m.target_date && !m.is_completed);
+        if (!eventDate || !targetDate) {
+            return 'Please select both event date and target date';
+        }
+
+        const existingMilestones = milestones.filter(
+            (milestone) =>
+                milestone.event_date &&
+                milestone.target_date &&
+                !milestone.is_completed &&
+                milestone.id !== currentMilestoneId,
+        );
+
         for (const milestone of existingMilestones) {
             const existingStart = new Date(milestone.event_date!);
             const existingEnd = new Date(milestone.target_date!);
@@ -244,28 +292,209 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                 targetDate.getTime() > existingStart.getTime();
 
             if (isOverlapping) {
-                setDateError(
-                    `Cannot create milestone - timeslot overlaps "${milestone.event_name}" (${format(existingStart, 'MMM dd, yyyy p')} to ${format(existingEnd, 'MMM dd, yyyy p')})`,
-                );
-                setIsSubmitting(false);
-                return;
+                return `Cannot ${actionLabel} milestone - timeslot overlaps "${milestone.event_name}" (${format(existingStart, 'MMM dd, yyyy p')} to ${format(existingEnd, 'MMM dd, yyyy p')})`;
             }
         }
 
-        // Check milestone type order constraints
         const lastCompletedMilestone = milestones
-            .filter(m => m.is_completed && m.milestone_type)
-            .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime())[0];
-        
+            .filter((milestone) => milestone.is_completed && milestone.milestone_type)
+            .sort(
+                (a, b) =>
+                    new Date(b.completed_at || 0).getTime() -
+                    new Date(a.completed_at || 0).getTime(),
+            )[0];
+
         const typeOrder = ['start', 'checkpoint', 'completion', 'deadline'];
         if (lastCompletedMilestone?.milestone_type) {
             const lastTypeIndex = typeOrder.indexOf(lastCompletedMilestone.milestone_type);
-            const newTypeIndex = typeOrder.indexOf(formData.milestone_type);
-            if (newTypeIndex <= lastTypeIndex && formData.milestone_type !== lastCompletedMilestone.milestone_type) {
-                setDateError(`After completing "${lastCompletedMilestone.event_name}" (${lastCompletedMilestone.milestone_type}), you cannot create a ${formData.milestone_type} milestone`);
-                setIsSubmitting(false);
-                return;
+            const newTypeIndex = typeOrder.indexOf(currentFormData.milestone_type);
+            if (
+                newTypeIndex <= lastTypeIndex &&
+                currentFormData.milestone_type !== lastCompletedMilestone.milestone_type
+            ) {
+                return `After completing "${lastCompletedMilestone.event_name}" (${lastCompletedMilestone.milestone_type}), you cannot ${actionLabel} a ${currentFormData.milestone_type} milestone`;
             }
+        }
+
+        return null;
+    };
+
+    // Determine if user can add milestones (own task or super admin, and task not completed)
+    const isTaskCompleted = taskState === 'Done' || taskState === 'Cancelled' || taskState === 'Rejected';
+    const canManageMilestones = isOwnTask || isSuperAdmin;
+    const canAddMilestone = canManageMilestones && !isTaskCompleted;
+
+    const renderMilestoneFormFields = (
+        currentFormData: MilestoneFormData,
+        setCurrentFormData: Dispatch<SetStateAction<MilestoneFormData>>,
+        currentEventDateInput: string,
+        setCurrentEventDateInput: Dispatch<SetStateAction<string>>,
+        currentTargetDateInput: string,
+        setCurrentTargetDateInput: Dispatch<SetStateAction<string>>,
+        currentDateError: string | null,
+        setCurrentDateError: Dispatch<SetStateAction<string | null>>,
+    ) => (
+        <>
+            {currentDateError && (
+                <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+                    {currentDateError}
+                </div>
+            )}
+            <div className="grid gap-2">
+                <Label htmlFor="event_name">Milestone Name *</Label>
+                <Input
+                    id="event_name"
+                    value={currentFormData.event_name}
+                    onChange={(e) =>
+                        setCurrentFormData({
+                            ...currentFormData,
+                            event_name: e.target.value,
+                        })
+                    }
+                    placeholder="e.g., Design Review, Testing Phase"
+                    required
+                />
+            </div>
+
+            <div className="grid gap-2">
+                <Label htmlFor="milestone_type">Milestone Type *</Label>
+                <Select
+                    value={currentFormData.milestone_type}
+                    onValueChange={(value) =>
+                        setCurrentFormData({ ...currentFormData, milestone_type: value })
+                    }
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select milestone type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {milestoneTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                                {type.label} - {type.description}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                    <Label htmlFor="event_date">Event Date *</Label>
+                    <Input
+                        id="event_date"
+                        type="datetime-local"
+                        value={currentEventDateInput}
+                        onChange={(e) => {
+                            const value = e.target.value;
+                            const parsedDate = parseDateTimeLocal(value);
+                            setCurrentEventDateInput(value);
+                            setCurrentFormData((prev) => ({
+                                ...prev,
+                                event_date: parsedDate,
+                            }));
+                            setCurrentDateError(null);
+                        }}
+                        min={toDateTimeLocalValue(taskStartAt)}
+                        max={toDateTimeLocalValue(taskDueAt)}
+                        className="w-full"
+                        required
+                    />
+                </div>
+                <div className="grid gap-2">
+                    <Label htmlFor="target_date">Target Date *</Label>
+                    <Input
+                        id="target_date"
+                        type="datetime-local"
+                        value={currentTargetDateInput}
+                        onChange={(e) => {
+                            const value = e.target.value;
+                            const parsedDate = parseDateTimeLocal(value);
+                            setCurrentTargetDateInput(value);
+                            setCurrentFormData((prev) => ({
+                                ...prev,
+                                target_date: parsedDate,
+                            }));
+                            setCurrentDateError(null);
+                        }}
+                        min={currentEventDateInput || toDateTimeLocalValue(taskStartAt)}
+                        max={toDateTimeLocalValue(taskDueAt)}
+                        className="w-full"
+                        required
+                    />
+                </div>
+            </div>
+            {currentFormData.event_date && currentFormData.target_date && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                    <p className="font-medium">Milestone Time Slot</p>
+                    <p>
+                        {format(currentFormData.event_date, 'MMM dd, yyyy p')} to{' '}
+                        {format(currentFormData.target_date, 'MMM dd, yyyy p')} (
+                        {Math.max(
+                            1,
+                            Math.round(
+                                (currentFormData.target_date.getTime() -
+                                    currentFormData.event_date.getTime()) /
+                                    (60 * 1000),
+                            ),
+                        )}{' '}
+                        min)
+                    </p>
+                </div>
+            )}
+            {(taskStartAt || taskDueAt) && (
+                <p className="text-xs text-muted-foreground">
+                    Allowed window:{' '}
+                    {taskStartAt ? format(new Date(taskStartAt), 'MMM dd, yyyy p') : 'N/A'} to{' '}
+                    {taskDueAt ? format(new Date(taskDueAt), 'MMM dd, yyyy p') : 'N/A'}
+                </p>
+            )}
+
+            <div className="grid gap-2">
+                <Label htmlFor="progress_percentage">Initial Progress (%)</Label>
+                <Input
+                    id="progress_percentage"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={currentFormData.progress_percentage}
+                    onChange={(e) =>
+                        setCurrentFormData({
+                            ...currentFormData,
+                            progress_percentage: parseInt(e.target.value) || 0,
+                        })
+                    }
+                    placeholder="0"
+                />
+            </div>
+
+            <div className="grid gap-2">
+                <Label htmlFor="event_description">Description</Label>
+                <Textarea
+                    id="event_description"
+                    value={currentFormData.event_description}
+                    onChange={(e) =>
+                        setCurrentFormData({
+                            ...currentFormData,
+                            event_description: e.target.value,
+                        })
+                    }
+                    placeholder="Optional description for this milestone"
+                    rows={3}
+                />
+            </div>
+        </>
+    );
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setDateError(null);
+
+        const validationError = validateMilestoneForm(formData, undefined, 'create');
+        if (validationError) {
+            setDateError(validationError);
+            setIsSubmitting(false);
+            return;
         }
 
         try {
@@ -280,7 +509,7 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
             });
 
             if (response.data) {
-                setMilestones([...milestones, response.data]);
+                setMilestones((previousMilestones) => [...previousMilestones, response.data]);
                 setIsOpen(false);
             }
         } catch (error: unknown) {
@@ -296,23 +525,86 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
         }
     };
 
+    const handleEditMilestone = (milestone: Milestone) => {
+        setEditingMilestone(milestone);
+        const milestoneFormData = createMilestoneFormData(milestone);
+        setEditFormData(milestoneFormData);
+        setEditEventDateInput(milestoneFormData.event_date ? toDateTimeLocalValue(milestoneFormData.event_date) : '');
+        setEditTargetDateInput(milestoneFormData.target_date ? toDateTimeLocalValue(milestoneFormData.target_date) : '');
+        setEditDateError(null);
+        setIsEditOpen(true);
+    };
+
+    const handleUpdateMilestone = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editingMilestone) {
+            return;
+        }
+
+        setIsEditSubmitting(true);
+        setEditDateError(null);
+
+        const validationError = validateMilestoneForm(editFormData, editingMilestone.id, 'update');
+        if (validationError) {
+            setEditDateError(validationError);
+            setIsEditSubmitting(false);
+            return;
+        }
+
+        try {
+            const response = await axios.patch(`/timeline-events/${editingMilestone.id}/milestone`, {
+                event_name: editFormData.event_name,
+                event_description: editFormData.event_description,
+                milestone_type: editFormData.milestone_type,
+                event_date: editFormData.event_date
+                    ? format(editFormData.event_date, 'yyyy-MM-dd HH:mm:ss')
+                    : null,
+                target_date: editFormData.target_date
+                    ? format(editFormData.target_date, 'yyyy-MM-dd HH:mm:ss')
+                    : null,
+                progress_percentage: editFormData.progress_percentage,
+            });
+
+            if (response.data) {
+                setMilestones((previousMilestones) =>
+                    previousMilestones.map((milestone) =>
+                        milestone.id === editingMilestone.id ? response.data : milestone,
+                    ),
+                );
+                setIsEditOpen(false);
+                setEditingMilestone(null);
+            }
+        } catch (error: unknown) {
+            console.error('Error updating milestone:', error);
+            const axiosError = error as { response?: { data?: { error?: string } } };
+            if (axiosError.response?.data?.error) {
+                setEditDateError(axiosError.response.data.error);
+            } else {
+                alert('Failed to update milestone. Please try again.');
+            }
+        } finally {
+            setIsEditSubmitting(false);
+        }
+    };
+
     const handleCompleteMilestone = async (milestoneId: number) => {
         try {
             const response = await axios.patch(`/timeline-events/${milestoneId}/complete`, {
                 progress_percentage: 100,
             });
 
-            setMilestones(
-                milestones.map((m) =>
-                    m.id === milestoneId
+            setMilestones((previousMilestones) =>
+                previousMilestones.map((milestone) =>
+                    milestone.id === milestoneId
                         ? {
-                              ...m,
+                              ...milestone,
                               is_completed: true,
                               completed_at: response.data.completed_at,
                               progress_percentage: 100,
                           }
-                        : m
-                )
+                        : milestone,
+                ),
             );
         } catch (error) {
             console.error('Error completing milestone:', error);
@@ -374,14 +666,14 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                     </CardDescription>
                 </div>
                 <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
-                    <DialogTrigger asChild>
-                        {canAddMilestone && (
+                    {canAddMilestone && (
+                        <DialogTrigger asChild>
                             <Button size="sm" className="gap-1">
                                 <Plus className="h-4 w-4" />
                                 Add Milestone
                             </Button>
-                        )}
-                    </DialogTrigger>
+                        </DialogTrigger>
+                    )}
                     <DialogContent className="sm:max-w-[700px] overflow-y-auto max-h-[85vh]">
                         <DialogHeader>
                             <DialogTitle>Add New Milestone</DialogTitle>
@@ -391,152 +683,16 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                         </DialogHeader>
                         <form onSubmit={handleSubmit}>
                             <div className="grid gap-4 py-4">
-                                {dateError && (
-                                    <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
-                                        {dateError}
-                                    </div>
+                                {renderMilestoneFormFields(
+                                    formData,
+                                    setFormData,
+                                    eventDateInput,
+                                    setEventDateInput,
+                                    targetDateInput,
+                                    setTargetDateInput,
+                                    dateError,
+                                    setDateError,
                                 )}
-                                <div className="grid gap-2">
-                                    <Label htmlFor="event_name">Milestone Name *</Label>
-                                    <Input
-                                        id="event_name"
-                                        value={formData.event_name}
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                event_name: e.target.value,
-                                            })
-                                        }
-                                        placeholder="e.g., Design Review, Testing Phase"
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor="milestone_type">Milestone Type *</Label>
-                                    <Select
-                                        value={formData.milestone_type}
-                                        onValueChange={(value) =>
-                                            setFormData({ ...formData, milestone_type: value })
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select milestone type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {milestoneTypes.map((type) => (
-                                                <SelectItem key={type.value} value={type.value}>
-                                                    {type.label} - {type.description}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="event_date">Event Date *</Label>
-                                        <Input
-                                            id="event_date"
-                                            type="datetime-local"
-                                            value={eventDateInput}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                const parsedDate = parseDateTimeLocal(value);
-                                                setEventDateInput(value);
-                                                setFormData((prev) => ({
-                                                    ...prev,
-                                                    event_date: parsedDate,
-                                                }));
-                                                setDateError(null);
-                                            }}
-                                            min={toDateTimeLocalValue(taskStartAt)}
-                                            max={toDateTimeLocalValue(taskDueAt)}
-                                            className="w-full"
-                                            required
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="target_date">Target Date *</Label>
-                                        <Input
-                                            id="target_date"
-                                            type="datetime-local"
-                                            value={targetDateInput}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                const parsedDate = parseDateTimeLocal(value);
-                                                setTargetDateInput(value);
-                                                setFormData((prev) => ({
-                                                    ...prev,
-                                                    target_date: parsedDate,
-                                                }));
-                                                setDateError(null);
-                                            }}
-                                            min={eventDateInput || toDateTimeLocalValue(taskStartAt)}
-                                            max={toDateTimeLocalValue(taskDueAt)}
-                                            className="w-full"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                {formData.event_date && formData.target_date && (
-                                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-                                        <p className="font-medium">Milestone Time Slot</p>
-                                        <p>
-                                            {format(formData.event_date, 'MMM dd, yyyy p')} to{' '}
-                                            {format(formData.target_date, 'MMM dd, yyyy p')} (
-                                            {Math.max(
-                                                1,
-                                                Math.round(
-                                                    (formData.target_date.getTime() - formData.event_date.getTime()) /
-                                                        (60 * 1000),
-                                                ),
-                                            )}{' '}
-                                            min)
-                                        </p>
-                                    </div>
-                                )}
-                                {(taskStartAt || taskDueAt) && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Allowed window:{' '}
-                                        {taskStartAt ? format(new Date(taskStartAt), 'MMM dd, yyyy p') : 'N/A'} to{' '}
-                                        {taskDueAt ? format(new Date(taskDueAt), 'MMM dd, yyyy p') : 'N/A'}
-                                    </p>
-                                )}
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor="progress_percentage">Initial Progress (%)</Label>
-                                    <Input
-                                        id="progress_percentage"
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={formData.progress_percentage}
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                progress_percentage: parseInt(e.target.value) || 0,
-                                            })
-                                        }
-                                        placeholder="0"
-                                    />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor="event_description">Description</Label>
-                                    <Textarea
-                                        id="event_description"
-                                        value={formData.event_description}
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                event_description: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Optional description for this milestone"
-                                        rows={3}
-                                    />
-                                </div>
                             </div>
                             <DialogFooter>
                                 <Button
@@ -548,6 +704,42 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                                 </Button>
                                 <Button type="submit" disabled={isSubmitting}>
                                     {isSubmitting ? 'Creating...' : 'Create Milestone'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+                <Dialog open={isEditOpen} onOpenChange={handleEditDialogOpenChange}>
+                    <DialogContent className="sm:max-w-[700px] overflow-y-auto max-h-[85vh]">
+                        <DialogHeader>
+                            <DialogTitle>Edit Milestone</DialogTitle>
+                            <DialogDescription>
+                                Update the milestone details for this task.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleUpdateMilestone}>
+                            <div className="grid gap-4 py-4">
+                                {renderMilestoneFormFields(
+                                    editFormData,
+                                    setEditFormData,
+                                    editEventDateInput,
+                                    setEditEventDateInput,
+                                    editTargetDateInput,
+                                    setEditTargetDateInput,
+                                    editDateError,
+                                    setEditDateError,
+                                )}
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => handleEditDialogOpenChange(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={isEditSubmitting}>
+                                    {isEditSubmitting ? 'Updating...' : 'Update Milestone'}
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -644,21 +836,33 @@ export function TaskMilestones({ taskId, taskStartAt, taskDueAt, initialMileston
                                                 Complete
                                             </Button>
                                         )}
-                                        {canManageMilestones && (
-                                            <Button
-                                                size="sm"
-                                                variant="destructive"
-                                                onClick={() => void handleDeleteMilestone(milestone.id)}
-                                                disabled={deletingMilestoneId === milestone.id}
-                                            >
-                                                <Trash2 className="mr-1 h-4 w-4" />
-                                                {deletingMilestoneId === milestone.id ? 'Deleting...' : 'Delete'}
-                                            </Button>
-                                        )}
                                         {milestone.is_completed && milestone.completed_at && (
                                             <span className="text-xs text-green-600">
                                                 Completed {format(new Date(milestone.completed_at || ''), 'MMM dd')}
                                             </span>
+                                        )}
+                                        {(!milestone.is_completed && canManageMilestones) && (
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => handleEditMilestone(milestone)}
+                                                >
+                                                    <Edit className="mr-1 h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="destructive"
+                                                    onClick={() => void handleDeleteMilestone(milestone.id)}
+                                                    disabled={deletingMilestoneId === milestone.id}
+                                                >
+                                                    {deletingMilestoneId === milestone.id ? (
+                                                        <Loader className="mr-1 h-4 w-4" />
+                                                    ) : (
+                                                        <Trash2 className="mr-1 h-4 w-4" />
+                                                    )}
+                                                </Button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

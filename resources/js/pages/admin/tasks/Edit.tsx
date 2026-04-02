@@ -10,6 +10,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import TaskDurationPicker from '@/components/tasks/TaskDurationPicker';
 import { Textarea } from '@/components/ui/textarea';
 import {
     Tooltip,
@@ -601,31 +602,17 @@ export default function TasksEdit({
                                             )}
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="estimate_hours">
-                                                Estimated Hours
-                                            </Label>
-                                            <Input
-                                                id="estimate_hours"
-                                                type="number"
-                                                step="0.5"
-                                                value={
-                                                    data.estimate_hours || ''
-                                                }
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'estimate_hours',
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                placeholder="Enter estimated hours"
-                                            />
-                                            {errors.estimate_hours && (
-                                                <p className="text-sm text-red-600">
-                                                    {errors.estimate_hours}
-                                                </p>
-                                            )}
-                                        </div>
+                                        <TaskDurationPicker
+                                            id="estimate_hours"
+                                            label="Estimated Duration"
+                                            value={data.estimate_hours}
+                                            onChange={(value) =>
+                                                setData('estimate_hours', value)
+                                            }
+                                            required
+                                            error={errors.estimate_hours}
+                                            helperText="Choose a duration using days, hours, and minutes."
+                                        />
 
                                         <div className="space-y-2">
                                             <Label htmlFor="due_at">

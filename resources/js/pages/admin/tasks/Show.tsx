@@ -241,7 +241,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                 setIsDeleting(true);
                 axios
                     .delete(`/admin/tasks/${task.id}`)
-                    .then((res) => {
+                    .then(() => {
                         router.visit('/admin/tasks');
                     })
                     .catch((res) => {
@@ -383,8 +383,8 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                         ? 'Mark as In Progress'
                                                         : newState ===
                                                             'InReview'
-                                                          ? 'Mark as In Review'
-                                                          : `Mark as ${newState}`}
+                                                            ? 'Mark as In Review'
+                                                            : `Mark as ${newState}`}
                                                 </span>
                                             </DropdownMenuItem>
                                         ),
@@ -463,8 +463,8 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                             ? 'Force Deleting...'
                                             : 'Force Delete'
                                         : isDeleting
-                                          ? 'Deleting...'
-                                          : 'Delete Task'}
+                                            ? 'Deleting...'
+                                            : 'Delete Task'}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -498,7 +498,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         <Badge
                                             className={getPriorityColor(
                                                 task.sla_policy?.priority ||
-                                                    'P2',
+                                                'P2',
                                             )}
                                         >
                                             <AlertCircle className="mr-1 h-3 w-3" />
@@ -556,15 +556,15 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                         </Link>
                                                         {task.ticket.client
                                                             ?.name && (
-                                                            <p className="text-xs font-normal text-muted-foreground">
-                                                                Client:{' '}
-                                                                {
-                                                                    task.ticket
-                                                                        .client
-                                                                        .name
-                                                                }
-                                                            </p>
-                                                        )}
+                                                                <p className="text-xs font-normal text-muted-foreground">
+                                                                    Client:{' '}
+                                                                    {
+                                                                        task.ticket
+                                                                            .client
+                                                                            .name
+                                                                    }
+                                                                </p>
+                                                            )}
                                                     </div>
                                                 ) : (
                                                     <span className="text-muted-foreground">
@@ -609,7 +609,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                             <div className="text-sm font-medium">
                                                 {localTask.due_at ? (
                                                     <div className="flex flex-col gap-2">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center justify-between gap-2">
                                                             <span>
                                                                 {format(
                                                                     new Date(
@@ -618,20 +618,121 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                                     'MMM dd, yyyy',
                                                                 )}
                                                             </span>
-                                                            {localTask.is_overdue &&
-                                                                localTask.overdue_time && (
-                                                                    <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                                                                        Overdue
-                                                                        by{' '}
-                                                                        {
-                                                                            localTask.overdue_time
+                                                            {localTask.state !==
+                                                                'Done' && (
+                                                                    <Dialog
+                                                                        open={
+                                                                            isExtendDueDateOpen
                                                                         }
-                                                                    </span>
+                                                                        onOpenChange={
+                                                                            setIsExtendDueDateOpen
+                                                                        }
+                                                                    >
+                                                                        <DialogTrigger
+                                                                            asChild
+                                                                        >
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                className="h-7 w-fit text-xs"
+                                                                            >
+                                                                                <CalendarPlus className="mr-1 h-3 w-3" />
+                                                                            </Button>
+                                                                        </DialogTrigger>
+                                                                        <DialogContent className="sm:max-w-[400px]">
+                                                                            <DialogHeader>
+                                                                                <DialogTitle>
+                                                                                    Extend
+                                                                                    Due
+                                                                                    Date
+                                                                                </DialogTitle>
+                                                                                <DialogDescription>
+                                                                                    Set
+                                                                                    a
+                                                                                    new
+                                                                                    due
+                                                                                    date
+                                                                                    for
+                                                                                    this
+                                                                                    task.
+                                                                                </DialogDescription>
+                                                                            </DialogHeader>
+                                                                            <div className="grid gap-4 py-4">
+                                                                                <div className="grid gap-2">
+                                                                                    <Label htmlFor="new-due-date">
+                                                                                        New
+                                                                                        Due
+                                                                                        Date
+                                                                                    </Label>
+                                                                                    <Input
+                                                                                        id="new-due-date"
+                                                                                        type="datetime-local"
+                                                                                        value={
+                                                                                            newDueDate
+                                                                                        }
+                                                                                        onChange={(
+                                                                                            e,
+                                                                                        ) =>
+                                                                                            setNewDueDate(
+                                                                                                e
+                                                                                                    .target
+                                                                                                    .value,
+                                                                                            )
+                                                                                        }
+                                                                                        min={format(
+                                                                                            new Date(),
+                                                                                            "yyyy-MM-dd'T'HH:mm",
+                                                                                        )}
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                            <DialogFooter>
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    onClick={() =>
+                                                                                        setIsExtendDueDateOpen(
+                                                                                            false,
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    Cancel
+                                                                                </Button>
+                                                                                <Button
+                                                                                    onClick={
+                                                                                        handleExtendDueDate
+                                                                                    }
+                                                                                    disabled={
+                                                                                        isExtending
+                                                                                    }
+                                                                                >
+                                                                                    {isExtending
+                                                                                        ? 'Extending...'
+                                                                                        : 'Extend Due Date'}
+                                                                                </Button>
+                                                                            </DialogFooter>
+                                                                        </DialogContent>
+                                                                    </Dialog>
                                                                 )}
                                                         </div>
-                                                        {!localTask.is_overdue &&
-                                                            localTask.state !==
-                                                                'Done' && (
+                                                        {localTask.is_overdue &&
+                                                            localTask.overdue_time && (
+                                                                <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                                                    Overdue
+                                                                    by{' '}
+                                                                    {
+                                                                        localTask.overdue_time
+                                                                    }
+                                                                </span>
+                                                            )}
+
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col gap-2">
+                                                        <span className="text-muted-foreground">
+                                                            No due date
+                                                        </span>
+                                                        {localTask.state !==
+                                                            'Done' && (
                                                                 <Dialog
                                                                     open={
                                                                         isExtendDueDateOpen
@@ -649,22 +750,21 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                                             className="h-7 w-fit text-xs"
                                                                         >
                                                                             <CalendarPlus className="mr-1 h-3 w-3" />
-                                                                            Extend
-                                                                            Due
-                                                                            Date
+                                                                            {localTask.is_overdue
+                                                                                ? 'Extend Overdue'
+                                                                                : 'Set Due Date'}
                                                                         </Button>
                                                                     </DialogTrigger>
                                                                     <DialogContent className="sm:max-w-[400px]">
                                                                         <DialogHeader>
                                                                             <DialogTitle>
-                                                                                Extend
+                                                                                Set
                                                                                 Due
                                                                                 Date
                                                                             </DialogTitle>
                                                                             <DialogDescription>
                                                                                 Set
                                                                                 a
-                                                                                new
                                                                                 due
                                                                                 date
                                                                                 for
@@ -675,7 +775,6 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                                         <div className="grid gap-4 py-4">
                                                                             <div className="grid gap-2">
                                                                                 <Label htmlFor="new-due-date">
-                                                                                    New
                                                                                     Due
                                                                                     Date
                                                                                 </Label>
@@ -721,114 +820,13 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                                                 }
                                                                             >
                                                                                 {isExtending
-                                                                                    ? 'Extending...'
-                                                                                    : 'Extend Due Date'}
+                                                                                    ? 'Setting...'
+                                                                                    : 'Set Due Date'}
                                                                             </Button>
                                                                         </DialogFooter>
                                                                     </DialogContent>
                                                                 </Dialog>
                                                             )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex flex-col gap-2">
-                                                        <span className="text-muted-foreground">
-                                                            No due date
-                                                        </span>
-                                                        {localTask.state !==
-                                                            'Done' && (
-                                                            <Dialog
-                                                                open={
-                                                                    isExtendDueDateOpen
-                                                                }
-                                                                onOpenChange={
-                                                                    setIsExtendDueDateOpen
-                                                                }
-                                                            >
-                                                                <DialogTrigger
-                                                                    asChild
-                                                                >
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        className="h-7 w-fit text-xs"
-                                                                    >
-                                                                        <CalendarPlus className="mr-1 h-3 w-3" />
-                                                                        Set Due
-                                                                        Date
-                                                                    </Button>
-                                                                </DialogTrigger>
-                                                                <DialogContent className="sm:max-w-[400px]">
-                                                                    <DialogHeader>
-                                                                        <DialogTitle>
-                                                                            Set
-                                                                            Due
-                                                                            Date
-                                                                        </DialogTitle>
-                                                                        <DialogDescription>
-                                                                            Set
-                                                                            a
-                                                                            due
-                                                                            date
-                                                                            for
-                                                                            this
-                                                                            task.
-                                                                        </DialogDescription>
-                                                                    </DialogHeader>
-                                                                    <div className="grid gap-4 py-4">
-                                                                        <div className="grid gap-2">
-                                                                            <Label htmlFor="new-due-date">
-                                                                                Due
-                                                                                Date
-                                                                            </Label>
-                                                                            <Input
-                                                                                id="new-due-date"
-                                                                                type="datetime-local"
-                                                                                value={
-                                                                                    newDueDate
-                                                                                }
-                                                                                onChange={(
-                                                                                    e,
-                                                                                ) =>
-                                                                                    setNewDueDate(
-                                                                                        e
-                                                                                            .target
-                                                                                            .value,
-                                                                                    )
-                                                                                }
-                                                                                min={format(
-                                                                                    new Date(),
-                                                                                    "yyyy-MM-dd'T'HH:mm",
-                                                                                )}
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                    <DialogFooter>
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            onClick={() =>
-                                                                                setIsExtendDueDateOpen(
-                                                                                    false,
-                                                                                )
-                                                                            }
-                                                                        >
-                                                                            Cancel
-                                                                        </Button>
-                                                                        <Button
-                                                                            onClick={
-                                                                                handleExtendDueDate
-                                                                            }
-                                                                            disabled={
-                                                                                isExtending
-                                                                            }
-                                                                        >
-                                                                            {isExtending
-                                                                                ? 'Setting...'
-                                                                                : 'Set Due Date'}
-                                                                        </Button>
-                                                                    </DialogFooter>
-                                                                </DialogContent>
-                                                            </Dialog>
-                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -903,7 +901,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                                                             user.name
                                                                         }
                                                                         {index <
-                                                                        assignedUsers.length -
+                                                                            assignedUsers.length -
                                                                             1
                                                                             ? ', '
                                                                             : ''}
@@ -945,7 +943,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                     taskDueAt={task.due_at}
                                     initialMilestones={
                                         task.timeline_events?.filter(
-                                            (e: any) => e.is_milestone,
+                                            (event) => event.is_milestone,
                                         ) || []
                                     }
                                     isOwnTask={isOwnTask}
@@ -1051,7 +1049,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
 
                         {/* Parent and Child Tasks */}
                         {task.parent_task ||
-                        (task.child_tasks && task.child_tasks.length > 0) ? (
+                            (task.child_tasks && task.child_tasks.length > 0) ? (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Task Hierarchy</CardTitle>
