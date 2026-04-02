@@ -652,10 +652,32 @@ class NotificationService
         }
 
         if ($this->sendWhatsApp($phone, $message)) {
+            // a copy shall be sent to the user(who has manager role) if the user is not a manager
+            if (! $user->hasRole('manager')) {
+                $this->sendNotificationToManager($userId, $subject, $message);
+            }
+
             return;
         }
 
         $this->logNotificationFailure($userId, $subject, $message, $phone);
+    }
+
+    protected function sendNotificationToManager(int $userId, string $subject, string $message): void
+    {
+        $user = User::find($userId);
+        $managers = User::whereHas('roles', function ($query) {
+            $query->where('name', 'manager');
+        })->get();
+
+        foreach ($managers as $manager) {
+            $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
+            $header = "Manager Copy - This message has been sent to {$user->name}";
+            if ($managerPhone) {
+                $this->sendWhatsApp($managerPhone, "{$header}\n{$subject}: {$message}");
+            }
+        }
+
     }
 
     /**

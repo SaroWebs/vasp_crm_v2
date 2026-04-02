@@ -32,6 +32,17 @@ interface ReportFormData {
 }
 
 export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProps) {
+    const allowedAttachmentMimeTypes = [
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+    ];
     
     const [reportFormData, setReportFormData] = useState<ReportFormData>({
         title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
@@ -99,8 +110,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
             const files = Array.from(e.target.files);
             // Validate file types and sizes
             const validFiles = files.filter(file => {
-                const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'text/plain'];
-                const isValidType = validTypes.includes(file.type);
+                const isValidType = allowedAttachmentMimeTypes.includes(file.type);
                 const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
 
                 if (!isValidType) {
@@ -324,7 +334,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                                     onChange={handleFileChange}
                                     className="hidden"
                                     id="file-upload"
-                                    accept=".jpg,.jpeg,.png,.gif,.pdf,.docx,.txt"
+                                    accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                                 />
                                 <label htmlFor="file-upload" className="cursor-pointer">
                                     <div className="flex flex-col items-center">
@@ -333,7 +343,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                                             Drag & drop files here or click to browse
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
-                                            Supports: JPG, PNG, GIF, PDF, DOCX, TXT (Max 5MB each)
+                                            Supports: JPG, PNG, GIF, PDF, DOC, DOCX, XLS, XLSX, TXT (Max 5MB each)
                                         </p>
                                     </div>
                                 </label>

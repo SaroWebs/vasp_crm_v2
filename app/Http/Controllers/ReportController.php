@@ -2,17 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Report;
+use App\Models\ReportAttachment;
 use App\Models\Task;
 use App\Models\User;
-use Inertia\Inertia;
-use App\Models\Report;
+use App\Services\WorkingHoursService;
 use Illuminate\Http\Request;
-use App\Models\TaskTimeEntry;
 use Illuminate\Support\Carbon;
-use App\Models\ReportAttachment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use App\Services\WorkingHoursService;
+use Inertia\Inertia;
 
 class ReportController extends Controller
 {
@@ -34,33 +33,33 @@ class ReportController extends Controller
                     'attachment_count' => $report->attachments->count(),
                 ];
             });
-            
+
         return response()->json($reports);
     }
 
     public function getDailyReports($userId, $date)
     {
         // If userId is 'me', use authenticated user's ID
-        if ($userId === 'me' || !$userId) {
+        if ($userId === 'me' || ! $userId) {
             $userId = Auth::id();
         }
-        
+
         $reports = Report::where('user_id', $userId)
             ->where('report_date', $date)
-            ->with(['tasks' => function($query) {
+            ->with(['tasks' => function ($query) {
                 $query->withPivot('remarks'); // Include remarks from pivot table
-            }, 'tasks.timeEntries' => function($query) use ($date) {
-                $query->where(function($q) use ($date) {
-                        $q->whereDate('start_time', $date)
-                          ->orWhereDate('end_time', $date);
-                    })
+            }, 'tasks.timeEntries' => function ($query) use ($date) {
+                $query->where(function ($q) use ($date) {
+                    $q->whereDate('start_time', $date)
+                        ->orWhereDate('end_time', $date);
+                })
                     ->where('is_active', false);
             }, 'attachments'])
             ->get();
-            
+
         return response()->json($reports);
     }
-    
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -70,11 +69,11 @@ class ReportController extends Controller
             'selected_tasks' => 'nullable|array',
             'tasks_remarks' => 'nullable|array',
             'attachments' => 'nullable|array',
-            'total_hours' => 'nullable'
+            'total_hours' => 'nullable',
         ]);
-        
+
         $userId = Auth::id();
-        
+
         // Create report
         $report = Report::create([
             'user_id' => $userId,
@@ -82,47 +81,47 @@ class ReportController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'],
             'status' => 'submitted',
-            'total_hours'=> $validated['total_hours']
+            'total_hours' => $validated['total_hours'],
         ]);
-        
+
         // Attach tasks to report with remarks
-        if (!empty($validated['selected_tasks'])) {
+        if (! empty($validated['selected_tasks'])) {
             foreach ($validated['selected_tasks'] as $taskId) {
                 $remarks = $validated['tasks_remarks'][$taskId] ?? null;
                 $report->tasks()->attach($taskId, ['remarks' => $remarks]);
             }
         }
-        
+
         // Handle attachments
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
                 $this->storeAttachment($report, $file);
             }
         }
-        
+
         $report->calculateTotalHours();
-        
+
         return response()->json($report);
     }
-    
+
     public function connectTaskToReport($reportId, $taskId)
     {
         $report = Report::findOrFail($reportId);
         $report->tasks()->attach($taskId);
         $report->calculateTotalHours();
-        
+
         return response()->json(['message' => 'Task connected to report']);
     }
-    
+
     public function disconnectTaskFromReport($reportId, $taskId)
     {
         $report = Report::findOrFail($reportId);
         $report->tasks()->detach($taskId);
         $report->calculateTotalHours();
-        
+
         return response()->json(['message' => 'Task disconnected from report']);
     }
-    
+
     /**
      * Store an attachment for a report with proper folder structure using Storage facade.
      */
@@ -130,10 +129,10 @@ class ReportController extends Controller
     {
         // Create a structured folder path: reports/{report_id}/attachments
         $folderPath = "reports/{$report->id}/attachments";
-        
+
         // Store the file using Storage facade with public visibility for access
         $path = Storage::disk('public')->put($folderPath, $file);
-        
+
         // Create attachment record
         $attachment = $report->attachments()->create([
             'file_name' => $file->getClientOriginalName(),
@@ -144,58 +143,62 @@ class ReportController extends Controller
                 'original_name' => $file->getClientOriginalName(),
                 'extension' => $file->getClientOriginalExtension(),
                 'uploaded_by' => $report->user_id,
-                'uploaded_at' => now()->toISOString()
-            ]
+                'uploaded_at' => now()->toISOString(),
+            ],
         ]);
-        
+
         return $attachment;
     }
-    
+
     public function addAttachment(Request $request, $reportId)
     {
         $report = Report::findOrFail($reportId);
-        
+
+        $request->validate([
+            'file' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt'],
+        ]);
+
         if ($request->hasFile('file')) {
             $file = $request->file('file');
             $attachment = $this->storeAttachment($report, $file);
-            
+
             return response()->json($attachment);
         }
-        
+
         return response()->json(['error' => 'No file uploaded'], 400);
     }
-    
+
     public function getEmployeeReports(Request $request, $userId)
     {
         $query = Report::where('user_id', $userId)
-            ->with(['user', 'tasks' => function($query) {
+            ->with(['user', 'tasks' => function ($query) {
                 $query->withPivot('remarks'); // Include remarks from pivot table
             }, 'attachments'])
             ->orderBy('report_date', 'desc');
-            
+
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $query->whereBetween('report_date', [
                 $request->start_date,
-                $request->end_date
+                $request->end_date,
             ]);
         }
-        
+
         $perPage = $request->input('per_page', 10);
-        
+
         return response()->json($query->paginate($perPage));
     }
 
     public function getAllReports(Request $request)
     {
-        $query = Report::with(['user', 'tasks' => function($query) {
-                $query->withPivot('remarks'); // Include remarks from pivot table
-            }, 'attachments'])
+        $query = Report::with(['user', 'tasks' => function ($query) {
+            $query->withPivot('remarks'); // Include remarks from pivot table
+        }, 'attachments'])
             ->orderBy('report_date', 'desc');
-            
+
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $query->whereBetween('report_date', [
                 $request->start_date,
-                $request->end_date
+                $request->end_date,
             ]);
         }
 
@@ -209,20 +212,20 @@ class ReportController extends Controller
 
         if ($request->filled('search')) {
             $searchTerm = $request->search;
-            $query->where(function($q) use ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
                 $q->where('title', 'like', "%{$searchTerm}%")
-                  ->orWhere('description', 'like', "%{$searchTerm}%")
-                  ->orWhereHas('user', function($q) use ($searchTerm) {
-                      $q->where('name', 'like', "%{$searchTerm}%");
-                  })
-                  ->orWhereHas('tasks', function($q) use ($searchTerm) {
-                      $q->where('title', 'like', "%{$searchTerm}%");
-                  });
+                    ->orWhere('description', 'like', "%{$searchTerm}%")
+                    ->orWhereHas('user', function ($q) use ($searchTerm) {
+                        $q->where('name', 'like', "%{$searchTerm}%");
+                    })
+                    ->orWhereHas('tasks', function ($q) use ($searchTerm) {
+                        $q->where('title', 'like', "%{$searchTerm}%");
+                    });
             });
         }
-        
+
         $perPage = $request->input('per_page', 10);
-        
+
         return response()->json($query->paginate($perPage));
     }
 
@@ -232,6 +235,7 @@ class ReportController extends Controller
     public function index()
     {
         $employees = User::all();
+
         return Inertia::render('admin/reports/Index', [
             'employees' => $employees,
             'authUser' => Auth::user(),
@@ -245,24 +249,24 @@ class ReportController extends Controller
     {
         // First get the report date
         $reportDate = Report::where('id', $id)->value('report_date');
-        
+
         // Load the report and relationships with timeEntries filtered by report date
-        $report = Report::with(['user', 'tasks' => function($query) {
-                $query->withPivot('remarks');
-            }, 'tasks.timeEntries' => function($query) use ($reportDate) {
-                $query->where(function($q) use ($reportDate) {
-                    $q->whereDate('start_time', $reportDate)
-                      ->orWhereDate('end_time', $reportDate);
-                });
-            }, 'attachments'])
+        $report = Report::with(['user', 'tasks' => function ($query) {
+            $query->withPivot('remarks');
+        }, 'tasks.timeEntries' => function ($query) use ($reportDate) {
+            $query->where(function ($q) use ($reportDate) {
+                $q->whereDate('start_time', $reportDate)
+                    ->orWhereDate('end_time', $reportDate);
+            });
+        }, 'attachments'])
             ->findOrFail($id);
 
         // Calculate working time for each time entry
-        $workingHoursService = new WorkingHoursService();
-        
+        $workingHoursService = new WorkingHoursService;
+
         foreach ($report->tasks as $task) {
             $totalWorkingSeconds = 0;
-            
+
             foreach ($task->timeEntries as $timeEntry) {
                 $workingSeconds = $this->calculateWorkingTimeSeconds(
                     $timeEntry->start_time,
@@ -272,7 +276,7 @@ class ReportController extends Controller
                 $timeEntry->working_duration = $workingSeconds;
                 $totalWorkingSeconds += $workingSeconds;
             }
-            
+
             // Add total working duration to task
             $task->total_working_seconds = $totalWorkingSeconds;
         }
@@ -290,16 +294,16 @@ class ReportController extends Controller
     {
         // Get the report date
         $reportDate = Report::where('id', $id)->value('report_date');
-        
+
         // Load the report and relationships with timeEntries filtered by report date
-        $report = Report::with(['user', 'tasks' => function($query) {
-                $query->withPivot('remarks');
-            }, 'tasks.timeEntries' => function($query) use ($reportDate) {
-                $query->where(function($q) use ($reportDate) {
-                    $q->whereDate('start_time', $reportDate)
-                      ->orWhereDate('end_time', $reportDate);
-                });
-            }, 'attachments'])
+        $report = Report::with(['user', 'tasks' => function ($query) {
+            $query->withPivot('remarks');
+        }, 'tasks.timeEntries' => function ($query) use ($reportDate) {
+            $query->where(function ($q) use ($reportDate) {
+                $q->whereDate('start_time', $reportDate)
+                    ->orWhereDate('end_time', $reportDate);
+            });
+        }, 'attachments'])
             ->findOrFail($id);
 
         // Check if user has permission to edit this report
@@ -315,11 +319,11 @@ class ReportController extends Controller
         }
 
         // Calculate working time for each time entry
-        $workingHoursService = new WorkingHoursService();
-        
+        $workingHoursService = new WorkingHoursService;
+
         foreach ($report->tasks as $task) {
             $totalWorkingSeconds = 0;
-            
+
             foreach ($task->timeEntries as $timeEntry) {
                 $workingSeconds = $this->calculateWorkingTimeSeconds(
                     $timeEntry->start_time,
@@ -329,7 +333,7 @@ class ReportController extends Controller
                 $timeEntry->working_duration = $workingSeconds;
                 $totalWorkingSeconds += $workingSeconds;
             }
-            
+
             // Add total working duration to task
             $task->total_working_seconds = $totalWorkingSeconds;
         }
@@ -351,7 +355,7 @@ class ReportController extends Controller
 
         $start = new Carbon($startTime);
         $end = new Carbon($endTime);
-        
+
         // If end is before start, return 0
         if ($end->lt($start)) {
             return 0;
@@ -359,56 +363,59 @@ class ReportController extends Controller
 
         $workingSeconds = 0;
         $current = $start->copy();
-        
+
         while ($current->lt($end)) {
             $currentDate = new Carbon($current->toDateString());
-            
+
             // Check if it's a working day
-            if (!$workingHoursService->isWorkingDay($currentDate)) {
+            if (! $workingHoursService->isWorkingDay($currentDate)) {
                 // Skip this day entirely
                 $current->addDay()->startOfDay();
+
                 continue;
             }
-            
+
             $workingHours = $workingHoursService->getWorkingHoursForDate($currentDate);
-            
-            if (!$workingHours['start'] || !$workingHours['end']) {
+
+            if (! $workingHours['start'] || ! $workingHours['end']) {
                 $current->addDay()->startOfDay();
+
                 continue;
             }
-            
+
             // Calculate the working period boundaries for this day
-            $dayStart = new Carbon($current->toDateString() . ' ' . $workingHours['start']->format('H:i:s'));
-            $dayEnd = new Carbon($current->toDateString() . ' ' . $workingHours['end']->format('H:i:s'));
-            
+            $dayStart = new Carbon($current->toDateString().' '.$workingHours['start']->format('H:i:s'));
+            $dayEnd = new Carbon($current->toDateString().' '.$workingHours['end']->format('H:i:s'));
+
             // Adjust for break time
-            $breakStart = $workingHours['break_start'] ? new Carbon($current->toDateString() . ' ' . $workingHours['break_start']->format('H:i:s')) : null;
-            $breakEnd = $workingHours['break_end'] ? new Carbon($current->toDateString() . ' ' . $workingHours['break_end']->format('H:i:s')) : null;
-            
+            $breakStart = $workingHours['break_start'] ? new Carbon($current->toDateString().' '.$workingHours['break_start']->format('H:i:s')) : null;
+            $breakEnd = $workingHours['break_end'] ? new Carbon($current->toDateString().' '.$workingHours['break_end']->format('H:i:s')) : null;
+
             // Determine the effective end of work for this portion
             $effectiveStart = $current->gte($dayStart) ? $current : $dayStart;
             $effectiveEnd = $end->lte($dayEnd) ? $end : $dayEnd;
-            
+
             if ($effectiveStart->gte($effectiveEnd)) {
                 $current->addDay()->startOfDay();
+
                 continue;
             }
-            
+
             // Calculate duration
             $duration = $effectiveStart->diffInSeconds($effectiveEnd);
-            
+
             // Subtract break time if overlapping
             if ($breakStart && $breakEnd) {
                 $breakOverlap = max(0, min($effectiveEnd, $breakEnd) - max($effectiveStart, $breakStart));
                 $duration -= $breakOverlap;
             }
-            
+
             $workingSeconds += max(0, $duration);
-            
+
             // Move to next day
             $current->addDay()->startOfDay();
         }
-        
+
         return $workingSeconds;
     }
 
@@ -421,7 +428,7 @@ class ReportController extends Controller
         ]);
 
         $report = Report::findOrFail($reportId);
-        
+
         // Check if user has permission to edit this report
         if ($report->user_id !== Auth::id()) {
             return response()->json(['error' => 'Unauthorized'], 403);
@@ -454,25 +461,25 @@ class ReportController extends Controller
     {
         $report = Report::findOrFail($reportId);
         $attachment = ReportAttachment::where('id', $attachmentId)->where('report_id', $reportId)->firstOrFail();
-        
+
         // Check if user has permission to delete this attachment
         if ($report->user_id !== Auth::id()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         // Delete the file from storage
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($attachment->file_path);
-        
+        Storage::disk('public')->delete($attachment->file_path);
+
         // Delete the attachment record
         $attachment->delete();
-        
+
         return response()->json(['message' => 'Attachment deleted successfully']);
     }
 
     public function destroy($reportId)
     {
         $report = Report::findOrFail($reportId);
-        
+
         // Check if user has permission to delete this report
         if ($report->user_id !== Auth::id()) {
             return response()->json(['error' => 'Unauthorized to delete this report.'], 403);
@@ -487,7 +494,7 @@ class ReportController extends Controller
 
         // Delete all attachments and their files
         foreach ($report->attachments as $attachment) {
-            \Illuminate\Support\Facades\Storage::disk('public')->delete($attachment->file_path);
+            Storage::disk('public')->delete($attachment->file_path);
             $attachment->delete();
         }
 
@@ -496,8 +503,8 @@ class ReportController extends Controller
 
         // Clean up the empty directory
         $folderPath = "reports/{$report->id}";
-        if (\Illuminate\Support\Facades\Storage::disk('public')->exists($folderPath)) {
-            \Illuminate\Support\Facades\Storage::disk('public')->deleteDirectory($folderPath);
+        if (Storage::disk('public')->exists($folderPath)) {
+            Storage::disk('public')->deleteDirectory($folderPath);
         }
 
         return response()->json(['message' => 'Report deleted successfully']);
@@ -508,7 +515,8 @@ class ReportController extends Controller
      */
     public function getEmployees()
     {
-        $employees = \App\Models\User::all();
+        $employees = User::all();
+
         return response()->json($employees);
     }
 
@@ -558,13 +566,14 @@ class ReportController extends Controller
                         'task_count' => $report->tasks->count(),
                         'attachment_count' => $report->attachments->count(),
                     ];
-                })
+                }),
             ];
         })->values();
 
         // Group reports by employee
         $reportsByEmployee = $reports->groupBy('user_id')->map(function ($employeeReports) {
             $user = $employeeReports->first()->user;
+
             return [
                 'user_id' => $user->id,
                 'user_name' => $user->name,
@@ -580,7 +589,7 @@ class ReportController extends Controller
                         'total_hours' => $report->total_hours,
                         'task_count' => $report->tasks->count(),
                     ];
-                })
+                }),
             ];
         })->values();
 
@@ -635,15 +644,15 @@ class ReportController extends Controller
             ])
             ->whereBetween('report_date', [$validated['start_date'], $validated['end_date']]);
 
-        if (!empty($validated['employee_ids'])) {
+        if (! empty($validated['employee_ids'])) {
             $reportsQuery->whereIn('user_id', $validated['employee_ids']);
         }
 
-        if (!empty($validated['status'])) {
+        if (! empty($validated['status'])) {
             $reportsQuery->where('status', $validated['status']);
         }
 
-        if (!empty($validated['search'])) {
+        if (! empty($validated['search'])) {
             $searchTerm = $validated['search'];
             $reportsQuery->where(function ($query) use ($searchTerm) {
                 $query->where('title', 'like', "%{$searchTerm}%")
