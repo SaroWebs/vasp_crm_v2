@@ -624,77 +624,7 @@ class NotificationService
     }
 
     /**
-     * Send SMS to a phone number.
-     */
-    public function sendSms(string $phone, string $message): bool
-    {
-        $apiKey = config('services.sms.api_key', 'pROzzgHpqZjQauAI');
-        $senderId = config('services.sms.sender_id', 'VASPTK');
-
-        $payload = [
-            'apikey' => $apiKey,
-            'senderid' => $senderId,
-            'number' => $phone,
-            'message' => $message,
-            'format' => 'json',
-        ];
-
-        $url = config('services.sms.url', 'https://msgn.mtalkz.com/api');
-
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ]);
-
-        $result = curl_exec($ch);
-
-        if ($result === false) {
-            curl_close($ch);
-
-            return false;
-        }
-
-        curl_close($ch);
-
-        $response = json_decode($result, true);
-
-        if (isset($response['status']) && $response['status'] === 'OK') {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Send email to a user.
-     */
-    public function sendEmail(string $to, string $subject, string $message): bool
-    {
-        $fromEmail = config('mail.from.address', 'no-reply@yourdomain.com');
-        $fromName = config('mail.from.name', 'VASP Ticket');
-
-        $headers = "From: {$fromName} <{$fromEmail}>\r\n";
-        $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-
-        try {
-            return mail($to, $subject, $message, $headers);
-        } catch (\Exception $e) {
-            Log::warning('Email sending failed: '.$e->getMessage(), [
-                'to' => $to,
-                'subject' => $subject,
-            ]);
-
-            return false;
-        }
-    }
-
-    /**
-     * Send notification to employee via WhatsApp, SMS, or Email.
-     * First tries WhatsApp, then falls back to SMS, then email, then logs error if all fail.
+     * Send notification to employee via WhatsApp.
      *
      * @param  int  $userId  The user to notify
      * @param  string  $subject  The notification subject/title
@@ -713,63 +643,37 @@ class NotificationService
             return;
         }
 
-        // Prefer employee contact details, then fall back to user record.
-        $phone = $user->employee?->phone ?? $user->phone;
-        $email = $user->employee?->email ?? $user->email;
+        $phone = $this->resolveWhatsAppPhoneNumber($user);
 
-        // Try WhatsApp first
-        if ($phone) {
-            $whatsappSent = $this->sendWhatsApp($phone, $message);
-            if ($whatsappSent) {
-                return; // Success via WhatsApp, no need for SMS or email
-            }
+        if (! $phone) {
+            $this->logNotificationFailure($userId, $subject, $message, null);
+
+            return;
         }
 
-        // WhatsApp failed or no phone, try SMS
-        if ($phone) {
-            $smsSent = $this->sendSms($phone, $message);
-            if ($smsSent) {
-                return; // Success via SMS, no need for email
-            }
+        if ($this->sendWhatsApp($phone, $message)) {
+            return;
         }
 
-        // SMS failed or no phone, try employee email
-        if ($email) {
-            $emailSent = $this->sendEmail($email, $subject, $message);
-            if ($emailSent) {
-                return; // Success
-            }
-        }
-
-        // Employee and fallback email failed or not available, try user email if different.
-        if ($user->email && $user->email !== $email) {
-            $emailSent = $this->sendEmail($user->email, $subject, $message);
-            if ($emailSent) {
-                return; // Success
-            }
-        }
-
-        // WhatsApp, SMS, and email failed, log the error
-        $this->logNotificationFailure($userId, $subject, $message, $phone, $user->email ?? null);
+        $this->logNotificationFailure($userId, $subject, $message, $phone);
     }
 
     /**
      * Log notification failure for further investigation.
      */
-    protected function logNotificationFailure(int $userId, string $subject, string $message, ?string $phone, ?string $email): void
+    protected function logNotificationFailure(int $userId, string $subject, string $message, ?string $phone): void
     {
         Log::error('Notification delivery failed', [
             'user_id' => $userId,
             'subject' => $subject,
             'message' => $message,
             'phone' => $phone,
-            'email' => $email,
-            'reason' => $phone ? 'WhatsApp, SMS, and email failed' : 'No phone number and email failed',
+            'reason' => $phone ? 'WhatsApp failed' : 'No phone number available',
         ]);
     }
 
     /**
-     * Send task assignment notification via SMS/Email to the assigned user.
+     * Send task assignment notification via Pusher and WhatsApp.
      *
      * @param  int  $taskId  The task ID
      * @param  string  $taskTitle  The task title
@@ -778,7 +682,6 @@ class NotificationService
      */
     public function sendTaskAssignmentExternalNotification(int $taskId, string $taskTitle, int $assignedUserId, int $assignedByUserId): void
     {
-        // Don't notify if user is doing action on their own task
         if ($assignedUserId === $assignedByUserId) {
             return;
         }
@@ -790,8 +693,7 @@ class NotificationService
         $taskUrl = config('app.url').'/my/tasks/'.$taskId;
         $message = "You have been assigned to task: {$taskTitle}. Assigned by: {$assignedByName}. View: {$taskUrl}";
 
-        // Send both Pusher and external notifications based on user preferences
-        $this->sendUnifiedNotification(
+        $notifications = $this->sendUnifiedNotification(
             $assignedUserId,
             'App\Notifications\TaskAssignedNotification',
             $title,
@@ -803,6 +705,13 @@ class NotificationService
                 'assigned_by_name' => $assignedByName,
             ]
         );
+
+        if (! (bool) ($notifications['whatsapp']['success'] ?? false)) {
+            Log::warning('Task assignment WhatsApp notification failed', [
+                'task_id' => $taskId,
+                'assigned_user_id' => $assignedUserId,
+            ]);
+        }
     }
 
     /**
@@ -918,23 +827,16 @@ class NotificationService
             ]
         );
 
-        $externalDelivered = (bool) ($notifications['whatsapp']['success'] ?? false)
-            || (bool) ($notifications['sms']['success'] ?? false)
-            || (bool) ($notifications['email']['success'] ?? false);
-
-        if (! $externalDelivered) {
-            Log::warning('Ticket assignment external notification fell back to employee delivery', [
+        if (! (bool) ($notifications['whatsapp']['success'] ?? false)) {
+            Log::warning('Ticket assignment WhatsApp notification failed', [
                 'ticket_id' => $ticketId,
                 'assigned_user_id' => $assignedUserId,
             ]);
-
-            $this->notifyEmployee($assignedUserId, $title, $message, $assignedByUserId);
         }
     }
 
     /**
-     * Send unified notification via multiple channels based on user preferences.
-     * This method sends notifications through Pusher (in-app), WhatsApp, SMS, and Email.
+     * Send unified notification through Pusher and WhatsApp.
      *
      * @param  int  $userId  The user ID to notify
      * @param  string  $type  Notification type/class
@@ -959,8 +861,6 @@ class NotificationService
             return $results;
         }
 
-        $preferences = $user->notificationPreferences ?? null;
-
         // 1. ALWAYS send Pusher/in-app notification (mandatory)
         try {
             $notification = Notification::createWorkflowNotification($userId, $type, $title, $message, $data);
@@ -983,50 +883,60 @@ class NotificationService
             $results['pusher'] = ['success' => false, 'error' => $e->getMessage()];
         }
 
-        // Check if external notifications are enabled (user preference for WhatsApp/SMS/Email)
-        $wantsExternalNotification = $preferences && $preferences->hasExternalNotificationEnabled();
+        // Always attempt WhatsApp delivery.
+        $phone = $this->resolveWhatsAppPhoneNumber($user);
 
-        if ($wantsExternalNotification) {
-            // 2. Try WhatsApp
-            $whatsappEnabled = $preferences ? $preferences->notify_via_whatsapp : false;
-            if ($whatsappEnabled && $preferences->getWhatsAppNumber()) {
-                try {
-                    $whatsappSent = $this->sendWhatsApp($preferences->getWhatsAppNumber(), "{$title}\n\n{$message}");
-                    $results['whatsapp'] = ['success' => $whatsappSent, 'message' => $whatsappSent ? 'Sent' : 'Failed'];
-                } catch (\Exception $e) {
-                    $results['whatsapp'] = ['success' => false, 'error' => $e->getMessage()];
-                }
-            } else {
-                $results['whatsapp'] = ['success' => false, 'reason' => 'Disabled or no number'];
-            }
+        if (! $phone) {
+            $results['whatsapp'] = ['success' => false, 'reason' => 'No phone number'];
 
-            // 3. Try SMS
-            $smsEnabled = $preferences ? $preferences->notify_via_sms : false;
-            if ($smsEnabled && $preferences->getSmsNumber()) {
-                try {
-                    $smsSent = $this->sendSms($preferences->getSmsNumber(), "{$title}: {$message}");
-                    $results['sms'] = ['success' => $smsSent, 'message' => $smsSent ? 'Sent' : 'Failed'];
-                } catch (\Exception $e) {
-                    $results['sms'] = ['success' => false, 'error' => $e->getMessage()];
-                }
-            } else {
-                $results['sms'] = ['success' => false, 'reason' => 'Disabled or no number'];
-            }
+            Log::warning('WhatsApp notification skipped because no phone number was available', [
+                'user_id' => $userId,
+                'notification_type' => $type,
+            ]);
+        } else {
+            try {
+                $whatsappSent = $this->sendWhatsApp($phone, "{$title}\n\n{$message}");
+                $results['whatsapp'] = ['success' => $whatsappSent, 'message' => $whatsappSent ? 'Sent' : 'Failed'];
 
-            // 4. Try Email
-            $emailEnabled = $preferences ? $preferences->notify_via_email : true;
-            if ($emailEnabled && $user->email) {
-                try {
-                    $emailSent = $this->sendEmail($user->email, $title, nl2br($message));
-                    $results['email'] = ['success' => $emailSent, 'message' => $emailSent ? 'Sent' : 'Failed'];
-                } catch (\Exception $e) {
-                    $results['email'] = ['success' => false, 'error' => $e->getMessage()];
+                if (! $whatsappSent) {
+                    Log::warning('WhatsApp notification failed', [
+                        'user_id' => $userId,
+                        'notification_type' => $type,
+                        'phone' => $phone,
+                    ]);
                 }
-            } else {
-                $results['email'] = ['success' => false, 'reason' => 'Disabled or no email'];
+            } catch (\Throwable $e) {
+                $results['whatsapp'] = ['success' => false, 'error' => $e->getMessage()];
+
+                Log::error('Failed to send WhatsApp notification', [
+                    'user_id' => $userId,
+                    'notification_type' => $type,
+                    'phone' => $phone,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
 
         return $results;
+    }
+
+    /**
+     * Resolve the phone number that should receive WhatsApp notifications.
+     */
+    protected function resolveWhatsAppPhoneNumber(User $user): ?string
+    {
+        $employeePhone = $user->employee?->phone;
+
+        if (is_string($employeePhone) && trim($employeePhone) !== '') {
+            return $employeePhone;
+        }
+
+        $userPhone = $user->phone;
+
+        if (is_string($userPhone) && trim($userPhone) !== '') {
+            return $userPhone;
+        }
+
+        return null;
     }
 }

@@ -11,7 +11,7 @@ class TicketAssignmentExternalFallbackTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_ticket_assignment_does_not_fall_back_when_external_delivery_already_succeeds(): void
+    public function test_ticket_assignment_does_not_fall_back_when_whatsapp_succeeds(): void
     {
         $assignedByUser = User::factory()->create();
         $assignedUser = User::factory()->create();
@@ -54,7 +54,7 @@ class TicketAssignmentExternalFallbackTest extends TestCase
         $this->assertCount(0, $service->notifyEmployeeCalls);
     }
 
-    public function test_ticket_assignment_falls_back_to_employee_delivery_when_external_channels_fail(): void
+    public function test_ticket_assignment_does_not_fall_back_to_employee_delivery_when_whatsapp_fails(): void
     {
         $assignedByUser = User::factory()->create();
         $assignedUser = User::factory()->create();
@@ -77,8 +77,6 @@ class TicketAssignmentExternalFallbackTest extends TestCase
                 return [
                     'pusher' => ['success' => true],
                     'whatsapp' => ['success' => false],
-                    'sms' => ['success' => false],
-                    'email' => ['success' => false],
                 ];
             }
 
@@ -96,6 +94,6 @@ class TicketAssignmentExternalFallbackTest extends TestCase
         );
 
         $this->assertCount(1, $service->unifiedCalls);
-        $this->assertCount(1, $service->notifyEmployeeCalls);
+        $this->assertCount(0, $service->notifyEmployeeCalls);
     }
 }

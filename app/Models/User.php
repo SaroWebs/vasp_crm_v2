@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -10,7 +12,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
@@ -82,8 +84,7 @@ class User extends Authenticatable
     /**
      * Check if user has role.
      *
-     * @param string|Role|array<int, string>|array<int, Role> $role
-     * @return bool
+     * @param  string|Role|array<int, string>|array<int, Role>  $role
      */
     public function hasRole($role): bool
     {
@@ -109,8 +110,7 @@ class User extends Authenticatable
     /**
      * Assign role to user and apply role permissions to user permissions.
      *
-     * @param string|Role $role
-     * @return void
+     * @param  string|Role  $role
      */
     public function assignRole($role): void
     {
@@ -118,14 +118,14 @@ class User extends Authenticatable
             $role = Role::where('slug', $role)->first();
         }
 
-        if ($role && !$this->roles->contains($role->id)) {
+        if ($role && ! $this->roles->contains($role->id)) {
             $this->roles()->attach($role->id);
-            
+
             // Apply role permissions to user permissions
             $rolePermissions = $role->permissions()->get();
             foreach ($rolePermissions as $permission) {
                 // Only grant if not already explicitly denied
-                if (!$this->deniedPermissions()->where('permission_id', $permission->id)->exists()) {
+                if (! $this->deniedPermissions()->where('permission_id', $permission->id)->exists()) {
                     $this->giveUserPermission($permission);
                 }
             }
@@ -135,8 +135,7 @@ class User extends Authenticatable
     /**
      * Remove role from user.
      *
-     * @param string|Role $role
-     * @return void
+     * @param  string|Role  $role
      */
     public function removeRole($role): void
     {
@@ -158,7 +157,7 @@ class User extends Authenticatable
             $permission = Permission::where('slug', $permission)->first();
         }
 
-        if ($permission && !$this->permissions->contains($permission->id)) {
+        if ($permission && ! $this->permissions->contains($permission->id)) {
             // Remove any existing denied entry first
             $this->deniedPermissions()->detach($permission->id);
             // Add granted permission
@@ -207,7 +206,7 @@ class User extends Authenticatable
             $permission = Permission::where('slug', $permission)->first();
         }
 
-        if (!$permission) {
+        if (! $permission) {
             return false;
         }
 
@@ -223,7 +222,7 @@ class User extends Authenticatable
             $permission = Permission::where('slug', $permission)->first();
         }
 
-        if (!$permission) {
+        if (! $permission) {
             return false;
         }
 
@@ -234,19 +233,18 @@ class User extends Authenticatable
      * Check if user has permission.
      * User-level permissions take precedence over role permissions.
      *
-     * @param string|Permission $permission
-     * @return bool
+     * @param  string|Permission  $permission
      */
     public function hasPermission($permission): bool
     {
 
-        if($this->hasRole('super-admin')){
+        if ($this->hasRole('super-admin')) {
             return true;
         }
 
         if (is_string($permission)) {
             $permissionModel = Permission::where('slug', $permission)->first();
-            if (!$permissionModel) {
+            if (! $permissionModel) {
                 return false;
             }
             $permission = $permissionModel;
@@ -263,7 +261,7 @@ class User extends Authenticatable
         }
 
         // If no user-level override, check role permissions
-        if (!$this->relationLoaded('roles')) {
+        if (! $this->relationLoaded('roles')) {
             $this->load('roles');
         }
 
@@ -281,8 +279,7 @@ class User extends Authenticatable
     /**
      * Check if user has any of the given permissions.
      *
-     * @param array<int, string> $permissions
-     * @return bool
+     * @param  array<int, string>  $permissions
      */
     public function hasAnyPermission($permissions): bool
     {
@@ -298,13 +295,12 @@ class User extends Authenticatable
     /**
      * Check if user has all of the given permissions.
      *
-     * @param array<int, string> $permissions
-     * @return bool
+     * @param  array<int, string>  $permissions
      */
     public function hasAllPermissions($permissions): bool
     {
         foreach ($permissions as $permission) {
-            if (!$this->hasPermission($permission)) {
+            if (! $this->hasPermission($permission)) {
                 return false;
             }
         }
@@ -315,7 +311,7 @@ class User extends Authenticatable
     /**
      * Get all permissions for the user (role + user-level).
      *
-     * @return \Illuminate\Database\Eloquent\Collection<int, Permission>
+     * @return Collection<int, Permission>
      */
     public function getAllPermissions()
     {
@@ -326,7 +322,7 @@ class User extends Authenticatable
         $permissions = $permissions->merge($userPermissions);
 
         // Add role permissions that are not explicitly overridden by denied user permissions
-        if (!$this->relationLoaded('roles')) {
+        if (! $this->relationLoaded('roles')) {
             $this->load('roles');
         }
 
@@ -370,8 +366,6 @@ class User extends Authenticatable
 
     /**
      * Check if user is super admin (has all permissions).
-     *
-     * @return bool
      */
     public function isSuperAdmin(): bool
     {
@@ -396,14 +390,6 @@ class User extends Authenticatable
     public function getLogName()
     {
         return 'User';
-    }
-
-    /**
-     * Get the user's notification preferences.
-     */
-    public function notificationPreferences()
-    {
-        return $this->hasOne(UserNotificationPreference::class);
     }
 
     /**
