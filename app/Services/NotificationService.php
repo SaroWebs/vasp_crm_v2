@@ -12,7 +12,6 @@ use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\Ticket;
 use App\Models\User;
-use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
 
 class NotificationService
@@ -33,10 +32,40 @@ class NotificationService
     /**
      * Broadcast notification.
      */
-    protected function broadcastNotification(Notification $notification, int $userId): void
+    protected function broadcastNotification(Notification $notification, int $userId): bool
     {
-        // Use the base notification event for general notifications
-        broadcast(new NotificationEvent($notification, $userId))->toOthers();
+        return $this->broadcastEvent(
+            new NotificationEvent($notification, $userId),
+            'general_notification',
+            [
+                'notification_id' => $notification->id,
+                'user_id' => $userId,
+            ]
+        );
+    }
+
+    /**
+     * Broadcast an event and log the outcome.
+     */
+    protected function broadcastEvent(object $event, string $context, array $contextData = []): bool
+    {
+        $logContext = array_merge([
+            'context' => $context,
+            'event_class' => $event::class,
+        ], $contextData);
+
+        try {
+            Log::debug('Broadcasting notification event', $logContext);
+            broadcast($event)->toOthers();
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to broadcast notification event', $logContext + [
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /**
@@ -97,7 +126,15 @@ class NotificationService
         );
 
         // Broadcast using specific task assignment event
-        broadcast(new TaskAssignedNotificationEvent($notification, $assignedUserId))->toOthers();
+        $this->broadcastEvent(
+            new TaskAssignedNotificationEvent($notification, $assignedUserId),
+            'task_assignment',
+            [
+                'notification_id' => $notification->id,
+                'task_id' => $taskId,
+                'user_id' => $assignedUserId,
+            ]
+        );
 
         return $notification;
     }
@@ -128,7 +165,15 @@ class NotificationService
             );
 
             // Broadcast using specific task status change event
-            broadcast(new TaskStatusChangedNotificationEvent($notification, $task->assigned_to))->toOthers();
+            $this->broadcastEvent(
+                new TaskStatusChangedNotificationEvent($notification, $task->assigned_to),
+                'task_status_change',
+                [
+                    'notification_id' => $notification->id,
+                    'task_id' => $taskId,
+                    'user_id' => $task->assigned_to,
+                ]
+            );
 
             $notifications[] = $notification;
         }
@@ -152,7 +197,15 @@ class NotificationService
             // Broadcast to department users
             $departmentUserIds = Department::find($task->assigned_department_id)->users()->pluck('id')->toArray();
             foreach ($departmentUserIds as $userId) {
-                broadcast(new TaskStatusChangedNotificationEvent($departmentNotifications[0], $userId))->toOthers();
+                $this->broadcastEvent(
+                    new TaskStatusChangedNotificationEvent($departmentNotifications[0], $userId),
+                    'task_status_change_department',
+                    [
+                        'notification_id' => $departmentNotifications[0]->id,
+                        'task_id' => $taskId,
+                        'user_id' => $userId,
+                    ]
+                );
             }
 
             $notifications = array_merge($notifications, $departmentNotifications);
@@ -195,7 +248,15 @@ class NotificationService
         // Broadcast to department users
         $departmentUserIds = Department::find($toDepartmentId)->users()->pluck('id')->toArray();
         foreach ($departmentUserIds as $userId) {
-            broadcast(new TaskForwardedNotificationEvent($departmentNotifications[0], $userId))->toOthers();
+            $this->broadcastEvent(
+                new TaskForwardedNotificationEvent($departmentNotifications[0], $userId),
+                'task_forwarded_department',
+                [
+                    'notification_id' => $departmentNotifications[0]->id,
+                    'task_id' => $taskId,
+                    'user_id' => $userId,
+                ]
+            );
         }
 
         $notifications = array_merge($notifications, $departmentNotifications);
@@ -218,7 +279,15 @@ class NotificationService
         // Broadcast to department managers
         $managerUserIds = Department::find($toDepartmentId)->getManagers()->pluck('id')->toArray();
         foreach ($managerUserIds as $userId) {
-            broadcast(new TaskForwardedNotificationEvent($managerNotifications[0], $userId))->toOthers();
+            $this->broadcastEvent(
+                new TaskForwardedNotificationEvent($managerNotifications[0], $userId),
+                'task_forwarded_manager',
+                [
+                    'notification_id' => $managerNotifications[0]->id,
+                    'task_id' => $taskId,
+                    'user_id' => $userId,
+                ]
+            );
         }
 
         $notifications = array_merge($notifications, $managerNotifications);
@@ -459,15 +528,12 @@ class NotificationService
      */
     public function sendWhatsApp(string $phone, string $message): bool
     {
-        // phone number should be in international format without +, e.g. 919876543210
-        // mostly we have 9876543210 but if we have country code then it should be like 919876543210
-        // if length is 10, we can assume it's a local number and prepend country code
-        if (strlen($phone) === 10) {
-            $phone = '91'.$phone; // Assuming country code 91 for India, adjust as needed
-        }
-        // check if phone number is valid (basic check for digits and length)
-        if (! preg_match('/^\d{10,15}$/', $phone)) {
-            Log::warning('Invalid phone number format for WhatsApp notification', ['phone' => $phone]);
+        $normalizedPhone = $this->normalizeWhatsAppPhoneNumber($phone);
+
+        if ($normalizedPhone === null) {
+            Log::warning('Invalid phone number format for WhatsApp notification', [
+                'phone' => $phone,
+            ]);
 
             return false;
         }
@@ -477,13 +543,15 @@ class NotificationService
         $isGroup = config('services.whatsapp.is_group', 'false');
 
         if (! $apiToken) {
-            Log::warning('WhatsApp API token not configured');
+            Log::warning('WhatsApp API token not configured', [
+                'phone' => $normalizedPhone,
+            ]);
 
             return false;
         }
 
         // Build the URL with query parameters
-        $fullUrl = $url.'?apitoken='.$apiToken.'&phoneno='.urlencode($phone).'&sms='.urlencode($message).'&isgroup='.$isGroup;
+        $fullUrl = $url.'?apitoken='.$apiToken.'&phoneno='.urlencode($normalizedPhone).'&sms='.urlencode($message).'&isgroup='.$isGroup;
 
         $ch = curl_init($fullUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -495,7 +563,10 @@ class NotificationService
         $result = curl_exec($ch);
 
         if ($result === false) {
-            Log::error('WhatsApp cURL error: '.curl_error($ch));
+            Log::error('WhatsApp cURL error', [
+                'phone' => $normalizedPhone,
+                'error' => curl_error($ch),
+            ]);
             curl_close($ch);
 
             return false;
@@ -509,20 +580,47 @@ class NotificationService
             $firstResponse = $response[0];
             if (isset($firstResponse['status']) && $firstResponse['status'] === 'Success') {
                 Log::info('WhatsApp message sent successfully', [
-                    'phone' => $phone,
+                    'phone' => $normalizedPhone,
                     'response' => $firstResponse,
                 ]);
 
                 return true;
             } else {
                 Log::warning('WhatsApp message failed', [
-                    'phone' => $phone,
+                    'phone' => $normalizedPhone,
                     'response' => $firstResponse,
                 ]);
             }
+        } else {
+            Log::warning('Unexpected WhatsApp response format', [
+                'phone' => $normalizedPhone,
+                'response' => $result,
+            ]);
         }
 
         return false;
+    }
+
+    /**
+     * Normalize a phone number for WhatsApp delivery.
+     */
+    protected function normalizeWhatsAppPhoneNumber(string $phone): ?string
+    {
+        $digitsOnly = preg_replace('/\D+/', '', $phone);
+
+        if (! is_string($digitsOnly) || $digitsOnly === '') {
+            return null;
+        }
+
+        if (strlen($digitsOnly) === 10) {
+            $digitsOnly = '91'.$digitsOnly;
+        }
+
+        if (! preg_match('/^\d{10,15}$/', $digitsOnly)) {
+            return null;
+        }
+
+        return $digitsOnly;
     }
 
     /**
@@ -807,7 +905,7 @@ class NotificationService
         $ticketUrl = config('app.url').'/admin/tickets/'.$ticketId;
         $message = "You have been assigned to ticket: {$ticketTitle}. Assigned by: {$assignedByName}. View: {$ticketUrl}";
 
-        $this->sendUnifiedNotification(
+        $notifications = $this->sendUnifiedNotification(
             $assignedUserId,
             'App\Notifications\TicketAssignedNotification',
             $title,
@@ -820,7 +918,18 @@ class NotificationService
             ]
         );
 
-        $this->notifyEmployee($assignedUserId, $title, $message, $assignedByUserId);
+        $externalDelivered = (bool) ($notifications['whatsapp']['success'] ?? false)
+            || (bool) ($notifications['sms']['success'] ?? false)
+            || (bool) ($notifications['email']['success'] ?? false);
+
+        if (! $externalDelivered) {
+            Log::warning('Ticket assignment external notification fell back to employee delivery', [
+                'ticket_id' => $ticketId,
+                'assigned_user_id' => $assignedUserId,
+            ]);
+
+            $this->notifyEmployee($assignedUserId, $title, $message, $assignedByUserId);
+        }
     }
 
     /**
@@ -860,9 +969,16 @@ class NotificationService
                 'delivered' => true,
                 'delivered_at' => now(),
             ]);
-            $this->broadcastNotification($notification, $userId);
-            $results['pusher'] = ['success' => true, 'notification_id' => $notification->id];
-        } catch (\Exception $e) {
+            $broadcasted = $this->broadcastNotification($notification, $userId);
+            $results['pusher'] = ['success' => $broadcasted, 'notification_id' => $notification->id];
+
+            if (! $broadcasted) {
+                Log::warning('Pusher notification was stored but not broadcast', [
+                    'user_id' => $userId,
+                    'notification_id' => $notification->id,
+                ]);
+            }
+        } catch (\Throwable $e) {
             Log::error('Failed to send Pusher notification', ['user_id' => $userId, 'error' => $e->getMessage()]);
             $results['pusher'] = ['success' => false, 'error' => $e->getMessage()];
         }
