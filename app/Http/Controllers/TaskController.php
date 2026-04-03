@@ -8,11 +8,18 @@ use App\Models\Task;
 use App\Models\TaskTimeEntry;
 use App\Models\TaskType;
 use App\Models\User;
+use App\Models\WorkloadMetric;
+use App\Services\DueDateCalculatorService;
+use App\Services\NotificationService;
+use App\Services\WorkingHoursService;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Task Controller for managing tasks with permission checks.
@@ -29,9 +36,9 @@ class TaskController extends Controller
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function index()
     {
@@ -64,9 +71,9 @@ class TaskController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function store(Request $request)
     {
@@ -107,7 +114,7 @@ class TaskController extends Controller
 
         // Calculate due date if not provided but estimate hours are given
         if (! isset($validatedData['due_at']) && isset($validatedData['estimate_hours'])) {
-            $dueDateCalculator = app(\App\Services\DueDateCalculatorService::class);
+            $dueDateCalculator = app(DueDateCalculatorService::class);
             $validatedData['due_at'] = $dueDateCalculator->calculateDueDate(
                 new \DateTime($validatedData['start_at']),
                 $validatedData['estimate_hours']
@@ -130,9 +137,9 @@ class TaskController extends Controller
     /**
      * Display the specified resource.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function show(Task $task)
     {
@@ -192,9 +199,9 @@ class TaskController extends Controller
     /**
      * Store a newly created self-assigned task in storage.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function storeSelfAssigned(Request $request)
     {
@@ -245,9 +252,9 @@ class TaskController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function update(Request $request, Task $task)
     {
@@ -307,7 +314,7 @@ class TaskController extends Controller
     /**
      * Extend the due date for a task.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function extendDueDate(Request $request, Task $task)
     {
@@ -333,9 +340,9 @@ class TaskController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function destroy(Task $task)
     {
@@ -371,9 +378,9 @@ class TaskController extends Controller
     /**
      * Get user's tasks (tasks assigned to the current user).
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getAllTasks(Request $request)
     {
@@ -443,9 +450,9 @@ class TaskController extends Controller
     /**
      * Get user's tasks (tasks assigned to the current user).
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getMyTasks(Request $request)
     {
@@ -504,9 +511,9 @@ class TaskController extends Controller
      * Get tasks by status.
      *
      * @param  string  $status
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksByStatus($status)
     {
@@ -542,9 +549,9 @@ class TaskController extends Controller
     /**
      * Update task status.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function updateStatus(Request $request, Task $task)
     {
@@ -584,6 +591,15 @@ class TaskController extends Controller
 
         $task->update($validatedData);
 
+        if (in_array($validatedData['state'], ['Done', 'Cancelled', 'Rejected'], true)) {
+            app(NotificationService::class)->sendTaskCompletionExternalNotification(
+                $task->id,
+                $task->title,
+                $validatedData['state'],
+                $user->id
+            );
+        }
+
         return response()->json([
             'success' => true,
             'data' => $task->load([
@@ -600,9 +616,9 @@ class TaskController extends Controller
     /**
      * Start tracking time for a task.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function startTask(Task $task)
     {
@@ -620,7 +636,7 @@ class TaskController extends Controller
         }
 
         // Check if current time is working time
-        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
         if (! $workingHoursService->isWorkingTime($now)) {
             return response()->json([
@@ -661,9 +677,9 @@ class TaskController extends Controller
     /**
      * Pause tracking time for a task.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function pauseTask(Task $task)
     {
@@ -706,9 +722,9 @@ class TaskController extends Controller
     /**
      * Resume tracking time for a task.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function resumeTask(Task $task)
     {
@@ -726,7 +742,7 @@ class TaskController extends Controller
         }
 
         // Check if current time is working time
-        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
         if (! $workingHoursService->isWorkingTime($now)) {
             return response()->json([
@@ -764,9 +780,9 @@ class TaskController extends Controller
     /**
      * End tracking time for a task.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function endTask(Task $task)
     {
@@ -802,6 +818,13 @@ class TaskController extends Controller
                 'state' => 'Done',
                 'completed_at' => now(),
             ]);
+
+            app(NotificationService::class)->sendTaskCompletionExternalNotification(
+                $task->id,
+                $task->title,
+                'Done',
+                $user->id
+            );
         }
 
         return response()->json([
@@ -821,9 +844,9 @@ class TaskController extends Controller
     /**
      * Calculate time spent on a task.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function calculateTimeSpent(Task $task)
     {
@@ -865,9 +888,9 @@ class TaskController extends Controller
     /**
      * Calculate remaining time for a task based on working hours.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function calculateRemainingTime(Task $task)
     {
@@ -882,7 +905,7 @@ class TaskController extends Controller
         $daysRequired = $task->calculateDaysRequired();
 
         // Get working hours configuration for response
-        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $workingHoursService = app(WorkingHoursService::class);
         $config = $workingHoursService->getWorkingHoursConfig();
 
         return response()->json([
@@ -899,9 +922,9 @@ class TaskController extends Controller
      * Get tasks by department.
      *
      * @param  int  $departmentId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksByDepartment($departmentId)
     {
@@ -931,9 +954,9 @@ class TaskController extends Controller
      * Get tasks by task type.
      *
      * @param  int  $taskTypeId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksByTaskType($taskTypeId)
     {
@@ -963,9 +986,9 @@ class TaskController extends Controller
      * Get tasks by SLA policy.
      *
      * @param  int  $slaPolicyId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksBySlaPolicy($slaPolicyId)
     {
@@ -994,9 +1017,9 @@ class TaskController extends Controller
     /**
      * Get overdue tasks.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getOverdueTasks()
     {
@@ -1025,9 +1048,9 @@ class TaskController extends Controller
     /**
      * Get tasks due today.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksDueToday()
     {
@@ -1056,9 +1079,9 @@ class TaskController extends Controller
     /**
      * Get tasks due this week.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTasksDueThisWeek()
     {
@@ -1087,9 +1110,9 @@ class TaskController extends Controller
     /**
      * Get high priority overdue tasks.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getHighPriorityOverdueTasks()
     {
@@ -1118,9 +1141,9 @@ class TaskController extends Controller
     /**
      * Get task summary.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function getTaskSummary(Task $task)
     {
@@ -1139,9 +1162,9 @@ class TaskController extends Controller
     /**
      * Display my tasks page (tasks assigned to current user).
      *
-     * @return \Inertia\Response
+     * @return Response
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function myTasks(Request $request)
     {
@@ -1189,7 +1212,7 @@ class TaskController extends Controller
         $metrics = [];
         $assignedUsers = $task->assignedUsers()->pluck('user_id');
         if ($assignedUsers->isNotEmpty()) {
-            $metrics = \App\Models\WorkloadMetric::whereIn('user_id', $assignedUsers)
+            $metrics = WorkloadMetric::whereIn('user_id', $assignedUsers)
                 ->with('user:id,name,email')
                 ->orderBy('calculated_at', 'desc')
                 ->get();
@@ -1352,7 +1375,7 @@ class TaskController extends Controller
     /**
      * Calculate minimum due date based on estimated working hours.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function calculateMinDueDate(Request $request)
     {
@@ -1360,7 +1383,7 @@ class TaskController extends Controller
         $startAt = $request->query('start_at');
 
         // Use provided start_at or default to now
-        $startDate = $startAt ? \Carbon\Carbon::parse($startAt) : now();
+        $startDate = $startAt ? Carbon::parse($startAt) : now();
 
         if (! $estimateHours || $estimateHours <= 0) {
             return response()->json([
@@ -1371,7 +1394,7 @@ class TaskController extends Controller
             ]);
         }
 
-        $dueDateCalculator = app(\App\Services\DueDateCalculatorService::class);
+        $dueDateCalculator = app(DueDateCalculatorService::class);
         $dueDate = $dueDateCalculator->calculateDueDate($startDate, (float) $estimateHours);
 
         return response()->json([

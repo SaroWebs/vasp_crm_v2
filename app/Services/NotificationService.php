@@ -12,6 +12,7 @@ use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\Ticket;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 
 class NotificationService
@@ -653,7 +654,7 @@ class NotificationService
 
         if ($this->sendWhatsApp($phone, $message)) {
             // a copy shall be sent to the user(who has manager role) if the user is not a manager
-            if (!$user->hasRole('manager')) {
+            if (! $user->hasRole('manager')) {
                 $this->sendNotificationToManager($userId, $subject, $message);
             }
 
@@ -666,9 +667,7 @@ class NotificationService
     protected function sendNotificationToManager(int $userId, string $subject, string $message): void
     {
         $user = User::find($userId);
-        $managers = User::whereHas('roles', function ($query) {
-            $query->where('name', 'manager');
-        })->get();
+        $managers = $this->getManagerUsers();
 
         foreach ($managers as $manager) {
             $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
@@ -678,6 +677,47 @@ class NotificationService
             }
         }
 
+    }
+
+    /**
+     * Get the users who should receive manager notifications.
+     *
+     * @return Collection<int, User>
+     */
+    protected function getSupportUsers(): Collection
+    {
+        return User::whereHas('roles', function ($query) {
+            $query->where('slug', 'support')
+                ->orWhere('slug', 'support-agent')
+                ->orWhere('name', 'support')
+                ->orWhere('name', 'support agent');
+        })->get();
+    }
+
+    /**
+     * Get the users who should receive manager notifications.
+     *
+     * @return Collection<int, User>
+     */
+    protected function getManagerUsers(): Collection
+    {
+        return User::whereHas('roles', function ($query) {
+            $query->where('slug', 'manager')
+                ->orWhere('name', 'manager');
+        })->get();
+    }
+
+    /**
+     * Convert a terminal task state into the text used in notifications.
+     */
+    protected function formatTerminalTaskState(string $state): string
+    {
+        return match ($state) {
+            'Done' => 'Completed',
+            'Cancelled' => 'Cancelled',
+            'Rejected' => 'Rejected',
+            default => $state,
+        };
     }
 
     /**
@@ -712,7 +752,7 @@ class NotificationService
         $assignedByName = $assignedByUser->name ?? 'System';
 
         $title = 'New Task Assigned';
-        $taskUrl = config('app.url').'/my/tasks/'.$taskId;
+        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
         $message = "You have been assigned to task: {$taskTitle}. Assigned by: {$assignedByName}. View: {$taskUrl}";
 
         $notifications = $this->sendUnifiedNotification(
@@ -737,6 +777,75 @@ class NotificationService
     }
 
     /**
+     * Send terminal task state notification to managers.
+     */
+    public function sendTaskCompletionExternalNotification(int $taskId, string $taskTitle, string $newStatus, int $changedByUserId): void
+    {
+        $changedByUser = User::with('employee')->find($changedByUserId);
+
+        if (! $changedByUser) {
+            return;
+        }
+
+        $stateLabel = $this->formatTerminalTaskState($newStatus);
+        $title = 'Task '.$stateLabel;
+        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
+        $actorName = $changedByUser->employee?->name ?? $changedByUser->name ?? 'System';
+        $message = "Task '{$taskTitle}' has been {$stateLabel} by {$actorName}. View: {$taskUrl}";
+
+        foreach ($this->getManagerUsers() as $manager) {
+            $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
+
+            if (! $managerPhone) {
+                $this->logNotificationFailure($manager->id, $title, $message, null);
+
+                continue;
+            }
+
+            $this->sendWhatsApp($managerPhone, "{$title}\n\n{$message}");
+        }
+
+        foreach ($this->getSupportUsers() as $support) {
+            $supportPhone = $this->resolveWhatsAppPhoneNumber($support);
+            if (! $supportPhone) {
+                $this->logNotificationFailure($support->id, $title, $message, null);
+
+                continue;
+            }
+            $this->sendWhatsApp($supportPhone, "{$title}\n\n{$message}");
+        }
+    }
+
+    /**
+     * Send ticket status change notification to support users.
+     */
+    public function sendTicketStatusChangeExternalNotification(int $ticketId, string $ticketTitle, string $newStatus, int $changedByUserId): void
+    {
+        $changedByUser = User::with('employee')->find($changedByUserId);
+
+        if (! $changedByUser) {
+            return;
+        }
+
+        $title = 'Ticket Status Updated';
+        $ticketUrl = config('app.url').'/admin/tickets/'.$ticketId;
+        $actorName = $changedByUser->employee?->name ?? $changedByUser->name ?? 'System';
+        $message = "Ticket '{$ticketTitle}' status changed to: {$newStatus}. Changed by: {$actorName}. View: {$ticketUrl}";
+
+        foreach ($this->getSupportUsers() as $support) {
+            $supportPhone = $this->resolveWhatsAppPhoneNumber($support);
+
+            if (! $supportPhone) {
+                $this->logNotificationFailure($support->id, $title, $message, null);
+
+                continue;
+            }
+
+            $this->sendWhatsApp($supportPhone, "{$title}\n\n{$message}");
+        }
+    }
+
+    /**
      * Send task status change notification via Pusher and external channels.
      *
      * @param  int  $taskId  The task ID
@@ -756,7 +865,7 @@ class NotificationService
         $changedByName = $changedByUser->name ?? 'System';
 
         $title = 'Task Status Updated';
-        $taskUrl = config('app.url').'/my/tasks/'.$taskId;
+        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
         $message = "Task '{$taskTitle}' status changed to: {$newStatus}. Changed by: {$changedByName}. View: {$taskUrl}";
 
         $this->sendUnifiedNotification(
@@ -795,7 +904,7 @@ class NotificationService
         $forwardedByName = $forwardedByUser->name ?? 'System';
 
         $title = 'Task Forwarded to Your Department';
-        $taskUrl = config('app.url').'/my/tasks/'.$taskId;
+        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
         $message = "Task '{$taskTitle}' has been forwarded from {$fromDepartmentName} to {$toDepartmentName}. Forwarded by: {$forwardedByName}. View: {$taskUrl}";
 
         $this->sendUnifiedNotification(
@@ -919,7 +1028,7 @@ class NotificationService
             try {
                 $whatsappSent = $this->sendWhatsApp($phone, "{$title}\n\n{$message}");
                 // a copy shall be sent to the user(who has manager role) if the user is not a manager
-                if (!$user->hasRole('manager')) {
+                if (! $user->hasRole('manager')) {
                     $this->sendNotificationToManager($userId, $title, $message);
                 }
 

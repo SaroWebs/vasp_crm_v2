@@ -806,6 +806,15 @@ class AdminTaskController extends Controller
             $user->id
         );
 
+        if (in_array($validated['state'], ['Done', 'Cancelled', 'Rejected'], true)) {
+            $this->notificationService->sendTaskCompletionExternalNotification(
+                $task->id,
+                $task->title,
+                $validated['state'],
+                $user->id
+            );
+        }
+
         return response()->json([
             'message' => 'Task status updated successfully',
             'task' => $task->load(['createdBy:id,name']),

@@ -337,6 +337,7 @@ class AdminTicketController extends Controller
         $validated['assigned_to'] = filled($validated['assigned_to'] ?? null) ? (int) $validated['assigned_to'] : null;
         $validated['approved_by'] = filled($validated['approved_by'] ?? null) ? (int) $validated['approved_by'] : null;
 
+        $previousStatus = $ticket->status;
         $organizationUser = OrganizationUser::where('id', $validated['organization_user_id'])
             ->where('client_id', $validated['client_id'])
             ->first();
@@ -423,6 +424,15 @@ class AdminTicketController extends Controller
             }
 
             DB::commit();
+
+            if ($previousStatus !== $validated['status']) {
+                $this->notificationService->sendTicketStatusChangeExternalNotification(
+                    $ticket->id,
+                    $ticket->title,
+                    $validated['status'],
+                    $currentUser->id
+                );
+            }
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -683,6 +693,12 @@ class AdminTicketController extends Controller
 
             // Send notifications
             $this->sendApprovalNotifications($ticket, $user);
+            $this->notificationService->sendTicketStatusChangeExternalNotification(
+                $ticket->id,
+                $ticket->title,
+                'approved',
+                $user->id
+            );
 
             return response()->json([
                 'message' => 'Ticket approved successfully',
@@ -715,6 +731,8 @@ class AdminTicketController extends Controller
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
+        $previousStatus = $ticket->status;
+
         $validated = $request->validate([
             'rejection_reason' => 'required|string|max:1000',
         ]);
@@ -725,6 +743,15 @@ class AdminTicketController extends Controller
             'rejected_by' => $user->id,
             'rejected_at' => now(),
         ]);
+
+        if ($previousStatus !== 'rejected') {
+            $this->notificationService->sendTicketStatusChangeExternalNotification(
+                $ticket->id,
+                $ticket->title,
+                'rejected',
+                $user->id
+            );
+        }
 
         return response()->json([
             'message' => 'Ticket rejected successfully',
@@ -748,6 +775,8 @@ class AdminTicketController extends Controller
             return response()->json(['message' => 'Ticket not found'], 404);
         }
 
+        $previousStatus = $ticket->status;
+
         $validated = $request->validate([
             'status' => 'required|in:open,approved,in-progress,closed,cancelled,rejected',
         ]);
@@ -755,6 +784,15 @@ class AdminTicketController extends Controller
         $ticket->update([
             'status' => $validated['status'],
         ]);
+
+        if ($previousStatus !== $validated['status']) {
+            $this->notificationService->sendTicketStatusChangeExternalNotification(
+                $ticket->id,
+                $ticket->title,
+                $validated['status'],
+                $user->id
+            );
+        }
 
         return response()->json([
             'message' => 'Ticket status updated successfully',
@@ -971,6 +1009,7 @@ class AdminTicketController extends Controller
 
             // Store previous assigned user for history
             $previousAssignedTo = $ticket->assigned_to;
+            $previousStatus = $ticket->status;
 
             // Determine new status - change from 'open' to 'in-progress' when assigned
             $newStatus = $ticket->status;
@@ -1034,6 +1073,15 @@ class AdminTicketController extends Controller
             );
 
             DB::commit();
+
+            if ($previousStatus !== $newStatus) {
+                $this->notificationService->sendTicketStatusChangeExternalNotification(
+                    $ticket->id,
+                    $ticket->title,
+                    $newStatus,
+                    $currentUser->id
+                );
+            }
 
             return response()->json([
                 'message' => 'Ticket assigned successfully',
