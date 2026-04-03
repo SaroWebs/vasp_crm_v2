@@ -1,14 +1,14 @@
+import '@mantine/dates/styles.css';
 import '../css/app.css';
 import './echo';
-import '@mantine/dates/styles.css';
 
 import { createInertiaApp } from '@inertiajs/react';
+import { MantineProvider } from '@mantine/core';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { initializeTheme } from './hooks/use-appearance';
-import { MantineProvider } from '@mantine/core';
 import { TimeTrackingProvider } from './context/TimeTrackingContext';
+import { initializeTheme } from './hooks/use-appearance';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -26,9 +26,7 @@ createInertiaApp({
             <StrictMode>
                 <MantineProvider>
                     <TimeTrackingProvider>
-                        <TimeTrackingProvider>
-                            <App {...props} />
-                        </TimeTrackingProvider>
+                        <App {...props} />
                     </TimeTrackingProvider>
                 </MantineProvider>
             </StrictMode>,

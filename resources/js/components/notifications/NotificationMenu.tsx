@@ -1,57 +1,31 @@
-import axios from 'axios';
-import React, { useEffect, useState } from 'react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import {
+    useNotifications,
+    type NotificationItem,
+} from '@/context/NotificationContext';
+import { Link, router } from '@inertiajs/react';
+import {
+    Bell,
+    Check,
+    CheckCircle,
+    Info,
+    UserPlus,
+    Users,
+    XCircle,
+} from 'lucide-react';
+import React from 'react';
 import { Badge, Button } from '../ui';
-import { Bell, CheckCircle, XCircle, UserPlus, Check, Users, Info } from 'lucide-react';
-import { Link, router, usePage } from '@inertiajs/react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
-type Props = {};
+const NotificationMenu = () => {
+    const { notifications, unreadCount, loading, markAsRead } =
+        useNotifications();
 
-interface NotificationData {
-    notifications: Note[];
-    total: number;
-    total_unread: number;
-}
-
-interface Note {
-    id: string;
-    title: string;
-    message: string;
-    status: 'read' | 'unread';
-    type: string;
-    type_key?: string;
-    icon?: string;
-    color?: string;
-    target_url?: string | null;
-    target_type?: string | null;
-    created_at: string;
-    updated_at: string;
-    read_at?: string | null;
-    data?: any;
-}
-
-interface PageProps {
-    auth?: {
-        user?: {
-            id: number;
-            name: string;
-            email: string;
-        };
-    };
-    [key: string]: any;
-}
-
-const NotificationMenu = (_props: Props) => {
-    const { auth } = usePage<PageProps>().props;
-    const userId = auth?.user?.id;
-    const [data, setData] = useState<NotificationData>({
-        notifications: [],
-        total: 0,
-        total_unread: 0,
-    });
-    const [loading, setLoading] = useState(false);
-
-    const getIcon = (note: Note) => {
+    const getIcon = (note: NotificationItem) => {
         const iconType = note.icon ?? note.type_key ?? note.type;
 
         const icons: { [key: string]: React.ReactNode } = {
@@ -69,8 +43,12 @@ const NotificationMenu = (_props: Props) => {
             check: <Check className="h-4 w-4 text-green-500" />,
             users: <Users className="h-4 w-4 text-indigo-500" />,
             info: <Info className="h-4 w-4 text-gray-500" />,
-            'App\\Notifications\\TaskAssignedNotification': <UserPlus className="h-4 w-4 text-purple-500" />,
-            'App\\Notifications\\TicketCreatedNotification': <CheckCircle className="h-4 w-4 text-blue-500" />,
+            'App\\Notifications\\TaskAssignedNotification': (
+                <UserPlus className="h-4 w-4 text-purple-500" />
+            ),
+            'App\\Notifications\\TicketCreatedNotification': (
+                <CheckCircle className="h-4 w-4 text-blue-500" />
+            ),
         };
 
         return icons[iconType] || <Bell className="h-4 w-4 text-gray-500" />;
@@ -94,31 +72,10 @@ const NotificationMenu = (_props: Props) => {
         return `${days}d ago`;
     };
 
-    const getData = async () => {
-        setLoading(true);
-        try {
-            const res = await axios.get('/admin/notifications/data');
-            setData(res.data);
-        } catch (err) {
-            console.error('Unable to get notifications', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleOpenNotification = async (note: Note) => {
+    const handleOpenNotification = async (note: NotificationItem) => {
         if (note.status === 'unread') {
             try {
-                await axios.patch(`/admin/notifications/${note.id}/read`);
-                setData((prevData) => ({
-                    ...prevData,
-                    notifications: prevData.notifications.map((n) =>
-                        n.id === note.id
-                            ? { ...n, status: 'read', read_at: new Date().toISOString() }
-                            : n,
-                    ),
-                    total_unread: Math.max(0, prevData.total_unread - 1),
-                }));
+                await markAsRead(note.id);
             } catch (err) {
                 console.error('Failed to mark notification as read:', err);
             }
@@ -129,82 +86,40 @@ const NotificationMenu = (_props: Props) => {
         }
     };
 
-    useEffect(() => {
-        void getData();
-
-        // Set up real-time Pusher/Echo listener for new notifications
-        if (userId && window.Echo) {
-            const channel = window.Echo.private(`notifications.${userId}`);
-
-            // Listen for new notification events
-            channel.listen('.notification.created', (event: { notification: Note }) => {
-                // Add new notification to the list
-                setData((prevData) => ({
-                    ...prevData,
-                    notifications: [event.notification, ...prevData.notifications],
-                    total: prevData.total + 1,
-                    total_unread: prevData.total_unread + 1,
-                }));
-            });
-
-            // Listen for notification read events
-            channel.listen('.notification.read', (event: { notification_id: string }) => {
-                setData((prevData) => ({
-                    ...prevData,
-                    notifications: prevData.notifications.map((n) =>
-                        n.id === event.notification_id
-                            ? { ...n, status: 'read', read_at: new Date().toISOString() }
-                            : n,
-                    ),
-                }));
-            });
-
-            // Cleanup on unmount
-            return () => {
-                window.Echo?.leave(`notifications.${userId}`);
-            };
-        }
-
-        // Fallback: polling every 30 seconds if no Echo available
-        const intervalId = window.setInterval(() => {
-            void getData();
-        }, 30000);
-
-        return () => window.clearInterval(intervalId);
-    }, [userId]);
-
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="relative">
                     <Bell className="mr-2 h-4 w-4" />
                     Notifications
-                    {data ? (
+                    {typeof unreadCount === 'number' ? (
                         <Badge variant="destructive" className="ml-2">
-                            {data.total_unread || 0}
+                            {unreadCount}
                         </Badge>
                     ) : null}
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="mr-4 w-80 max-h-96 overflow-y-auto">
+            <DropdownMenuContent className="mr-4 max-h-96 w-80 overflow-y-auto">
                 {loading ? (
                     <DropdownMenuItem className="p-3 text-sm text-muted-foreground">
                         Loading notifications...
                     </DropdownMenuItem>
                 ) : null}
-                {!loading && data.notifications?.length === 0 ? (
+                {!loading && notifications.length === 0 ? (
                     <DropdownMenuItem className="p-3 text-sm text-muted-foreground">
                         No notifications yet.
                     </DropdownMenuItem>
                 ) : null}
-                {!loading && data.notifications?.length > 0
-                    ? data.notifications.map((note) => (
+                {!loading && notifications.length > 0
+                    ? notifications.map((note) => (
                           <DropdownMenuItem
                               onClick={() => void handleOpenNotification(note)}
                               key={note.id}
                               className="flex items-start space-x-3 p-3"
                           >
-                              <div className="mt-0.5 shrink-0">{getIcon(note)}</div>
+                              <div className="mt-0.5 shrink-0">
+                                  {getIcon(note)}
+                              </div>
                               <div className="min-w-0 flex-1">
                                   <p className="truncate text-xs font-medium text-gray-900">
                                       {note.title}
@@ -213,7 +128,9 @@ const NotificationMenu = (_props: Props) => {
                                       <Link
                                           href={note.target_url}
                                           className="line-clamp-2 block text-xs text-blue-600 hover:underline"
-                                          onClick={(event) => event.stopPropagation()}
+                                          onClick={(event) =>
+                                              event.stopPropagation()
+                                          }
                                       >
                                           {note.message}
                                       </Link>
@@ -240,7 +157,10 @@ const NotificationMenu = (_props: Props) => {
                       ))
                     : null}
                 <DropdownMenuItem asChild>
-                    <Link href="/admin/notifications" className="text-center text-sm text-blue-600 hover:text-blue-800">
+                    <Link
+                        href="/admin/notifications"
+                        className="text-center text-sm text-blue-600 hover:text-blue-800"
+                    >
                         View All Notifications
                     </Link>
                 </DropdownMenuItem>
