@@ -22,9 +22,58 @@ const statusColorMap: Record<string, string> = {
     Rejected: 'bg-rose-100 text-rose-700',
 };
 
+const priorityConfig = {
+    P1: {
+        label: 'Critical',
+        dotClass: 'bg-red-500',
+    },
+    P2: {
+        label: 'High',
+        dotClass: 'bg-orange-500',
+    },
+    P3: {
+        label: 'Medium',
+        dotClass: 'bg-amber-500',
+    },
+    P4: {
+        label: 'Low',
+        dotClass: 'bg-emerald-500',
+    },
+} as const;
+
+const getPriorityConfig = (priority?: string | null) => {
+    const normalizedPriority = priority?.toUpperCase();
+
+    if (
+        normalizedPriority &&
+        normalizedPriority in priorityConfig
+    ) {
+        return priorityConfig[normalizedPriority as keyof typeof priorityConfig];
+    }
+
+    return priorityConfig.P4;
+};
+
+type TaskForwardingRecord = {
+    id: number;
+    from_department?: {
+        name?: string | null;
+    } | null;
+    to_department?: {
+        name?: string | null;
+    } | null;
+    status?: string;
+    created_at: string;
+    reason?: string | null;
+    notes?: string | null;
+    forwarded_by_user?: {
+        name?: string | null;
+    } | null;
+};
+
 // Component definitions moved before TaskCard to avoid hoisting issues
 const TaskForwarding = ({ task}: { task: Task }) => {
-    const [forwardings, setForwardings] = useState<any[]>([]);
+    const [forwardings, setForwardings] = useState<TaskForwardingRecord[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -221,6 +270,8 @@ const TaskCard: React.FC<{
     const statusClass =
         statusColorMap[task.state as keyof typeof statusColorMap] ??
         'bg-gray-100 text-gray-700';
+    const priorityValue = task.sla_policy?.priority ?? "P4";
+    const priorityConfigValue = getPriorityConfig(priorityValue);
 
     const handleCardClick = (e: React.MouseEvent) => {
         if ((e.target as HTMLElement).closest('.mantine-Button-root')) {
@@ -250,7 +301,21 @@ const TaskCard: React.FC<{
                     >
                         <div className="flex justify-between">
                             <div className="flex-1">
-                                <p className="font-medium text-sm pt-2">{task.title}</p>
+                                <div className="flex flex-wrap items-center gap-2 pt-2">
+                                    <p className="font-medium text-sm">{task.title}</p>
+                                    {priorityValue && (
+                                        <span
+                                            className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600"
+                                            title={`SLA priority: ${priorityConfigValue.label}`}
+                                            aria-label={`SLA priority: ${priorityConfigValue.label}`}
+                                        >
+                                            <span
+                                                className={`h-2 w-2 rounded-full ${priorityConfigValue.dotClass}`}
+                                            />
+                                            {priorityConfigValue.label}
+                                        </span>
+                                    )}
+                                </div>
                                 <p className="text-xs text-gray-500 mt-1">{task.task_code}</p>
                                 {/* Overdue Time Display */}
                                 {task.overdue_time && task.state !== 'Done' && task.state !== 'Cancelled' && task.state !== 'Rejected' && (
@@ -283,7 +348,7 @@ const TaskCard: React.FC<{
                 <MenuDropdown>
                     <MenuItem
                         leftSection={<Eye size={16} />}
-                        component={Link as any}
+                        component={Link}
                         href={`/my/tasks/${task.id}`}
                     >
                         View

@@ -272,14 +272,14 @@ export interface Task {
     };
     sla_policy?: {
         id: number;
-        name: string;
-        type: string;
+        name?: string;
+        type?: string;
         priority: string;
     };
     slaPolicy?: {
         id: number;
-        name: string;
-        type: string;
+        name?: string;
+        type?: string;
         priority: string;
     };
     parentTask?: Task;

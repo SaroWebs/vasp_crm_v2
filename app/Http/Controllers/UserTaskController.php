@@ -21,7 +21,7 @@ class UserTaskController extends TimeTrackingController
             ->with(['timeEntries' => function($query) use ($date) {
                 $query->whereDate('start_time', $date)
                       ->where('is_active', false);
-            }])
+            },'slaPolicy'])
             ->get();
             
         // Filter tasks that have time entries for the selected date
@@ -45,7 +45,7 @@ class UserTaskController extends TimeTrackingController
         $tasks = Task::whereHas('assignedUsers', function($query) use ($user) {
                 $query->where('user_id', $user->id);
             })
-            ->with(['taskType', 'project', 'createdBy', 'assignedUsers'])
+            ->with(['taskType','slaPolicy', 'project', 'createdBy', 'assignedUsers'])
             ->orderByRaw("CASE 
                 WHEN due_at < NOW() AND state != 'Done' THEN 1 
                 WHEN due_at >= NOW() OR due_at IS NULL THEN 2 
