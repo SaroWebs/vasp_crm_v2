@@ -34,7 +34,7 @@ class TaskAttachmentController extends Controller
                     'file_path' => $attachment->file_path,
                     'file_name' => basename($attachment->file_path),
                     'file_type' => $attachment->file_type,
-                    'file_size' => Storage::exists($attachment->file_path) ? Storage::size($attachment->file_path) : 0,
+                    'file_size' => Storage::disk('public')->exists($attachment->file_path) ? Storage::disk('public')->size($attachment->file_path) : 0,
                     'uploaded_by' => $attachment->uploaded_by,
                     'uploaded_by_user' => $attachment->uploadedByUser,
                     'created_at' => $attachment->created_at,
@@ -112,7 +112,7 @@ class TaskAttachmentController extends Controller
                     'file_path' => $attachment->file_path,
                     'file_name' => basename($attachment->file_path),
                     'file_type' => $attachment->file_type,
-                    'file_size' => Storage::size($attachment->file_path),
+                    'file_size' => Storage::disk('public')->size($attachment->file_path),
                     'uploaded_by' => $attachment->uploaded_by,
                     'uploaded_by_user' => $attachment->uploadedByUser,
                     'created_at' => $attachment->created_at,
@@ -145,8 +145,8 @@ class TaskAttachmentController extends Controller
 
         try {
             // Delete file from storage
-            if (Storage::exists($attachment->file_path)) {
-                Storage::delete($attachment->file_path);
+            if (Storage::disk('public')->exists($attachment->file_path)) {
+                Storage::disk('public')->delete($attachment->file_path);
             }
 
             // Delete record

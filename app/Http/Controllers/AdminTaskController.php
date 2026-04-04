@@ -453,15 +453,9 @@ class AdminTaskController extends Controller
 
                     TaskAttachment::create([
                         'task_id' => $task->id,
-                        'file_name' => $uniqueName,
                         'file_path' => $filePath,
-                        'file_size' => $attachment->getSize(),
                         'file_type' => $attachment->getClientMimeType(),
                         'uploaded_by' => Auth::user()->id,
-                        'metadata' => [
-                            'original_name' => $originalName,
-                            'extension' => $fileExtension,
-                        ],
                     ]);
                 }
             }
@@ -622,6 +616,8 @@ class AdminTaskController extends Controller
             'version' => ['nullable', 'integer'],
             'metadata' => ['nullable', 'array'],
             'completion_notes' => ['nullable', 'string'],
+            'attachments' => ['nullable', 'array'],
+            'attachments.*' => ['file', 'max:10240'],
         ]);
 
         // Prevent circular reference in parent task
@@ -649,6 +645,34 @@ class AdminTaskController extends Controller
         $validated['version'] = ($task->version ?? 0) + 1;
 
         $task->update($validated);
+
+        // Handle task attachments using Storage facade
+        $attachmentsData = [];
+        if ($request->hasFile('attachments')) {
+            $attachmentsData = $request->file('attachments');
+        }
+
+        if (! empty($attachmentsData)) {
+            foreach ($attachmentsData as $idx => $attachment) {
+                $originalName = $attachment->getClientOriginalName();
+                $fileExtension = $attachment->getClientOriginalExtension();
+                $timestamp = now()->format('Ymd_His');
+                $index = $idx + 1;
+                $taskCode = $task->task_code ?? 'TASK';
+
+                $baseName = "{$taskCode}_{$timestamp}_{$index}";
+                $uniqueName = $baseName.($fileExtension ? '.'.$fileExtension : '');
+
+                $filePath = Storage::disk('public')->putFileAs('task_attachments', $attachment, $uniqueName);
+
+                TaskAttachment::create([
+                    'task_id' => $task->id,
+                    'file_path' => $filePath,
+                    'file_type' => $attachment->getClientMimeType(),
+                    'uploaded_by' => Auth::user()->id,
+                ]);
+            }
+        }
 
         return response()->json([
             'message' => 'Task updated successfully',
