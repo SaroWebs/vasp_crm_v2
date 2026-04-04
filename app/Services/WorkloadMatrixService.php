@@ -113,37 +113,33 @@ class WorkloadMatrixService
 
             $stats = $assignmentStatsByUser[$uid] ?? $this->emptyUserStats();
             $stats['task_ids'][$taskId] = true;
+
+            if (in_array($taskState, self::TERMINAL_TASK_STATES, true)) {
+                $assignmentStatsByUser[$uid] = $stats;
+
+                continue;
+            }
+
             $stats['assignment_state_counts'][$assignmentState] = ($stats['assignment_state_counts'][$assignmentState] ?? 0) + 1;
+            $stats['active_task_ids'][$taskId] = true;
 
-            if (! in_array($taskState, self::TERMINAL_TASK_STATES, true)) {
-                $stats['active_task_ids'][$taskId] = true;
-
-                if (in_array($taskState, self::IN_PROGRESS_TASK_STATES, true)) {
-                    $stats['in_progress_task_ids'][$taskId] = true;
-                } elseif (in_array($taskState, self::PENDING_TASK_STATES, true)) {
-                    $stats['pending_task_ids'][$taskId] = true;
-                } else {
-                    $stats['pending_task_ids'][$taskId] = true;
-                }
-
-                if (! empty($task->due_at) && Carbon::parse($task->due_at)->lt($now)) {
-                    $stats['overdue_task_ids'][$taskId] = true;
-                }
-
-                $taskEstimateHours = (float) ($task->estimate_hours ?? 0);
-                $assigneeCount = $activeAssigneeCountByTask[$taskId] ?? 1;
-                $stats['open_estimated_hours'] += $assignment->estimated_time !== null
-                    ? (float) $assignment->estimated_time
-                    : $this->splitTaskEstimateAcrossAssignees($taskEstimateHours, $assigneeCount);
+            if (in_array($taskState, self::IN_PROGRESS_TASK_STATES, true)) {
+                $stats['in_progress_task_ids'][$taskId] = true;
+            } elseif (in_array($taskState, self::PENDING_TASK_STATES, true)) {
+                $stats['pending_task_ids'][$taskId] = true;
+            } else {
+                $stats['pending_task_ids'][$taskId] = true;
             }
 
-            if ($taskState === 'Done') {
-                $stats['completed_task_ids'][$taskId] = true;
+            if (! empty($task->due_at) && Carbon::parse($task->due_at)->lt($now)) {
+                $stats['overdue_task_ids'][$taskId] = true;
             }
 
-            if (in_array($taskState, ['Cancelled', 'Rejected'], true)) {
-                $stats['other_task_ids'][$taskId] = true;
-            }
+            $taskEstimateHours = (float) ($task->estimate_hours ?? 0);
+            $assigneeCount = $activeAssigneeCountByTask[$taskId] ?? 1;
+            $stats['open_estimated_hours'] += $assignment->estimated_time !== null
+                ? (float) $assignment->estimated_time
+                : $this->splitTaskEstimateAcrossAssignees($taskEstimateHours, $assigneeCount);
 
             $assignmentStatsByUser[$uid] = $stats;
         }
@@ -208,14 +204,10 @@ class WorkloadMatrixService
                 'in_progress_task_count' => count($stats['in_progress_task_ids']),
                 'pending_task_count' => count($stats['pending_task_ids']),
                 'overdue_task_count' => count($stats['overdue_task_ids']),
-                'completed_task_count' => count($stats['completed_task_ids']),
-                'other_task_count' => count($stats['other_task_ids']),
                 'assignment_state_counts' => [
                     'pending' => (int) ($stats['assignment_state_counts']['pending'] ?? 0),
                     'accepted' => (int) ($stats['assignment_state_counts']['accepted'] ?? 0),
                     'in_progress' => (int) ($stats['assignment_state_counts']['in_progress'] ?? 0),
-                    'completed' => (int) ($stats['assignment_state_counts']['completed'] ?? 0),
-                    'rejected' => (int) ($stats['assignment_state_counts']['rejected'] ?? 0),
                 ],
                 'open_estimated_hours' => $openEstimatedHours,
                 'logged_hours' => $loggedHours,
@@ -256,31 +248,17 @@ class WorkloadMatrixService
 
     private function buildChartData($rows, array $summary): array
     {
-        $pending = (int) $rows->sum('pending_task_count');
-        $inProgress = (int) $rows->sum('in_progress_task_count');
-        $completed = (int) $rows->sum('completed_task_count');
-        $other = (int) $rows->sum('other_task_count');
-
         $workloadByEmployee = $rows->map(function ($row) {
             return [
                 'name' => explode(' ', $row['name'])[0], // First name only for shorter labels
                 'fullName' => $row['name'],
-                'pending' => $row['pending_task_count'],
+                'assigned' => $row['active_task_count'],
                 'inProgress' => $row['in_progress_task_count'],
-                'completed' => $row['completed_task_count'],
-                'other' => $row['other_task_count'],
                 'estimatedHours' => $row['open_estimated_hours'],
                 'loggedHours' => $row['logged_hours'],
                 'capacityHours' => $row['capacity_hours'],
             ];
         })->values()->all();
-
-        $taskStatusDistribution = [
-            ['name' => 'Pending', 'value' => $pending, 'color' => '#f59e0b'],
-            ['name' => 'In Progress', 'value' => $inProgress, 'color' => '#3b82f6'],
-            ['name' => 'Completed', 'value' => $completed, 'color' => '#10b981'],
-            ['name' => 'Other', 'value' => $other, 'color' => '#6b7280'],
-        ];
 
         // Utilization gauge data
         $utilizationData = [
@@ -311,7 +289,6 @@ class WorkloadMatrixService
 
         return [
             'workloadByEmployee' => $workloadByEmployee,
-            'taskStatusDistribution' => $taskStatusDistribution,
             'utilizationData' => $utilizationData,
             'workloadByDepartment' => $workloadByDepartment,
             'workloadTrend' => $workloadTrend,
@@ -379,8 +356,6 @@ class WorkloadMatrixService
             'in_progress_task_ids' => [],
             'pending_task_ids' => [],
             'overdue_task_ids' => [],
-            'completed_task_ids' => [],
-            'other_task_ids' => [],
             'assignment_state_counts' => [],
             'open_estimated_hours' => 0.0,
         ];

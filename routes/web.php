@@ -50,6 +50,10 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
+Route::get('/sample', function () {
+    return Inertia::render('SamplePage');
+})->name('sample');
+
 Route::get('/testx/{client:code}', function (Client $client) {
     $client->load('product');
 

@@ -15,17 +15,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import {
-    Activity,
-    BarChart3,
-    Download,
-    PieChart,
-    RefreshCw,
-} from 'lucide-react';
+import { BarChart3, Download, PieChart, RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
     Bar,
@@ -59,8 +61,6 @@ interface MatrixRow {
         pending: number;
         accepted: number;
         in_progress: number;
-        completed: number;
-        rejected: number;
     };
     open_estimated_hours: number;
     logged_hours: number;
@@ -75,35 +75,11 @@ interface ChartData {
     workloadByEmployee: Array<{
         name: string;
         fullName: string;
-        pending: number;
+        assigned: number;
         inProgress: number;
-        completed: number;
-        other: number;
         estimatedHours: number;
         loggedHours: number;
         capacityHours: number;
-    }>;
-    taskStatusDistribution: Array<{
-        name: string;
-        value: number;
-        color: string;
-    }>;
-    utilizationData: Array<{
-        name: string;
-        value: number;
-        color: string;
-    }>;
-    workloadByDepartment: Array<{
-        name: string;
-        employees: number;
-        totalTasks: number;
-        totalEstimatedHours: number;
-        totalLoggedHours: number;
-        avgUtilization: number;
-    }>;
-    workloadTrend: Array<{
-        period: string;
-        utilization: number;
     }>;
 }
 
@@ -199,7 +175,7 @@ export default function WorkloadMatrixIndex({
         }));
     };
 
-    const buildQuery = () => {
+    const buildQuery = (): Record<string, string> => {
         const query: Record<string, string> = {
             period: filterState.period,
         };
@@ -223,7 +199,7 @@ export default function WorkloadMatrixIndex({
         return query;
     };
 
-    const fetchMatrix = async () => {
+    const fetchMatrix = async (): Promise<void> => {
         setLoading(true);
         try {
             const response = await axios.get('/admin/api/workload-matrix', {
@@ -237,7 +213,7 @@ export default function WorkloadMatrixIndex({
         }
     };
 
-    const clearFilters = async () => {
+    const clearFilters = async (): Promise<void> => {
         setFilterState({
             period: 'weekly',
             from_date: '',
@@ -259,10 +235,46 @@ export default function WorkloadMatrixIndex({
         }
     };
 
-    const exportCsv = () => {
+    const exportCsv = (): void => {
         const params = new URLSearchParams(buildQuery());
         window.location.href = `/admin/api/workload-matrix/export?${params.toString()}`;
     };
+
+    const stackedWorkloadData = useMemo(
+        () =>
+            (matrix.charts?.workloadByEmployee ?? []).map((employee) => ({
+                ...employee,
+                assignedQueue: Math.max(
+                    employee.assigned - employee.inProgress,
+                    0,
+                ),
+            })),
+        [matrix.charts],
+    );
+
+    const donutChartData = useMemo(
+        () =>
+            [
+                {
+                    name: 'Assigned Queue',
+                    value: Math.max(
+                        matrix.summary.total_active_tasks -
+                            matrix.summary.total_in_progress_tasks,
+                        0,
+                    ),
+                    color: '#f59e0b',
+                },
+                {
+                    name: 'In Progress',
+                    value: matrix.summary.total_in_progress_tasks,
+                    color: '#3b82f6',
+                },
+            ].filter((segment) => segment.value > 0),
+        [
+            matrix.summary.total_active_tasks,
+            matrix.summary.total_in_progress_tasks,
+        ],
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -275,8 +287,8 @@ export default function WorkloadMatrixIndex({
                             Workload Matrix
                         </h1>
                         <p className="text-muted-foreground">
-                            Assignment load, utilization, and capacity overview
-                            for admin planning
+                            Assigned and in-progress task counts for each team
+                            member
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -432,70 +444,58 @@ export default function WorkloadMatrixIndex({
                     </CardContent>
                 </Card>
 
-                {/* Summary Stats */}
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4">
-                    <div className="flex items-center gap-2">
-                        <div className="text-sm text-muted-foreground">
-                            Employees
-                        </div>
-                        <div className="text-xl font-bold">
-                            {matrix.summary.employee_count}
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="text-sm text-muted-foreground">
-                            Active Tasks
-                        </div>
-                        <div className="text-xl font-bold">
-                            {matrix.summary.total_active_tasks}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            ({matrix.summary.total_in_progress_tasks} in progress)
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="text-sm text-muted-foreground">Hours</div>
-                        <div className="text-xl font-bold">
-                            {matrix.summary.total_open_estimated_hours}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            (Logged: {matrix.summary.total_logged_hours})
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="text-sm text-muted-foreground">
-                            Utilization
-                        </div>
-                        <div className="text-xl font-bold">
-                            {matrix.summary.avg_planned_utilization_percent}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            (Actual: {matrix.summary.avg_actual_utilization_percent}%)
-                        </div>
-                    </div>
+                <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardDescription>Employees</CardDescription>
+                            <CardTitle className="text-3xl">
+                                {matrix.summary.employee_count}
+                            </CardTitle>
+                        </CardHeader>
+                    </Card>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardDescription>Assigned Tasks</CardDescription>
+                            <CardTitle className="text-3xl">
+                                {matrix.summary.total_active_tasks}
+                            </CardTitle>
+                        </CardHeader>
+                    </Card>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardDescription>In Progress Tasks</CardDescription>
+                            <CardTitle className="text-3xl">
+                                {matrix.summary.total_in_progress_tasks}
+                            </CardTitle>
+                        </CardHeader>
+                    </Card>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardDescription>Overdue Tasks</CardDescription>
+                            <CardTitle className="text-3xl">
+                                {matrix.summary.total_overdue_tasks}
+                            </CardTitle>
+                        </CardHeader>
+                    </Card>
                 </div>
 
-                {/* Charts Section */}
-                {matrix.charts && matrix.rows.length > 0 && (
+                {matrix.charts && matrix.rows.length > 0 ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                        {/* Workload by Employee Bar Chart (Stacked) */}
-                        <Card className="col-span-2">
+                        <Card className="md:col-span-2">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <BarChart3 className="h-5 w-5" />
                                     Workload Overview
                                 </CardTitle>
                                 <CardDescription>
-                                    Pending, In Progress, Completed, and Other tasks distribution
+                                    Stacked assigned load split into waiting
+                                    work and tasks currently in progress
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={500}>
                                     <BarChart
-                                        data={matrix.charts.workloadByEmployee.slice(
-                                            0,
-                                            10,
-                                        )}
+                                        data={stackedWorkloadData.slice(0, 10)}
                                         layout="vertical"
                                     >
                                         <CartesianGrid
@@ -521,14 +521,14 @@ export default function WorkloadMatrixIndex({
                                         />
                                         <Legend />
                                         <Bar
-                                            dataKey="pending"
-                                            name="Pending"
-                                            stackId="a"
+                                            dataKey="assignedQueue"
+                                            name="Assigned Queue"
+                                            stackId="assigned"
                                             fill="#f59e0b"
-                                            radius={[0, 4, 4, 0]}
+                                            radius={[0, 0, 0, 0]}
                                         >
                                             <LabelList
-                                                dataKey="pending"
+                                                dataKey="assignedQueue"
                                                 position="center"
                                                 fill="#fff"
                                                 fontSize={11}
@@ -540,7 +540,7 @@ export default function WorkloadMatrixIndex({
                                         <Bar
                                             dataKey="inProgress"
                                             name="In Progress"
-                                            stackId="a"
+                                            stackId="assigned"
                                             fill="#3b82f6"
                                             radius={[0, 4, 4, 0]}
                                         >
@@ -554,78 +554,41 @@ export default function WorkloadMatrixIndex({
                                                 }
                                             />
                                         </Bar>
-                                        <Bar
-                                            dataKey="completed"
-                                            name="Completed"
-                                            stackId="a"
-                                            fill="#10b981"
-                                            radius={[0, 4, 4, 0]}
-                                        >
-                                            <LabelList
-                                                dataKey="completed"
-                                                position="center"
-                                                fill="#fff"
-                                                fontSize={11}
-                                                formatter={(value) =>
-                                                    value === 0 ? '' : value
-                                                }
-                                            />
-                                        </Bar>
-                                        <Bar
-                                            dataKey="other"
-                                            name="Other"
-                                            stackId="a"
-                                            fill="#6b7280"
-                                            radius={[0, 4, 4, 0]}
-                                        >
-                                            <LabelList
-                                                dataKey="other"
-                                                position="center"
-                                                fill="#fff"
-                                                fontSize={11}
-                                                formatter={(value) =>
-                                                    value === 0 ? '' : value
-                                                }
-                                            />
-                                        </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
                             </CardContent>
                         </Card>
 
-                        {/* Task Status Distribution Pie Chart */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <PieChart className="h-5 w-5" />
-                                    Task Status Distribution
+                                    Assignment Distribution
                                 </CardTitle>
                                 <CardDescription>
-                                    Pending, In Progress, Completed, and Other tasks
+                                    Overall split between waiting assigned work
+                                    and tasks being worked
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
+                                <ResponsiveContainer width="100%" height={320}>
                                     <RechartsPieChart>
                                         <Pie
-                                            data={
-                                                matrix.charts
-                                                    .taskStatusDistribution
-                                            }
+                                            data={donutChartData}
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={100}
-                                            paddingAngle={2}
+                                            innerRadius={70}
+                                            outerRadius={110}
+                                            paddingAngle={3}
                                             dataKey="value"
                                             label={({ name, percent }) =>
                                                 `${name}: ${(Number(percent || 0) * 100).toFixed(0)}%`
                                             }
                                         >
-                                            {matrix.charts.taskStatusDistribution.map(
+                                            {donutChartData.map(
                                                 (entry, index) => (
                                                     <Cell
-                                                        key={`cell-${index}`}
+                                                        key={`${entry.name}-${index}`}
                                                         fill={entry.color}
                                                     />
                                                 ),
@@ -638,84 +601,44 @@ export default function WorkloadMatrixIndex({
                                                 borderRadius: '8px',
                                             }}
                                         />
+                                        <Legend />
                                     </RechartsPieChart>
                                 </ResponsiveContainer>
                             </CardContent>
                         </Card>
 
-                        {/* Utilization Comparison */}
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Activity className="h-5 w-5" />
-                                    Utilization Metrics
-                                </CardTitle>
+                                <CardTitle>Reading Guide</CardTitle>
                                 <CardDescription>
-                                    Planned vs Actual utilization
+                                    The simplified view keeps the older visual
+                                    structure without mixing in completed or
+                                    rejected work
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent>
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span>Planned Utilization</span>
-                                            <span className="font-medium">
-                                                {
-                                                    matrix.summary
-                                                        .avg_planned_utilization_percent
-                                                }
-                                                %
-                                            </span>
-                                        </div>
-                                        <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-                                            <div
-                                                className="h-full rounded-full bg-violet-500 transition-all"
-                                                style={{
-                                                    width: `${Math.min(matrix.summary.avg_planned_utilization_percent, 100)}%`,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span>Actual Utilization</span>
-                                            <span className="font-medium">
-                                                {
-                                                    matrix.summary
-                                                        .avg_actual_utilization_percent
-                                                }
-                                                %
-                                            </span>
-                                        </div>
-                                        <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-                                            <div
-                                                className="h-full rounded-full bg-emerald-500 transition-all"
-                                                style={{
-                                                    width: `${Math.min(matrix.summary.avg_actual_utilization_percent, 100)}%`,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="pt-4 text-center">
-                                        <div className="text-3xl font-bold">
-                                            {matrix.summary.total_active_tasks}
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                            Active Tasks
-                                        </div>
-                                    </div>
-                                </div>
+                            <CardContent className="space-y-3 text-sm text-muted-foreground">
+                                <p>
+                                    `Assigned Queue` means assigned tasks that
+                                    are not yet in progress.
+                                </p>
+                                <p>
+                                    `In Progress` means tasks actively being
+                                    worked right now.
+                                </p>
+                                <p>
+                                    Completed, cancelled, and rejected tasks are
+                                    excluded from both charts and table totals.
+                                </p>
                             </CardContent>
                         </Card>
                     </div>
-                )}
+                ) : null}
 
-                {/* <Card>
+                <Card>
                     <CardHeader>
                         <CardTitle>Employee Workload</CardTitle>
                         <CardDescription>
-                            Period: {matrix.filters.from_date} to{' '}
-                            {matrix.filters.to_date}
+                            Assigned and in-progress task counts by employee
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -724,22 +647,15 @@ export default function WorkloadMatrixIndex({
                                 <TableRow>
                                     <TableHead>Employee</TableHead>
                                     <TableHead>Department</TableHead>
-                                    <TableHead>Active</TableHead>
+                                    <TableHead>Assigned</TableHead>
                                     <TableHead>In Progress</TableHead>
-                                    <TableHead>Overdue</TableHead>
-                                    <TableHead>Open Est. Hours</TableHead>
-                                    <TableHead>Logged Hours</TableHead>
-                                    <TableHead>Capacity</TableHead>
-                                    <TableHead>Planned %</TableHead>
-                                    <TableHead>Actual %</TableHead>
-                                    <TableHead>Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {matrix.rows.length === 0 ? (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={11}
+                                            colSpan={4}
                                             className="text-center text-muted-foreground"
                                         >
                                             No records found for the selected
@@ -767,40 +683,13 @@ export default function WorkloadMatrixIndex({
                                             <TableCell>
                                                 {row.in_progress_task_count}
                                             </TableCell>
-                                            <TableCell>
-                                                {row.overdue_task_count}
-                                            </TableCell>
-                                            <TableCell>
-                                                {row.open_estimated_hours}
-                                            </TableCell>
-                                            <TableCell>
-                                                {row.logged_hours}
-                                            </TableCell>
-                                            <TableCell>
-                                                {row.capacity_hours}
-                                            </TableCell>
-                                            <TableCell>
-                                                {
-                                                    row.planned_utilization_percent
-                                                }
-                                                %
-                                            </TableCell>
-                                            <TableCell>
-                                                {row.actual_utilization_percent}
-                                                %
-                                            </TableCell>
-                                            <TableCell>
-                                                {getUtilizationBadge(
-                                                    row.availability_status,
-                                                )}
-                                            </TableCell>
                                         </TableRow>
                                     ))
                                 )}
                             </TableBody>
                         </Table>
                     </CardContent>
-                </Card> */}
+                </Card>
             </div>
         </AppLayout>
     );

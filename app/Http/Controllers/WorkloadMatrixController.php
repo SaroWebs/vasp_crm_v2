@@ -107,7 +107,7 @@ class WorkloadMatrixController extends Controller
 
             fputcsv($file, ['Summary']);
             fputcsv($file, ['Employee Count', $payload['summary']['employee_count']]);
-            fputcsv($file, ['Total Active Tasks', $payload['summary']['total_active_tasks']]);
+            fputcsv($file, ['Total Assigned Tasks', $payload['summary']['total_active_tasks']]);
             fputcsv($file, ['Total In Progress Tasks', $payload['summary']['total_in_progress_tasks']]);
             fputcsv($file, ['Total Overdue Tasks', $payload['summary']['total_overdue_tasks']]);
             fputcsv($file, ['Total Open Estimated Hours', $payload['summary']['total_open_estimated_hours']]);
@@ -121,7 +121,7 @@ class WorkloadMatrixController extends Controller
                 'Employee',
                 'Email',
                 'Department',
-                'Active Tasks',
+                'Assigned Tasks',
                 'In Progress Tasks',
                 'Overdue Tasks',
                 'Pending Assignments',
@@ -171,15 +171,15 @@ class WorkloadMatrixController extends Controller
             $normalized[$key] = $value;
         }
 
-        if (!empty($normalized['from_date']) && empty($normalized['to_date'])) {
+        if (! empty($normalized['from_date']) && empty($normalized['to_date'])) {
             $normalized['to_date'] = $normalized['from_date'];
         }
 
-        if (!empty($normalized['to_date']) && empty($normalized['from_date'])) {
+        if (! empty($normalized['to_date']) && empty($normalized['from_date'])) {
             $normalized['from_date'] = $normalized['to_date'];
         }
 
-        if (!empty($normalized['from_date']) || !empty($normalized['to_date'])) {
+        if (! empty($normalized['from_date']) || ! empty($normalized['to_date'])) {
             $normalized['period'] = $normalized['period'] ?? 'custom';
         }
 
@@ -188,7 +188,7 @@ class WorkloadMatrixController extends Controller
 
     private function authorizeAccess(?User $user): void
     {
-        if (!$user) {
+        if (! $user) {
             abort(403, 'Insufficient permissions');
         }
 
@@ -198,7 +198,7 @@ class WorkloadMatrixController extends Controller
             || $user->hasPermission('workload-metric.read')
             || $user->hasPermission('dashboard.read');
 
-        if (!$canView) {
+        if (! $canView) {
             abort(403, 'Insufficient permissions');
         }
     }

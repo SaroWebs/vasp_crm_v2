@@ -17,7 +17,7 @@ class WorkloadMatrixChartsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_task_status_distribution_groups_states_into_four_buckets(): void
+    public function test_terminal_tasks_are_excluded_from_workload_matrix_counts_and_charts(): void
     {
         $department = Department::create([
             'name' => 'Support',
@@ -74,16 +74,19 @@ class WorkloadMatrixChartsTest extends TestCase
         ]);
 
         $result = app(WorkloadMatrixService::class)->build();
-        $distribution = collect($result['charts']['taskStatusDistribution'])->keyBy('name');
+        $row = $result['rows'][0] ?? [];
 
-        $this->assertSame(1, $distribution['Pending']['value']);
-        $this->assertSame(1, $distribution['In Progress']['value']);
-        $this->assertSame(1, $distribution['Completed']['value']);
-        $this->assertSame(2, $distribution['Other']['value']);
+        $this->assertSame(2, $result['summary']['total_active_tasks']);
+        $this->assertSame(1, $result['summary']['total_in_progress_tasks']);
+        $this->assertSame(2, $row['active_task_count'] ?? null);
+        $this->assertSame(1, $row['pending_task_count'] ?? null);
+        $this->assertSame(1, $row['in_progress_task_count'] ?? null);
 
         $workloadByEmployee = $result['charts']['workloadByEmployee'][0] ?? [];
-        $this->assertSame(1, $workloadByEmployee['completed'] ?? null);
-        $this->assertSame(2, $workloadByEmployee['other'] ?? null);
+        $this->assertSame(2, $workloadByEmployee['assigned'] ?? null);
+        $this->assertSame(1, $workloadByEmployee['inProgress'] ?? null);
+        $this->assertArrayNotHasKey('completed', $workloadByEmployee);
+        $this->assertArrayNotHasKey('other', $workloadByEmployee);
     }
 
     public function test_filters_limit_tasks_by_due_date_range(): void

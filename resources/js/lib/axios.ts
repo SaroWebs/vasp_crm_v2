@@ -1,13 +1,16 @@
 import axios from 'axios';
+import { configureAxiosInstance } from './http';
 
 // Create axios instance
 const axiosInstance = axios.create({
     baseURL: '/api',
     headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        Accept: 'application/json',
     },
 });
+
+configureAxiosInstance(axiosInstance);
 
 // Add request interceptor to include bearer token
 axiosInstance.interceptors.request.use(
@@ -20,7 +23,7 @@ axiosInstance.interceptors.request.use(
     },
     (error) => {
         return Promise.reject(error);
-    }
+    },
 );
 
 // Add response interceptor to handle 401 errors
@@ -34,7 +37,7 @@ axiosInstance.interceptors.response.use(
             window.location.href = '/login';
         }
         return Promise.reject(error);
-    }
+    },
 );
 
 export default axiosInstance;
