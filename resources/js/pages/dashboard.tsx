@@ -1,5 +1,5 @@
-import NotificationMenu from '@/components/notifications/NotificationMenu';
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
+import NotificationMenu from '@/components/notifications/NotificationMenu';
 import RecentReportSection from '@/components/reports/RecentReportSection';
 import MajorTasks from '@/components/tasks/MajorTasks';
 import { Badge } from '@/components/ui/badge';
@@ -13,9 +13,11 @@ import {
 } from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, Link } from '@inertiajs/react';
 import {
+    AlertCircle,
+    ArrowRight,
+    Briefcase,
     Building2,
     CheckCircle,
     Clock,
@@ -23,10 +25,8 @@ import {
     Ticket,
     UserCheck,
     Users,
-    AlertCircle,
-    ArrowRight,
-    Briefcase,
 } from 'lucide-react';
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -102,27 +102,19 @@ export default function Dashboard(props: DashboardProps) {
         dashboard_type,
         stats,
         recentTickets,
-        employeeProgress,
         employees,
         ticketStats,
         taskStats,
         userPermissions,
         myDepartmentTasks,
         teamWorkload,
-        departmentStats,
         myTasks,
         myTaskStats,
         forwardedTasks,
         upcomingDeadlines,
-        recentTimeEntries,
-        unreadNotificationsList,
     } = props;
 
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
-
-    const ShowEmployeeDetails = (employee: any) => {
-        router.visit(`/admin/employees/${employee.id}`);
-    }
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
 
     const renderAdminDashboard = () => (
         <>
@@ -161,10 +153,9 @@ export default function Dashboard(props: DashboardProps) {
                                         variant={
                                             ticket.status === 'open'
                                                 ? 'destructive'
-                                                : ticket.status ===
-                                                    'approved'
-                                                    ? 'default'
-                                                    : 'secondary'
+                                                : ticket.status === 'approved'
+                                                  ? 'default'
+                                                  : 'secondary'
                                         }
                                         className="h-6"
                                     >
@@ -196,16 +187,19 @@ export default function Dashboard(props: DashboardProps) {
                             <div className="flex items-center gap-2">
                                 <Users className="h-4 w-4 text-muted-foreground" />
                                 <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={selectedEmployeeId ?? ''}
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={selectedEmployeeId}
                                     onChange={(e) => {
-                                        const value = e.target.value;
-                                        setSelectedEmployeeId(value ? Number(value) : null);
+                                        setSelectedEmployeeId(e.target.value);
                                     }}
                                 >
+                                    <option value="all">All employees</option>
                                     <option value="">Select an employee</option>
                                     {(employees || []).map((employee) => (
-                                        <option key={employee.id} value={employee.id}>
+                                        <option
+                                            key={employee.id}
+                                            value={employee.id}
+                                        >
                                             {employee.name}
                                         </option>
                                     ))}
@@ -214,11 +208,18 @@ export default function Dashboard(props: DashboardProps) {
                         </div>
 
                         {/* Employee Task Progress Component */}
-                        {selectedEmployeeId ? (
-                            <EmployeeTaskProgress employeeId={selectedEmployeeId} />
+                        {selectedEmployeeId === 'all' ? (
+                            <EmployeeTaskProgress employeeId="all" />
+                        ) : selectedEmployeeId ? (
+                            <EmployeeTaskProgress
+                                employeeId={Number(selectedEmployeeId)}
+                            />
                         ) : (
-                            <div className="text-center py-8 text-muted-foreground">
-                                <p>Select an employee to view their task progress</p>
+                            <div className="py-8 text-center text-muted-foreground">
+                                <p>
+                                    Select an employee or all employees to view
+                                    task progress
+                                </p>
                             </div>
                         )}
                     </div>
@@ -245,9 +246,7 @@ export default function Dashboard(props: DashboardProps) {
                                         <span className="capitalize">
                                             {status.replace('_', ' ')}
                                         </span>
-                                        <Badge variant="outline">
-                                            {count}
-                                        </Badge>
+                                        <Badge variant="outline">{count}</Badge>
                                     </div>
                                 ),
                             )}
@@ -273,9 +272,7 @@ export default function Dashboard(props: DashboardProps) {
                                         <span className="capitalize">
                                             {status.replace('_', ' ')}
                                         </span>
-                                        <Badge variant="outline">
-                                            {count}
-                                        </Badge>
+                                        <Badge variant="outline">{count}</Badge>
                                     </div>
                                 ),
                             )}
@@ -355,17 +352,30 @@ export default function Dashboard(props: DashboardProps) {
                 <CardContent>
                     <div className="space-y-4">
                         {teamWorkload?.map((user) => (
-                            <div key={user.user_id} className="flex items-center justify-between">
+                            <div
+                                key={user.user_id}
+                                className="flex items-center justify-between"
+                            >
                                 <div className="flex items-center gap-2">
-                                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                                         <span className="text-xs font-medium">
                                             {user.name.charAt(0)}
                                         </span>
                                     </div>
-                                    <span className="font-medium">{user.name}</span>
+                                    <span className="font-medium">
+                                        {user.name}
+                                    </span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Badge variant={user.status === 'overloaded' ? 'destructive' : user.status === 'busy' ? 'default' : 'secondary'}>
+                                    <Badge
+                                        variant={
+                                            user.status === 'overloaded'
+                                                ? 'destructive'
+                                                : user.status === 'busy'
+                                                  ? 'default'
+                                                  : 'secondary'
+                                        }
+                                    >
                                         {user.task_count} tasks
                                     </Badge>
                                     <Badge variant="outline">
@@ -392,17 +402,30 @@ export default function Dashboard(props: DashboardProps) {
                             <Link
                                 key={task.id}
                                 href={`/admin/tasks/${task.id}`}
-                                className="flex items-center justify-between p-2 rounded-lg hover:bg-muted"
+                                className="flex items-center justify-between rounded-lg p-2 hover:bg-muted"
                             >
                                 <div>
                                     <p className="font-medium">{task.title}</p>
                                     <p className="text-sm text-muted-foreground">
-                                        {task.department} • Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
+                                        {task.department} • Due:{' '}
+                                        {task.due_date
+                                            ? new Date(
+                                                  task.due_date,
+                                              ).toLocaleDateString()
+                                            : 'N/A'}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Badge variant="outline">{task.status}</Badge>
-                                    <Badge variant={task.priority === 'high' ? 'destructive' : 'secondary'}>
+                                    <Badge variant="outline">
+                                        {task.status}
+                                    </Badge>
+                                    <Badge
+                                        variant={
+                                            task.priority === 'high'
+                                                ? 'destructive'
+                                                : 'secondary'
+                                        }
+                                    >
                                         {task.priority}
                                     </Badge>
                                 </div>
@@ -511,9 +534,7 @@ export default function Dashboard(props: DashboardProps) {
             <Card>
                 <CardHeader>
                     <CardTitle>My Tasks</CardTitle>
-                    <CardDescription>
-                        Your assigned tasks
-                    </CardDescription>
+                    <CardDescription>Your assigned tasks</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
@@ -521,26 +542,45 @@ export default function Dashboard(props: DashboardProps) {
                             <Link
                                 key={task.id}
                                 href={`/my/tasks/${task.id}`}
-                                className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors"
+                                className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted"
                             >
                                 <div className="flex-1">
                                     <p className="font-medium">{task.title}</p>
                                     <p className="text-sm text-muted-foreground">
-                                        {task.department} • Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
+                                        {task.department} • Due:{' '}
+                                        {task.due_date
+                                            ? new Date(
+                                                  task.due_date,
+                                              ).toLocaleDateString()
+                                            : 'N/A'}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Badge variant={task.status === 'in-progress' ? 'default' : task.status === 'completed' ? 'secondary' : 'outline'}>
+                                    <Badge
+                                        variant={
+                                            task.status === 'in-progress'
+                                                ? 'default'
+                                                : task.status === 'completed'
+                                                  ? 'secondary'
+                                                  : 'outline'
+                                        }
+                                    >
                                         {task.status}
                                     </Badge>
-                                    <Badge variant={task.priority === 'high' ? 'destructive' : 'secondary'}>
+                                    <Badge
+                                        variant={
+                                            task.priority === 'high'
+                                                ? 'destructive'
+                                                : 'secondary'
+                                        }
+                                    >
                                         {task.priority}
                                     </Badge>
                                 </div>
                             </Link>
                         ))}
                         {(!myTasks || myTasks.length === 0) && (
-                            <p className="text-center text-muted-foreground py-4">
+                            <p className="py-4 text-center text-muted-foreground">
                                 No tasks assigned to you
                             </p>
                         )}
@@ -561,18 +601,28 @@ export default function Dashboard(props: DashboardProps) {
                     <CardContent>
                         <div className="space-y-4">
                             {forwardedTasks?.map((task) => (
-                                <div key={task.id} className="p-3 rounded-lg border">
-                                    <p className="font-medium">{task.task_title}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        From: {task.from_user} ({task.from_department})
+                                <div
+                                    key={task.id}
+                                    className="rounded-lg border p-3"
+                                >
+                                    <p className="font-medium">
+                                        {task.task_title}
                                     </p>
                                     <p className="text-sm text-muted-foreground">
-                                        Forwarded: {new Date(task.forwarded_at).toLocaleDateString()}
+                                        From: {task.from_user} (
+                                        {task.from_department})
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Forwarded:{' '}
+                                        {new Date(
+                                            task.forwarded_at,
+                                        ).toLocaleDateString()}
                                     </p>
                                 </div>
                             ))}
-                            {(!forwardedTasks || forwardedTasks.length === 0) && (
-                                <p className="text-center text-muted-foreground py-4">
+                            {(!forwardedTasks ||
+                                forwardedTasks.length === 0) && (
+                                <p className="py-4 text-center text-muted-foreground">
                                     No forwarded tasks
                                 </p>
                             )}
@@ -591,20 +641,37 @@ export default function Dashboard(props: DashboardProps) {
                     <CardContent>
                         <div className="space-y-4">
                             {upcomingDeadlines?.map((task) => (
-                                <div key={task.id} className="flex items-center justify-between p-3 rounded-lg border">
+                                <div
+                                    key={task.id}
+                                    className="flex items-center justify-between rounded-lg border p-3"
+                                >
                                     <div>
-                                        <p className="font-medium">{task.title}</p>
+                                        <p className="font-medium">
+                                            {task.title}
+                                        </p>
                                         <p className="text-sm text-muted-foreground">
-                                            Due: {new Date(task.due_date).toLocaleDateString()}
+                                            Due:{' '}
+                                            {new Date(
+                                                task.due_date,
+                                            ).toLocaleDateString()}
                                         </p>
                                     </div>
-                                    <Badge variant={task.is_overdue ? 'destructive' : 'outline'}>
-                                        {task.is_overdue ? 'Overdue' : task.status}
+                                    <Badge
+                                        variant={
+                                            task.is_overdue
+                                                ? 'destructive'
+                                                : 'outline'
+                                        }
+                                    >
+                                        {task.is_overdue
+                                            ? 'Overdue'
+                                            : task.status}
                                     </Badge>
                                 </div>
                             ))}
-                            {(!upcomingDeadlines || upcomingDeadlines.length === 0) && (
-                                <p className="text-center text-muted-foreground py-4">
+                            {(!upcomingDeadlines ||
+                                upcomingDeadlines.length === 0) && (
+                                <p className="py-4 text-center text-muted-foreground">
                                     No upcoming deadlines
                                 </p>
                             )}
@@ -619,22 +686,38 @@ export default function Dashboard(props: DashboardProps) {
                     <CardTitle>My Task Summary</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="text-center p-4 rounded-lg bg-muted">
-                            <div className="text-2xl font-bold">{myTaskStats?.pending || 0}</div>
-                            <div className="text-sm text-muted-foreground">Pending</div>
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                        <div className="rounded-lg bg-muted p-4 text-center">
+                            <div className="text-2xl font-bold">
+                                {myTaskStats?.pending || 0}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                Pending
+                            </div>
                         </div>
-                        <div className="text-center p-4 rounded-lg bg-muted">
-                            <div className="text-2xl font-bold">{myTaskStats?.in_progress || 0}</div>
-                            <div className="text-sm text-muted-foreground">In Progress</div>
+                        <div className="rounded-lg bg-muted p-4 text-center">
+                            <div className="text-2xl font-bold">
+                                {myTaskStats?.in_progress || 0}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                In Progress
+                            </div>
                         </div>
-                        <div className="text-center p-4 rounded-lg bg-muted">
-                            <div className="text-2xl font-bold">{myTaskStats?.waiting || 0}</div>
-                            <div className="text-sm text-muted-foreground">Waiting</div>
+                        <div className="rounded-lg bg-muted p-4 text-center">
+                            <div className="text-2xl font-bold">
+                                {myTaskStats?.waiting || 0}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                Waiting
+                            </div>
                         </div>
-                        <div className="text-center p-4 rounded-lg bg-muted">
-                            <div className="text-2xl font-bold">{myTaskStats?.completed || 0}</div>
-                            <div className="text-sm text-muted-foreground">Completed</div>
+                        <div className="rounded-lg bg-muted p-4 text-center">
+                            <div className="text-2xl font-bold">
+                                {myTaskStats?.completed || 0}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                Completed
+                            </div>
                         </div>
                     </div>
                 </CardContent>
@@ -730,7 +813,9 @@ export default function Dashboard(props: DashboardProps) {
                                 <Users className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.total_users}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats.total_users}
+                                </div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -741,7 +826,9 @@ export default function Dashboard(props: DashboardProps) {
                                 <Building2 className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.total_departments}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats.total_departments}
+                                </div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -752,7 +839,9 @@ export default function Dashboard(props: DashboardProps) {
                                 <Ticket className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.open_tickets}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats.open_tickets}
+                                </div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -763,7 +852,9 @@ export default function Dashboard(props: DashboardProps) {
                                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.pending_tasks}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats.pending_tasks}
+                                </div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -774,7 +865,9 @@ export default function Dashboard(props: DashboardProps) {
                                 <UserCheck className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.active_users_today}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats.active_users_today}
+                                </div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -785,7 +878,9 @@ export default function Dashboard(props: DashboardProps) {
                                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.tasks_completed_today}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats.tasks_completed_today}
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
@@ -797,4 +892,3 @@ export default function Dashboard(props: DashboardProps) {
         </AppLayout>
     );
 }
-

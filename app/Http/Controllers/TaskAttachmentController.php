@@ -86,7 +86,7 @@ class TaskAttachmentController extends Controller
         }
 
         $validated = $request->validate([
-            'file' => 'required|file|max:10240', // 10MB max
+            'file' => 'required|file|max:20480', // 20MB max
             'file_type' => 'nullable|string|max:255',
         ]);
 

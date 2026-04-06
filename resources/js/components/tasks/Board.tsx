@@ -96,8 +96,6 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks }) => {
     setLoading(true);
     axios.patch(`/data/tasks/${taskId}/status`, { state: newStatus })
       .then(async () => {
-        // Handle the status change in the time tracking context
-        // This will stop the timer if the task was active and moved to a non-active state
         await handleTaskStatusChange(taskId, newStatus);
         loadTasks();
       })

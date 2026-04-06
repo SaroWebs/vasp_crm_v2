@@ -75,7 +75,7 @@ class TaskCommentController extends Controller
         $validated = $request->validate([
             'comment_text' => 'nullable|string|max:5000',
             'is_internal' => 'sometimes|boolean',
-            'attachments.*' => 'nullable|file|max:10240', // 10MB max per file
+            'attachments.*' => 'nullable|file|max:20480', // 20MB max per file
         ]);
 
         // Ensure either text or attachments are present

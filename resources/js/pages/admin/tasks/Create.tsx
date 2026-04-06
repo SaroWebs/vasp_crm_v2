@@ -996,7 +996,7 @@ const TaskAttachments: React.FC<TaskAttachmentsProps> = ({ attachments, setAttac
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
                         </svg>
                         <span className="text-sm text-gray-600">Click to upload files or drag and drop</span>
-                        <span className="text-xs text-gray-500">Max file size: 10MB per file</span>
+                        <span className="text-xs text-gray-500">Max file size: 20MB per file</span>
                     </div>
                 </label>
             </div>

@@ -6,6 +6,7 @@ use App\Http\Middleware\ValidateUserSession;
 use App\Models\Client;
 use App\Models\OrganizationUser;
 use App\Models\Role;
+use App\Models\SlaPolicy;
 use App\Models\Task;
 use App\Models\Ticket;
 use App\Models\User;
@@ -39,22 +40,46 @@ class AdminTasksOnDemandLoadingTest extends TestCase
         $this->withoutMiddleware(ValidateUserSession::class);
         $admin = $this->createAdminUser();
 
+        $highPriorityPolicy = SlaPolicy::query()->create([
+            'name' => 'High Priority',
+            'description' => 'High priority SLA policy',
+            'priority' => 'P1',
+            'response_time_minutes' => 30,
+            'resolution_time_minutes' => 120,
+            'review_time_minutes' => 60,
+            'escalation_steps' => [],
+            'is_active' => true,
+        ]);
+
+        $lowPriorityPolicy = SlaPolicy::query()->create([
+            'name' => 'Low Priority',
+            'description' => 'Low priority SLA policy',
+            'priority' => 'P4',
+            'response_time_minutes' => 120,
+            'resolution_time_minutes' => 480,
+            'review_time_minutes' => 240,
+            'escalation_steps' => [],
+            'is_active' => true,
+        ]);
+
         Task::query()->create([
-            'title' => 'First on-demand task',
-            'task_code' => 'TASK-OD-001',
+            'title' => 'Lower priority task',
+            'task_code' => 'TASK-OD-002',
             'state' => 'Draft',
+            'sla_policy_id' => $lowPriorityPolicy->id,
             'created_by' => $admin->id,
         ]);
 
         Task::query()->create([
-            'title' => 'Second on-demand task',
-            'task_code' => 'TASK-OD-002',
+            'title' => 'Higher priority task',
+            'task_code' => 'TASK-OD-001',
             'state' => 'Draft',
+            'sla_policy_id' => $highPriorityPolicy->id,
             'created_by' => $admin->id,
         ]);
 
         $this->actingAs($admin, 'web')
-            ->getJson('/admin/data/tasks?per_page=5')
+            ->getJson('/admin/data/tasks?per_page=5&sort_by=priority&sort_order=asc')
             ->assertOk()
             ->assertJsonStructure([
                 'tasks' => [
@@ -63,6 +88,8 @@ class AdminTasksOnDemandLoadingTest extends TestCase
                     'last_page',
                     'per_page',
                     'total',
+                    'from',
+                    'to',
                     'links',
                 ],
                 'stats' => [
@@ -78,6 +105,10 @@ class AdminTasksOnDemandLoadingTest extends TestCase
                 ],
             ])
             ->assertJsonPath('tasks.total', 2)
+            ->assertJsonPath('tasks.per_page', 5)
+            ->assertJsonPath('tasks.from', 1)
+            ->assertJsonPath('tasks.to', 2)
+            ->assertJsonPath('tasks.data.0.task_code', 'TASK-OD-001')
             ->assertJsonPath('stats.total', 2)
             ->assertJsonPath('stats.draft', 2);
     }
@@ -121,6 +152,34 @@ class AdminTasksOnDemandLoadingTest extends TestCase
             ->assertOk()
             ->assertJsonPath('tasks.data.0.ticket.ticket_number', 'TKT-CLIENT-001')
             ->assertJsonPath('tasks.data.0.ticket.client.name', 'Acme Client');
+    }
+
+    public function test_tasks_data_endpoint_sorts_by_due_date(): void
+    {
+        $this->withoutMiddleware(ValidateUserSession::class);
+        $admin = $this->createAdminUser();
+
+        Task::query()->create([
+            'title' => 'Later due task',
+            'task_code' => 'TASK-DUE-002',
+            'state' => 'Draft',
+            'due_at' => now()->addDays(5),
+            'created_by' => $admin->id,
+        ]);
+
+        Task::query()->create([
+            'title' => 'Earlier due task',
+            'task_code' => 'TASK-DUE-001',
+            'state' => 'Draft',
+            'due_at' => now()->addDay(),
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin, 'web')
+            ->getJson('/admin/data/tasks?per_page=10&sort_by=due_at&sort_order=asc')
+            ->assertOk()
+            ->assertJsonPath('tasks.data.0.task_code', 'TASK-DUE-001')
+            ->assertJsonPath('tasks.data.1.task_code', 'TASK-DUE-002');
     }
 
     private function createAdminUser(): User

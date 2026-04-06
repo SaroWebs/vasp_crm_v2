@@ -3,11 +3,14 @@ import { Task, type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { format } from 'date-fns';
 import {
+    ArrowUpDown,
     Calendar,
     User,
     AlertCircle,
     CheckCircle,
     Clock,
+    ChevronDown,
+    ChevronUp,
     XCircle,
     Plus,
 } from 'lucide-react';
@@ -30,6 +33,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import ReportForm from '@/components/reports/ReportForm';
@@ -112,20 +122,62 @@ interface PaginatedTasks {
     last_page: number;
     per_page: number;
     total: number;
+    from: number;
+    to: number;
 }
+
+type TaskSortField =
+    | 'priority'
+    | 'state'
+    | 'due_at'
+    | 'title'
+    | 'task_code'
+    | 'created_at';
 
 export default function MyTasks() {
     const [tasks, setTasks] = useState<PaginatedTasks | null>(null);
     const [boardTasks, setBoardTasks] = useState<Task[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [perPage, setPerPage] = useState(5);
+    const [sortConfig, setSortConfig] = useState<{
+        field: TaskSortField;
+        direction: 'asc' | 'desc';
+    }>({
+        field: 'priority',
+        direction: 'asc',
+    });
     const [loading, setLoading] = useState(false);
     const [boardLoading, setBoardLoading] = useState(false);
     const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
 
-    const loadTasks = (page = 1) => {
+    const loadTasks = (
+        page = 1,
+        overrides: Partial<{
+            per_page: number;
+            sort_by: TaskSortField;
+            sort_order: 'asc' | 'desc';
+        }> = {},
+    ) => {
+        const nextPerPage = overrides.per_page ?? perPage;
+        const nextSortField = overrides.sort_by ?? sortConfig.field;
+        const nextSortOrder = overrides.sort_order ?? sortConfig.direction;
+
         setLoading(true);
+        setPerPage(nextPerPage);
+        setSortConfig({
+            field: nextSortField,
+            direction: nextSortOrder,
+        });
+
         axios
-            .get(`/data/my/tasks?page=${page}`)
+            .get('/data/my/tasks', {
+                params: {
+                    page,
+                    per_page: nextPerPage,
+                    sort_by: nextSortField,
+                    sort_order: nextSortOrder,
+                },
+            })
             .then((res) => {
                 setTasks(res.data);
                 setCurrentPage(page);
@@ -157,6 +209,40 @@ export default function MyTasks() {
         loadTasks();
         loadBoardTasks();
     }, []);
+
+    const handleSort = (field: TaskSortField) => {
+        const nextDirection =
+            sortConfig.field === field && sortConfig.direction === 'asc'
+                ? 'desc'
+                : 'asc';
+
+        loadTasks(1, {
+            sort_by: field,
+            sort_order: nextDirection,
+        });
+    };
+
+    const getSortIcon = (field: TaskSortField) => {
+        if (sortConfig.field !== field) {
+            return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+        }
+
+        return sortConfig.direction === 'asc' ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+        );
+    };
+
+    const showingFrom =
+        tasks && tasks.total > 0
+            ? tasks.from || (tasks.current_page - 1) * tasks.per_page + 1
+            : 0;
+    const showingTo =
+        tasks && tasks.total > 0
+            ? tasks.to ||
+              Math.min(tasks.current_page * tasks.per_page, tasks.total)
+            : 0;
 
 
 
@@ -211,11 +297,35 @@ export default function MyTasks() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Task</TableHead>
-                                        <TableHead>State</TableHead>
-                                        <TableHead>Priority</TableHead>
+                                        <TableHead
+                                            className="cursor-pointer select-none"
+                                            onClick={() => handleSort('state')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                <span>State</span>
+                                                {getSortIcon('state')}
+                                            </div>
+                                        </TableHead>
+                                        <TableHead
+                                            className="cursor-pointer select-none"
+                                            onClick={() => handleSort('priority')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                <span>Priority</span>
+                                                {getSortIcon('priority')}
+                                            </div>
+                                        </TableHead>
                                         <TableHead>Type</TableHead>
                                         <TableHead>Assigned By</TableHead>
-                                        <TableHead>Due Date</TableHead>
+                                        <TableHead
+                                            className="cursor-pointer select-none"
+                                            onClick={() => handleSort('due_at')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                <span>Due Date</span>
+                                                {getSortIcon('due_at')}
+                                            </div>
+                                        </TableHead>
                                         <TableHead>Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -399,29 +509,67 @@ export default function MyTasks() {
                     </CardContent>
                 </Card>
 
-                {tasks && tasks.last_page > 1 && (
-                    <div className="flex justify-center mt-4">
-                        <nav className="flex items-center space-x-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => loadTasks(currentPage - 1)}
-                                disabled={currentPage === 1 || loading}
+                {tasks && tasks.total > 0 && (
+                    <div className="space-y-2">
+                        <div>
+                            <Select
+                                value={perPage.toString()}
+                                onValueChange={(value) => {
+                                    loadTasks(1, {
+                                        per_page: Number(value),
+                                    });
+                                }}
                             >
-                                Previous
-                            </Button>
-                            <span className="text-sm text-gray-600">
-                                Page {currentPage} of {tasks.last_page}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => loadTasks(currentPage + 1)}
-                                disabled={currentPage === tasks.last_page || loading}
-                            >
-                                Next
-                            </Button>
-                        </nav>
+                                <SelectTrigger className="w-42">
+                                    <SelectValue placeholder="Per page" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="5">
+                                        5 per page
+                                    </SelectItem>
+                                    <SelectItem value="10">
+                                        10 per page
+                                    </SelectItem>
+                                    <SelectItem value="25">
+                                        25 per page
+                                    </SelectItem>
+                                    <SelectItem value="50">
+                                        50 per page
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-4">
+                            <div className="text-sm text-muted-foreground">
+                                Showing {showingFrom} to {showingTo} of{' '}
+                                {tasks.total} tasks
+                            </div>
+                            <nav className="flex items-center space-x-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => loadTasks(currentPage - 1)}
+                                    disabled={currentPage === 1 || loading}
+                                >
+                                    Previous
+                                </Button>
+                                <span className="text-sm text-gray-600">
+                                    Page {currentPage} of {tasks.last_page}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => loadTasks(currentPage + 1)}
+                                    disabled={
+                                        currentPage === tasks.last_page ||
+                                        loading
+                                    }
+                                >
+                                    Next
+                                </Button>
+                            </nav>
+                        </div>
                     </div>
                 )}
 

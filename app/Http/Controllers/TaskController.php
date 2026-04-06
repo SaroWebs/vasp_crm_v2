@@ -464,7 +464,19 @@ class TaskController extends Controller
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
-        $showRecentOnly = $request->query('recent') === 'true';
+        $validated = $request->validate([
+            'recent' => ['nullable', 'in:true,false'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'in:5,10,25,50,100'],
+            'sort_by' => ['nullable', 'string', 'in:priority,state,due_at,title,task_code,created_at'],
+            'sort_order' => ['nullable', 'string', 'in:asc,desc'],
+        ]);
+
+        $showRecentOnly = ($validated['recent'] ?? 'false') === 'true';
+        $perPage = (int) ($validated['per_page'] ?? 5);
+        $page = (int) ($validated['page'] ?? 1);
+        $sortBy = $validated['sort_by'] ?? 'priority';
+        $sortOrder = $validated['sort_order'] ?? 'asc';
 
         $query = Task::query()
             ->select('tasks.*')
@@ -504,9 +516,11 @@ class TaskController extends Controller
                 ->where('completed_at', '>=', now()->subDays(2));
         }
 
-        $this->applySlaPriorityOrdering($query);
+        $this->applyMyTaskSorting($query, $sortBy, $sortOrder);
 
-        $tasks = $query->paginate();
+        $tasks = $query
+            ->paginate($perPage, ['*'], 'page', $page)
+            ->withQueryString();
 
         return response()->json($tasks);
     }
@@ -1196,9 +1210,17 @@ class TaskController extends Controller
             ])
             ->withCount('comments');
 
-        $this->applySlaPriorityOrdering($query);
+        $this->applyMyTaskSorting(
+            $query,
+            $request->query('sort_by'),
+            $request->query('sort_order', 'asc'),
+        );
 
-        $tasks = $query->paginate(5);
+        $perPage = (int) $request->query('per_page', 5);
+        $page = (int) $request->query('page', 1);
+        $tasks = $query
+            ->paginate($perPage, ['*'], 'page', $page)
+            ->withQueryString();
 
         return Inertia::render('tasks/MyTasks', [
             'tasks' => $tasks,
@@ -1423,5 +1445,50 @@ class TaskController extends Controller
             ->leftJoin('sla_policies as sla_policy_order', 'tasks.sla_policy_id', '=', 'sla_policy_order.id')
             ->orderByRaw("CASE sla_policy_order.priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 WHEN 'P4' THEN 4 ELSE 5 END")
             ->orderByDesc('tasks.created_at');
+    }
+
+    /**
+     * Apply ordering for my tasks list.
+     */
+    private function applyMyTaskSorting(Builder $query, ?string $sortBy, string $sortOrder): Builder
+    {
+        $sortBy = $sortBy ?: 'priority';
+        $sortOrder = $sortOrder === 'desc' ? 'desc' : 'asc';
+
+        if ($sortBy === 'priority') {
+            return $query
+                ->leftJoin('sla_policies as sla_policy_order', 'tasks.sla_policy_id', '=', 'sla_policy_order.id')
+                ->select('tasks.*')
+                ->orderByRaw("CASE sla_policy_order.priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 WHEN 'P4' THEN 4 ELSE 5 END {$sortOrder}")
+                ->orderByDesc('tasks.created_at');
+        }
+
+        if ($sortBy === 'state') {
+            return $query
+                ->orderBy('tasks.state', $sortOrder)
+                ->orderByDesc('tasks.created_at');
+        }
+
+        if ($sortBy === 'due_at') {
+            return $query
+                ->orderBy('tasks.due_at', $sortOrder)
+                ->orderByDesc('tasks.created_at');
+        }
+
+        if ($sortBy === 'title') {
+            return $query
+                ->orderBy('tasks.title', $sortOrder)
+                ->orderByDesc('tasks.created_at');
+        }
+
+        if ($sortBy === 'task_code') {
+            return $query
+                ->orderBy('tasks.task_code', $sortOrder)
+                ->orderByDesc('tasks.created_at');
+        }
+
+        return $query
+            ->orderBy('tasks.created_at', $sortOrder)
+            ->orderByDesc('tasks.id');
     }
 }

@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -42,7 +43,16 @@ class AdminTaskController extends Controller
         $departments = Department::select('id', 'name')->where('status', 'active')->get();
 
         return Inertia::render('admin/tasks/Index', [
-            'filters' => $request->only(['state', 'priority', 'assigned_department_id', 'search', 'assigned_to']),
+            'filters' => $request->only([
+                'state',
+                'priority',
+                'assigned_department_id',
+                'search',
+                'assigned_to',
+                'per_page',
+                'sort_by',
+                'sort_order',
+            ]),
             'users' => $users,
             'departments' => $departments,
         ]);
@@ -50,8 +60,25 @@ class AdminTaskController extends Controller
 
     public function getData(Request $request)
     {
-        $perPage = $request->get('per_page', 5);
+        $validated = $request->validate([
+            'state' => ['nullable', 'string'],
+            'priority' => ['nullable', 'string', 'in:all,P1,P2,P3,P4'],
+            'assigned_department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
+            'search' => ['nullable', 'string'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'in:5,10,25,50,100'],
+            'sort_by' => ['nullable', 'string', 'in:created_at,title,task_code,state,due_at,priority'],
+            'sort_order' => ['nullable', 'string', 'in:asc,desc'],
+        ]);
+
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $page = (int) ($validated['page'] ?? 1);
+        $sortBy = $validated['sort_by'] ?? 'created_at';
+        $sortOrder = $validated['sort_order'] ?? 'desc';
+
         $query = Task::withTrashed()
+            ->select('tasks.*')
             ->with([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
@@ -65,28 +92,28 @@ class AdminTaskController extends Controller
                 'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ]);
 
-        if ($request->has('state') && $request->state !== 'all') {
-            $query->where('state', $request->state);
+        if (! empty($validated['state']) && $validated['state'] !== 'all') {
+            $query->where('state', $validated['state']);
         }
 
-        if ($request->has('priority') && $request->priority !== 'all') {
-            $query->whereHas('slaPolicy', function ($q) use ($request) {
-                $q->where('priority', $request->priority);
+        if (! empty($validated['priority']) && $validated['priority'] !== 'all') {
+            $query->whereHas('slaPolicy', function ($q) use ($validated) {
+                $q->where('priority', $validated['priority']);
             });
         }
 
-        if ($request->has('assigned_department_id') && $request->assigned_department_id !== 'all') {
-            $query->where('assigned_department_id', $request->assigned_department_id);
+        if (! empty($validated['assigned_department_id'])) {
+            $query->where('assigned_department_id', $validated['assigned_department_id']);
         }
 
-        if ($request->has('assigned_to') && $request->assigned_to !== 'all') {
-            $query->whereHas('assignedUsers', function ($q) use ($request) {
-                $q->where('user_id', $request->assigned_to);
+        if (! empty($validated['assigned_to'])) {
+            $query->whereHas('assignedUsers', function ($q) use ($validated) {
+                $q->where('user_id', $validated['assigned_to']);
             });
         }
 
-        if ($request->has('search') && ! empty($request->search)) {
-            $search = $request->search;
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
                     ->orWhere('task_code', 'like', "%{$search}%")
@@ -105,7 +132,11 @@ class AdminTaskController extends Controller
             });
         }
 
-        $tasks = $query->latest('created_at')->paginate($perPage);
+        $this->applyTaskSorting($query, $sortBy, $sortOrder);
+
+        $tasks = $query
+            ->paginate($perPage, ['*'], 'page', $page)
+            ->withQueryString();
         $stateCounts = Task::withTrashed()
             ->selectRaw('state, COUNT(*) as total')
             ->groupBy('state')
@@ -127,6 +158,38 @@ class AdminTaskController extends Controller
             'tasks' => $tasks,
             'stats' => $stats,
         ]);
+    }
+
+    /**
+     * Apply the requested task sorting.
+     */
+    private function applyTaskSorting(Builder $query, string $sortBy, string $sortOrder): void
+    {
+        if ($sortBy === 'priority') {
+            $query->leftJoin('sla_policies', 'tasks.sla_policy_id', '=', 'sla_policies.id')
+                ->select('tasks.*')
+                ->orderByRaw(
+                    "CASE
+                        WHEN sla_policies.priority = 'P1' THEN 1
+                        WHEN sla_policies.priority = 'P2' THEN 2
+                        WHEN sla_policies.priority = 'P3' THEN 3
+                        WHEN sla_policies.priority = 'P4' THEN 4
+                        ELSE 5
+                    END {$sortOrder}"
+                )
+                ->orderBy('tasks.created_at', 'desc')
+                ->orderBy('tasks.id', 'desc');
+
+            return;
+        }
+
+        $sortableColumns = ['created_at', 'title', 'task_code', 'state', 'due_at'];
+        if (! in_array($sortBy, $sortableColumns, true)) {
+            $sortBy = 'created_at';
+        }
+
+        $query->orderBy("tasks.{$sortBy}", $sortOrder)
+            ->orderBy('tasks.id', 'desc');
     }
 
     /**
@@ -322,7 +385,7 @@ class AdminTaskController extends Controller
             'metadata' => ['nullable', 'array'],
             'completion_notes' => ['nullable', 'string'],
             'attachments' => ['nullable', 'array'],
-            'attachments.*' => ['file', 'max:10240'], // 10MB max per file
+            'attachments.*' => ['file', 'max:20480'], // 20MB max per file
             'assignments' => ['nullable', 'array'],
             'assignments.*.user_id' => ['required', 'exists:users,id'],
             'assignments.*.assignment_notes' => ['nullable', 'string'],
@@ -404,7 +467,6 @@ class AdminTaskController extends Controller
             // Start database transaction
             DB::beginTransaction();
 
-            // Unset attachments and assignments before storing task data
             // Unset attachments and assignments before storing task data
             $attachmentsData = [];
             if ($request->hasFile('attachments')) {
@@ -617,7 +679,7 @@ class AdminTaskController extends Controller
             'metadata' => ['nullable', 'array'],
             'completion_notes' => ['nullable', 'string'],
             'attachments' => ['nullable', 'array'],
-            'attachments.*' => ['file', 'max:10240'],
+            'attachments.*' => ['file', 'max:20480'], // 20MB max per file
         ]);
 
         // Prevent circular reference in parent task

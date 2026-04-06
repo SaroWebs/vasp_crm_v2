@@ -99,14 +99,162 @@ class MyTasksPrioritySortingTest extends TestCase
             $task->assignUser($user->id, $user->id);
         }
 
+        Task::create([
+            'title' => 'P4 Task Extra 1',
+            'task_code' => 'TASK-P4-EXTRA-1',
+            'description' => null,
+            'task_type_id' => null,
+            'created_by' => $user->id,
+            'sla_policy_id' => $slaPolicies['P4']->id,
+            'project_id' => null,
+            'phase_id' => null,
+            'department_id' => null,
+            'current_owner_kind' => 'UNASSIGNED',
+            'current_owner_id' => null,
+            'state' => 'Draft',
+            'start_at' => null,
+            'due_at' => null,
+            'completed_at' => null,
+            'estimate_hours' => null,
+            'tags' => [],
+            'version' => 1,
+            'metadata' => [],
+            'parent_task_id' => null,
+            'ticket_id' => null,
+            'completion_notes' => null,
+        ])->assignUser($user->id, $user->id);
+
+        Task::create([
+            'title' => 'P4 Task Extra 2',
+            'task_code' => 'TASK-P4-EXTRA-2',
+            'description' => null,
+            'task_type_id' => null,
+            'created_by' => $user->id,
+            'sla_policy_id' => $slaPolicies['P4']->id,
+            'project_id' => null,
+            'phase_id' => null,
+            'department_id' => null,
+            'current_owner_kind' => 'UNASSIGNED',
+            'current_owner_id' => null,
+            'state' => 'Draft',
+            'start_at' => null,
+            'due_at' => null,
+            'completed_at' => null,
+            'estimate_hours' => null,
+            'tags' => [],
+            'version' => 1,
+            'metadata' => [],
+            'parent_task_id' => null,
+            'ticket_id' => null,
+            'completion_notes' => null,
+        ])->assignUser($user->id, $user->id);
+
         $this->actingAs($user);
 
-        $response = $this->getJson('/data/my/tasks');
+        $response = $this->getJson('/data/my/tasks?per_page=5');
 
         $response->assertOk()
             ->assertJsonPath('data.0.sla_policy.priority', 'P1')
             ->assertJsonPath('data.1.sla_policy.priority', 'P2')
             ->assertJsonPath('data.2.sla_policy.priority', 'P3')
-            ->assertJsonPath('data.3.sla_policy.priority', 'P4');
+            ->assertJsonPath('data.3.sla_policy.priority', 'P4')
+            ->assertJsonPath('per_page', 5)
+            ->assertJsonPath('from', 1)
+            ->assertJsonPath('to', 5);
+    }
+
+    public function test_it_sorts_my_tasks_by_due_date_when_requested(): void
+    {
+        $permission = Permission::create([
+            'name' => 'Task Read',
+            'slug' => 'task.read',
+            'module' => 'task',
+            'action' => 'read',
+            'description' => 'Read tasks',
+        ]);
+
+        $role = Role::create([
+            'name' => 'Admin',
+            'slug' => 'admin',
+            'guard_name' => 'web',
+            'description' => 'Admin role',
+            'is_default' => false,
+            'level' => 10,
+        ]);
+
+        $role->permissions()->attach($permission->id);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $priority = SlaPolicy::create([
+            'name' => 'P4 Policy',
+            'description' => null,
+            'task_type_id' => null,
+            'priority' => 'P4',
+            'response_time_minutes' => 60,
+            'resolution_time_minutes' => 120,
+            'review_time_minutes' => 30,
+            'escalation_steps' => null,
+            'is_active' => true,
+        ]);
+
+        Task::create([
+            'title' => 'Later due task',
+            'task_code' => 'TASK-DUE-LATE',
+            'description' => null,
+            'task_type_id' => null,
+            'created_by' => $user->id,
+            'sla_policy_id' => $priority->id,
+            'project_id' => null,
+            'phase_id' => null,
+            'department_id' => null,
+            'current_owner_kind' => 'UNASSIGNED',
+            'current_owner_id' => null,
+            'state' => 'Draft',
+            'start_at' => null,
+            'due_at' => now()->addDays(5),
+            'completed_at' => null,
+            'estimate_hours' => null,
+            'tags' => [],
+            'version' => 1,
+            'metadata' => [],
+            'parent_task_id' => null,
+            'ticket_id' => null,
+            'completion_notes' => null,
+        ])->assignUser($user->id, $user->id);
+
+        Task::create([
+            'title' => 'Earlier due task',
+            'task_code' => 'TASK-DUE-EARLY',
+            'description' => null,
+            'task_type_id' => null,
+            'created_by' => $user->id,
+            'sla_policy_id' => $priority->id,
+            'project_id' => null,
+            'phase_id' => null,
+            'department_id' => null,
+            'current_owner_kind' => 'UNASSIGNED',
+            'current_owner_id' => null,
+            'state' => 'Draft',
+            'start_at' => null,
+            'due_at' => now()->addDay(),
+            'completed_at' => null,
+            'estimate_hours' => null,
+            'tags' => [],
+            'version' => 1,
+            'metadata' => [],
+            'parent_task_id' => null,
+            'ticket_id' => null,
+            'completion_notes' => null,
+        ])->assignUser($user->id, $user->id);
+
+        $this->actingAs($user);
+
+        $response = $this->getJson('/data/my/tasks?sort_by=due_at&sort_order=asc');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.task_code', 'TASK-DUE-EARLY')
+            ->assertJsonPath('data.1.task_code', 'TASK-DUE-LATE');
     }
 }

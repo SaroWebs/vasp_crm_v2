@@ -1,8 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Activity, Clock, ListChecks } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 type ProgressPeriod = 'daily' | 'weekly' | 'monthly';
 
@@ -51,12 +57,16 @@ interface CurrentEmployeeProgress {
 }
 
 interface EmployeeTaskProgressProps {
-    employeeId: number;
+    employeeId: number | 'all';
 }
 
-const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId }) => {
+const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
+    employeeId,
+}) => {
     const [period, setPeriod] = useState<ProgressPeriod>('monthly');
-    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState<string>(
+        new Date().toISOString().split('T')[0],
+    );
     const [selectedWeekStart, setSelectedWeekStart] = useState<string>(() => {
         const today = new Date();
         const dayOfWeek = today.getDay();
@@ -71,7 +81,9 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
     const [progressRefreshNonce, setProgressRefreshNonce] = useState(0);
     const [isProgressLoading, setIsProgressLoading] = useState(true);
     const [progressError, setProgressError] = useState<string | null>(null);
-    const [progressPayload, setProgressPayload] = useState<EmployeeProgressResponse | null>(null);
+    const [progressPayload, setProgressPayload] =
+        useState<EmployeeProgressResponse | null>(null);
+    const isAllEmployeesView = employeeId === 'all';
 
     useEffect(() => {
         const controller = new AbortController();
@@ -80,7 +92,12 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
             setIsProgressLoading(true);
             setProgressError(null);
             try {
-                const params = new URLSearchParams({ period, employee_id: employeeId.toString() });
+                const params = new URLSearchParams({ period });
+
+                if (!isAllEmployeesView) {
+                    params.append('employee_id', employeeId.toString());
+                }
+
                 if (period === 'daily') {
                     params.append('date', selectedDate);
                 } else if (period === 'weekly') {
@@ -89,18 +106,24 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
                     params.append('month', selectedMonth);
                 }
 
-                const response = await fetch(`/admin/api/employee-progress?${params.toString()}`, {
-                    signal: controller.signal,
-                    headers: {
-                        Accept: 'application/json',
+                const response = await fetch(
+                    `/admin/api/employee-progress?${params.toString()}`,
+                    {
+                        signal: controller.signal,
+                        headers: {
+                            Accept: 'application/json',
+                        },
                     },
-                });
+                );
 
                 if (!response.ok) {
-                    throw new Error(`Request failed with status ${response.status}`);
+                    throw new Error(
+                        `Request failed with status ${response.status}`,
+                    );
                 }
 
-                const data = (await response.json()) as EmployeeProgressResponse;
+                const data =
+                    (await response.json()) as EmployeeProgressResponse;
                 setProgressPayload(data);
             } catch {
                 if (controller.signal.aborted) return;
@@ -117,38 +140,74 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
         return () => {
             controller.abort();
         };
-    }, [period, progressRefreshNonce, selectedDate, selectedWeekStart, selectedMonth]);
+    }, [
+        employeeId,
+        isAllEmployeesView,
+        period,
+        progressRefreshNonce,
+        selectedDate,
+        selectedWeekStart,
+        selectedMonth,
+    ]);
 
-    const currentEmployeeProgress = useMemo<CurrentEmployeeProgress | null>(() => {
-        if (!progressPayload) return null;
+    const currentEmployeeProgress =
+        useMemo<CurrentEmployeeProgress | null>(() => {
+            if (!progressPayload || isAllEmployeesView) return null;
 
-        const found = progressPayload.data.find((item) => item.id === employeeId);
+            const found = progressPayload.data.find(
+                (item) => item.id === employeeId,
+            );
 
-        if (!found) {
-            return null;
+            if (!found) {
+                return null;
+            }
+
+            return {
+                total_time: found.total_time,
+                tasks_completed: found.tasks_completed,
+                daily_reports: found.daily_reports,
+            };
+        }, [progressPayload, employeeId, isAllEmployeesView]);
+
+    const sortedEmployeeProgress = useMemo(() => {
+        if (!progressPayload) {
+            return [];
         }
 
-        return {
-            total_time: found.total_time,
-            tasks_completed: found.tasks_completed,
-            daily_reports: found.daily_reports,
-        };
-    }, [progressPayload, employeeId]);
+        return [...progressPayload.data].sort(
+            (a, b) => b.total_time - a.total_time,
+        );
+    }, [progressPayload]);
 
     const contributionPercent = useMemo(() => {
-        if (!currentEmployeeProgress || !progressPayload || Number(progressPayload.total_time) <= 0) {
+        if (
+            !currentEmployeeProgress ||
+            !progressPayload ||
+            Number(progressPayload.total_time) <= 0 ||
+            isAllEmployeesView
+        ) {
             return 0;
         }
 
-        return (Number(currentEmployeeProgress.total_time) / Number(progressPayload.total_time)) * 100;
-    }, [currentEmployeeProgress, progressPayload]);
+        return (
+            (Number(currentEmployeeProgress.total_time) /
+                Number(progressPayload.total_time)) *
+            100
+        );
+    }, [currentEmployeeProgress, progressPayload, isAllEmployeesView]);
 
     const averageTimePerTask = useMemo(() => {
-        if (!currentEmployeeProgress || currentEmployeeProgress.tasks_completed === 0) {
+        if (
+            !currentEmployeeProgress ||
+            currentEmployeeProgress.tasks_completed === 0
+        ) {
             return 0;
         }
 
-        return Number(currentEmployeeProgress.total_time) / currentEmployeeProgress.tasks_completed;
+        return (
+            Number(currentEmployeeProgress.total_time) /
+            currentEmployeeProgress.tasks_completed
+        );
     }, [currentEmployeeProgress]);
 
     const recentDailyReports = useMemo(() => {
@@ -158,24 +217,363 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 5);
     }, [currentEmployeeProgress]);
+
+    const averageTimePerEmployee = useMemo(() => {
+        if (!progressPayload || progressPayload.total_employees === 0) {
+            return 0;
+        }
+
+        return (
+            Number(progressPayload.total_time) / progressPayload.total_employees
+        );
+    }, [progressPayload]);
+
+    const averageTasksPerEmployee = useMemo(() => {
+        if (!progressPayload || progressPayload.total_employees === 0) {
+            return 0;
+        }
+
+        return (
+            Number(progressPayload.total_tasks) /
+            progressPayload.total_employees
+        );
+    }, [progressPayload]);
+
+    const renderEmployeeMetrics = () => {
+        if (!currentEmployeeProgress || !progressPayload) {
+            return null;
+        }
+
+        return (
+            <div className="grid gap-2 md:grid-cols-4">
+                <div className="flex items-center justify-between rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Total Time</p>
+                    <p className="flex items-center gap-1 text-xs font-semibold">
+                        <Clock className="h-3 w-3" />
+                        {Number(currentEmployeeProgress.total_time).toFixed(2)}h
+                    </p>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Tasks</p>
+                    <p className="flex items-center gap-1 text-xs font-semibold">
+                        <ListChecks className="h-3 w-3" />
+                        {currentEmployeeProgress.tasks_completed}
+                    </p>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Avg/Task</p>
+                    <p className="text-xs font-semibold">
+                        {averageTimePerTask.toFixed(2)}h
+                    </p>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Overall %</p>
+                    <p className="text-xs font-semibold">
+                        {contributionPercent.toFixed(1)}%
+                    </p>
+                </div>
+            </div>
+        );
+    };
+
+    const renderEmployeeView = () => {
+        if (!progressPayload) {
+            return null;
+        }
+
+        return (
+            <>
+                {renderEmployeeMetrics()}
+
+                <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Workflow</h4>
+                    {recentDailyReports.length > 0 ? (
+                        <div className="space-y-2">
+                            {recentDailyReports.map((report) => (
+                                <div
+                                    key={report.date}
+                                    className="space-y-3 rounded-lg border p-3 text-sm"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span>
+                                            {new Date(
+                                                report.date,
+                                            ).toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                            })}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            {Number(report.total_time).toFixed(
+                                                2,
+                                            )}
+                                            h
+                                        </span>
+                                    </div>
+
+                                    {report.events?.length > 0 ? (
+                                        <div className="space-y-2 border-t pt-2">
+                                            {report.events.map(
+                                                (event, index) => (
+                                                    <div
+                                                        key={`${report.date}-${event.event_name}-${index}`}
+                                                        className="space-y-1"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium">
+                                                                {
+                                                                    event.event_name
+                                                                }
+                                                            </span>
+                                                            {event.duration_hours !==
+                                                                undefined && (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    (
+                                                                    {Number(
+                                                                        event.duration_hours,
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}
+                                                                    h)
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {event.event_description && (
+                                                            <p className="text-muted-foreground">
+                                                                {
+                                                                    event.event_description
+                                                                }
+                                                            </p>
+                                                        )}
+
+                                                        {event.remarks && (
+                                                            <div
+                                                                className="text-xs font-medium text-blue-600"
+                                                                dangerouslySetInnerHTML={{
+                                                                    __html: event.remarks,
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="border-t pt-2 text-muted-foreground">
+                                            No report details available.
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            No daily reports available for this period.
+                        </p>
+                    )}
+                </div>
+            </>
+        );
+    };
+
+    const renderAllEmployeesView = () => {
+        if (!progressPayload) {
+            return null;
+        }
+
+        return (
+            <>
+                <div className="grid gap-2 md:grid-cols-5">
+                    <div className="rounded-lg border p-3">
+                        <p className="text-xs text-muted-foreground">
+                            Employees
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                            {progressPayload.total_employees}
+                        </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                        <p className="text-xs text-muted-foreground">
+                            Total Time
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                            {Number(progressPayload.total_time).toFixed(2)}h
+                        </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                        <p className="text-xs text-muted-foreground">
+                            Tasks Completed
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                            {progressPayload.total_tasks}
+                        </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                        <p className="text-xs text-muted-foreground">
+                            Avg / Employee
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                            {averageTimePerEmployee.toFixed(2)}h
+                        </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                        <p className="text-xs text-muted-foreground">
+                            Avg Tasks / Employee
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                            {averageTasksPerEmployee.toFixed(2)}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium">Overall breakdown</h4>
+                        <span className="text-xs text-muted-foreground">
+                            Sorted by total time
+                        </span>
+                    </div>
+
+                    {sortedEmployeeProgress.length > 0 ? (
+                        <div className="space-y-3">
+                            {sortedEmployeeProgress.map((employee) => {
+                                const sharePercent =
+                                    Number(progressPayload.total_time) > 0
+                                        ? (Number(employee.total_time) /
+                                              Number(
+                                                  progressPayload.total_time,
+                                              )) *
+                                          100
+                                        : 0;
+
+                                return (
+                                    <div
+                                        key={employee.id}
+                                        className="space-y-3 rounded-lg border p-3"
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="font-medium">
+                                                    {employee.user_name}
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {employee.email}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-semibold">
+                                                    {Number(
+                                                        employee.total_time,
+                                                    ).toFixed(2)}
+                                                    h
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {employee.tasks_completed}{' '}
+                                                    tasks
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                                <span>Overall share</span>
+                                                <span>
+                                                    {sharePercent.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            <div className="h-2 overflow-hidden rounded-full bg-muted">
+                                                <div
+                                                    className="h-full rounded-full bg-primary transition-all duration-300"
+                                                    style={{
+                                                        width: `${sharePercent}%`,
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid gap-2 sm:grid-cols-3">
+                                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Avg / task
+                                                </p>
+                                                <p className="text-sm font-medium">
+                                                    {employee.tasks_completed >
+                                                    0
+                                                        ? (
+                                                              Number(
+                                                                  employee.total_time,
+                                                              ) /
+                                                              employee.tasks_completed
+                                                          ).toFixed(2)
+                                                        : '0.00'}
+                                                    h
+                                                </p>
+                                            </div>
+                                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Daily reports
+                                                </p>
+                                                <p className="text-sm font-medium">
+                                                    {
+                                                        Object.keys(
+                                                            employee.daily_reports ||
+                                                                {},
+                                                        ).length
+                                                    }
+                                                </p>
+                                            </div>
+                                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Task refs
+                                                </p>
+                                                <p className="text-sm font-medium">
+                                                    {
+                                                        employee.task_details
+                                                            .length
+                                                    }
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            No progress records found for the selected period.
+                        </p>
+                    )}
+                </div>
+            </>
+        );
+    };
     return (
         <Card>
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <CardTitle className="flex items-center gap-2">
                         <Activity className="h-5 w-5" />
-                        Employee Progress
+                        {isAllEmployeesView
+                            ? 'All Employees Progress'
+                            : 'Employee Progress'}
                     </CardTitle>
                     <CardDescription>
-                        Time tracking and completed task overview
+                        {isAllEmployeesView
+                            ? 'Team-wide time tracking and task completion overview'
+                            : 'Time tracking and completed task overview'}
                     </CardDescription>
                 </div>
                 <div className="">
                     <div className="flex items-center gap-2">
-                        {(['daily', 'weekly', 'monthly'] as ProgressPeriod[]).map((value) => (
+                        {(
+                            ['daily', 'weekly', 'monthly'] as ProgressPeriod[]
+                        ).map((value) => (
                             <Button
                                 key={value}
-                                variant={period === value ? 'default' : 'outline'}
+                                variant={
+                                    period === value ? 'default' : 'outline'
+                                }
                                 size="sm"
                                 onClick={() => setPeriod(value)}
                             >
@@ -188,7 +586,9 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
                             <Input
                                 type="date"
                                 value={selectedDate}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedDate(e.target.value)}
+                                onChange={(
+                                    e: React.ChangeEvent<HTMLInputElement>,
+                                ) => setSelectedDate(e.target.value)}
                                 className="w-full sm:w-auto"
                             />
                         )}
@@ -197,18 +597,25 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
                                 <Input
                                     type="date"
                                     value={selectedWeekStart}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                        setSelectedWeekStart(e.target.value)
-                                    }
+                                    onChange={(
+                                        e: React.ChangeEvent<HTMLInputElement>,
+                                    ) => setSelectedWeekStart(e.target.value)}
                                     className="w-full sm:w-auto"
                                 />
-                                <span className="text-sm text-muted-foreground">to</span>
+                                <span className="text-sm text-muted-foreground">
+                                    to
+                                </span>
                                 <span className="text-sm font-medium">
-                                    {new Date(
-                                        new Date(selectedWeekStart).getTime() + 6 * 24 * 60 * 60 * 1000,
-                                    )
-                                        .toISOString()
-                                        .split('T')[0]}
+                                    {
+                                        new Date(
+                                            new Date(
+                                                selectedWeekStart,
+                                            ).getTime() +
+                                                6 * 24 * 60 * 60 * 1000,
+                                        )
+                                            .toISOString()
+                                            .split('T')[0]
+                                    }
                                 </span>
                             </div>
                         )}
@@ -216,7 +623,9 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
                             <Input
                                 type="month"
                                 value={selectedMonth}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedMonth(e.target.value)}
+                                onChange={(
+                                    e: React.ChangeEvent<HTMLInputElement>,
+                                ) => setSelectedMonth(e.target.value)}
                                 className="w-full sm:w-auto"
                             />
                         )}
@@ -225,127 +634,49 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({ employeeId 
             </CardHeader>
             <CardContent className="space-y-4">
                 {isProgressLoading && (
-                    <p className="text-sm text-muted-foreground">Loading employee progress...</p>
+                    <p className="text-sm text-muted-foreground">
+                        Loading employee progress...
+                    </p>
                 )}
 
                 {!isProgressLoading && progressError && (
                     <div className="space-y-3">
-                        <p className="text-sm text-destructive">{progressError}</p>
+                        <p className="text-sm text-destructive">
+                            {progressError}
+                        </p>
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setProgressRefreshNonce((value) => value + 1)}
+                            onClick={() =>
+                                setProgressRefreshNonce((value) => value + 1)
+                            }
                         >
                             Retry
                         </Button>
                     </div>
                 )}
 
-                {!isProgressLoading && !progressError && !currentEmployeeProgress && (
-                    <p className="text-sm text-muted-foreground">
-                        No progress records found for this employee in the selected period.
-                    </p>
-                )}
+                {!isProgressLoading &&
+                    !progressError &&
+                    isAllEmployeesView &&
+                    progressPayload &&
+                    renderAllEmployeesView()}
 
-                {!isProgressLoading && !progressError && currentEmployeeProgress && (
-                    <>
-                        <div className="grid gap-2 md:grid-cols-4">
-                            <div className="rounded-lg border p-2 flex justify-between items-center">
-                                <p className="text-xs text-muted-foreground">Total Time</p>
-                                <p className="text-xs font-semibold flex items-center gap-1">
-                                    <Clock className="h-3 w-3" />
-                                    {Number(currentEmployeeProgress.total_time).toFixed(2)}h
-                                </p>
-                            </div>
-                            <div className="rounded-lg border p-2 flex justify-between items-center">
-                                <p className="text-xs text-muted-foreground">Tasks</p>
-                                <p className="text-xs font-semibold flex items-center gap-1">
-                                    <ListChecks className="h-3 w-3" />
-                                    {currentEmployeeProgress.tasks_completed}
-                                </p>
-                            </div>
-                            <div className="rounded-lg border p-2 flex justify-between items-center">
-                                <p className="text-xs text-muted-foreground">Avg/Task</p>
-                                <p className="text-xs font-semibold">
-                                    {averageTimePerTask.toFixed(2)}h
-                                </p>
-                            </div>
-                            <div className="rounded-lg border p-2 flex justify-between items-center">
-                                <p className="text-xs text-muted-foreground">Team %</p>
-                                <p className="text-xs font-semibold">
-                                    {contributionPercent.toFixed(1)}%
-                                </p>
-                            </div>
-                        </div>
+                {!isProgressLoading &&
+                    !progressError &&
+                    !isAllEmployeesView &&
+                    currentEmployeeProgress &&
+                    renderEmployeeView()}
 
-                        <div className="space-y-2">
-                            <h4 className="text-sm font-medium">Workflow</h4>
-                            {recentDailyReports.length > 0 ? (
-                                <div className="space-y-2">
-                                    {recentDailyReports.map((report) => (
-                                        <div
-                                            key={report.date}
-                                            className="space-y-3 rounded-lg border p-3 text-sm"
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <span>
-                                                    {new Date(report.date).toLocaleDateString('en-US', {
-                                                        year: 'numeric',
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                    })}
-                                                </span>
-                                                <span className="text-muted-foreground">
-                                                    {Number(report.total_time).toFixed(2)}h
-                                                </span>
-                                            </div>
-
-                                            {report.events?.length > 0 ? (
-                                                <div className="space-y-2 border-t pt-2">
-                                                    {report.events.map((event, index) => (
-                                                        <div
-                                                            key={`${report.date}-${event.event_name}-${index}`}
-                                                            className="space-y-1"
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-medium">{event.event_name}</span>
-                                                                {event.duration_hours !== undefined && (
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        ({Number(event.duration_hours).toFixed(2)}h)
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            {event.event_description && (
-                                                                <p className="text-muted-foreground">
-                                                                    {event.event_description}
-                                                                </p>
-                                                            )}
-
-                                                            {event.remarks && (
-                                                                <div
-                                                                    className="text-xs font-medium text-blue-600"
-                                                                    dangerouslySetInnerHTML={{ __html: event.remarks }}
-                                                                />
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <p className="border-t pt-2 text-muted-foreground">
-                                                    No report details available.
-                                                </p>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    No daily reports available for this period.
-                                </p>
-                            )}
-                        </div>
-                    </>
-                )}
+                {!isProgressLoading &&
+                    !progressError &&
+                    !isAllEmployeesView &&
+                    !currentEmployeeProgress && (
+                        <p className="text-sm text-muted-foreground">
+                            No progress records found for this employee in the
+                            selected period.
+                        </p>
+                    )}
             </CardContent>
         </Card>
     );

@@ -1,23 +1,12 @@
-import AppLayout from '@/layouts/app-layout';
-import { Task, type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
-import {
-    Plus,
-    Search,
-    Calendar,
-    User,
-    TicketIcon,
-    AlertCircle,
-    CheckCircle,
-    Clock,
-    XCircle,
-    UserPlus,
-    EllipsisVertical
-} from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import TaskAssignmentModal from '@/components/TaskAssignmentModal';
 import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -42,20 +31,42 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import AppLayout from '@/layouts/app-layout';
+import { Task, type BreadcrumbItem } from '@/types';
+import { Head, Link } from '@inertiajs/react';
+import { Badge } from '@mantine/core';
 import axios from 'axios';
+import { format } from 'date-fns';
+import {
+    ArrowUpDown,
+    AlertCircle,
+    Calendar,
+    CheckCircle,
+    Clock,
+    ChevronDown,
+    ChevronUp,
+    EllipsisVertical,
+    Plus,
+    Search,
+    TicketIcon,
+    User,
+    UserPlus,
+    XCircle,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { BiSolidEdit } from 'react-icons/bi';
 import { FiTrash } from 'react-icons/fi';
-import { PiEye } from "react-icons/pi";
+import { PiEye } from 'react-icons/pi';
 import { toast } from 'sonner';
-import TaskAssignmentModal from '@/components/TaskAssignmentModal';
-import { Badge } from '@mantine/core';
 
 interface PaginatedTasks {
-    data: Task[];
+    data: Task[]; 
     current_page: number;
     last_page: number;
     per_page: number;
     total: number;
+    from: number;
+    to: number;
     links: Array<{
         url: string | null;
         label: string;
@@ -94,14 +105,25 @@ interface TasksIndexProps {
     filters: {
         state?: string;
         assigned_to?: string;
-        assigned_department_id?: string;
         search?: string;
+        per_page?: string;
+        sort_by?: string;
+        sort_order?: string;
     };
     users: Array<{ id: number; name: string }>;
-    departments: Array<{ id: number; name: string }>;
 }
 
-type TaskFilterKey = 'state' | 'assigned_to' | 'assigned_department_id';
+type TaskFilterKey = 'state' | 'assigned_to';
+type TaskSortField = 'created_at' | 'title' | 'task_code' | 'state' | 'due_at' | 'priority';
+
+const sortableTaskFields: TaskSortField[] = [
+    'created_at',
+    'title',
+    'task_code',
+    'state',
+    'due_at',
+    'priority',
+];
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -169,36 +191,45 @@ const getPriorityCheck = (priority?: string) => {
     };
 
     if (priority) {
-        return priority in map
-            ? map[priority as keyof typeof map]
-            : map.P4;
+        return priority in map ? map[priority as keyof typeof map] : map.P4;
     } else {
         return map.P4;
     }
 };
 
-
 export default function TasksIndex({
     filters = {},
     users,
-    departments,
 }: TasksIndexProps) {
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [, setIsDeleting] = useState(false);
-    const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<number | null>(null);
+    const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<
+        number | null
+    >(null);
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
     const [tasksData, setTasksData] = useState<PaginatedTasks>({
         data: [],
         current_page: 1,
         last_page: 1,
-        per_page: 5,
+        per_page: Number(filters.per_page) || 10,
         total: 0,
+        from: 0,
+        to: 0,
         links: [],
+    });
+    const [perPage, setPerPage] = useState(Number(filters.per_page) || 10);
+    const [sortConfig, setSortConfig] = useState<{
+        field: TaskSortField;
+        direction: 'asc' | 'desc';
+    }>({
+        field: sortableTaskFields.includes(filters.sort_by as TaskSortField)
+            ? (filters.sort_by as TaskSortField)
+            : 'created_at',
+        direction: filters.sort_order === 'asc' ? 'asc' : 'desc',
     });
     const [activeFilters, setActiveFilters] = useState({
         state: filters.state || 'all',
         assigned_to: filters.assigned_to || 'all',
-        assigned_department_id: filters.assigned_department_id || 'all',
         search: filters.search || '',
     });
     const [taskStats, setTaskStats] = useState<TaskOverviewStats>({
@@ -220,18 +251,25 @@ export default function TasksIndex({
         overrides: Partial<{
             state: string;
             assigned_to: string;
-            assigned_department_id: string;
             search: string;
             page: number;
+            per_page: number;
+            sort_by: TaskSortField;
+            sort_order: 'asc' | 'desc';
         }> = {},
     ) => {
         const mergedFilters = {
             ...activeFilters,
             ...overrides,
         };
+        const nextPerPage = overrides.per_page ?? perPage;
+        const nextSortField = overrides.sort_by ?? sortConfig.field;
+        const nextSortOrder = overrides.sort_order ?? sortConfig.direction;
 
         const requestParams: Record<string, string | number> = {
-            per_page: tasksData.per_page || 5,
+            per_page: nextPerPage,
+            sort_by: nextSortField,
+            sort_order: nextSortOrder,
         };
 
         if (mergedFilters.state && mergedFilters.state !== 'all') {
@@ -242,9 +280,6 @@ export default function TasksIndex({
             requestParams.assigned_to = mergedFilters.assigned_to;
         }
 
-        if (mergedFilters.assigned_department_id && mergedFilters.assigned_department_id !== 'all') {
-            requestParams.assigned_department_id = mergedFilters.assigned_department_id;
-        }
 
         if (mergedFilters.search && mergedFilters.search.trim() !== '') {
             requestParams.search = mergedFilters.search.trim();
@@ -254,6 +289,11 @@ export default function TasksIndex({
             requestParams.page = overrides.page;
         }
 
+        setPerPage(nextPerPage);
+        setSortConfig({
+            field: nextSortField,
+            direction: nextSortOrder,
+        });
         setIsTasksLoading(true);
 
         try {
@@ -319,6 +359,45 @@ export default function TasksIndex({
         }
     };
 
+    const handleSort = (field: TaskSortField) => {
+        const nextDirection =
+            sortConfig.field === field && sortConfig.direction === 'asc'
+                ? 'desc'
+                : 'asc';
+
+        loadTasksData({
+            sort_by: field,
+            sort_order: nextDirection,
+            page: 1,
+        });
+    };
+
+    const getSortIcon = (field: TaskSortField) => {
+        if (sortConfig.field !== field) {
+            return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+        }
+
+        return sortConfig.direction === 'asc' ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+        );
+    };
+
+    const showingFrom =
+        tasksData.total === 0
+            ? 0
+            : tasksData.from ||
+              (tasksData.current_page - 1) * tasksData.per_page + 1;
+    const showingTo =
+        tasksData.total === 0
+            ? 0
+            : tasksData.to ||
+              Math.min(
+                  tasksData.current_page * tasksData.per_page,
+                  tasksData.total,
+              );
+
     useEffect(() => {
         loadTasksData();
     }, []);
@@ -360,200 +439,149 @@ export default function TasksIndex({
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Total Tasks
-                            </CardTitle>
-                            <TicketIcon className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
+                <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-lg border bg-card p-3">
+                        <div className="flex items-center justify-between">
                             <div className="text-2xl font-bold">
                                 {taskStats.total}
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                All tasks in system
-                            </p>
-                        </CardContent>
-                    </Card>
+                            <TicketIcon className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            Total
+                        </div>
+                    </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Draft
-                            </CardTitle>
-                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
+                    <div className="rounded-lg border bg-card p-3">
+                        <div className="flex items-center justify-between">
                             <div className="text-2xl font-bold">
                                 {taskStats.draft}
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                New tasks being prepared
-                            </p>
-                        </CardContent>
-                    </Card>
+                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            Draft
+                        </div>
+                    </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                In Progress
-                            </CardTitle>
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
+                    <div className="rounded-lg border bg-card p-3">
+                        <div className="flex items-center justify-between">
                             <div className="text-2xl font-bold">
                                 {taskStats.inProgress}
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                Currently being worked on
-                            </p>
-                        </CardContent>
-                    </Card>
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            In Progress
+                        </div>
+                    </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Done
-                            </CardTitle>
-                            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
+                    <div className="rounded-lg border bg-card p-3">
+                        <div className="flex items-center justify-between">
                             <div className="text-2xl font-bold">
                                 {taskStats.done}
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                Completed tasks
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Filters and Search */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Filters</CardTitle>
-                        <CardDescription>
-                            Filter and search tasks by various criteria
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex flex-wrap gap-4">
-                            <form
-                                onSubmit={handleSearch}
-                                className="flex gap-2"
-                            >
-                                <Input
-                                    placeholder="Search tasks..."
-                                    value={searchQuery}
-                                    onChange={(e) =>
-                                        setSearchQuery(e.target.value)
-                                    }
-                                    className="w-64"
-                                />
-                                <Button type="submit" variant="outline">
-                                    <Search className="h-4 w-4" />
-                                </Button>
-                            </form>
-
-                            <Select
-                                value={activeFilters.state}
-                                onValueChange={(value) =>
-                                    handleFilterChange('state', value)
-                                }
-                            >
-                                <SelectTrigger className="w-40">
-                                    <SelectValue placeholder="State" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">
-                                        All States
-                                    </SelectItem>
-                                    <SelectItem value="Draft">Draft</SelectItem>
-                                    <SelectItem value="Assigned">
-                                        Assigned
-                                    </SelectItem>
-                                    <SelectItem value="InProgress">
-                                        In Progress
-                                    </SelectItem>
-                                    <SelectItem value="Blocked">
-                                        Blocked
-                                    </SelectItem>
-                                    <SelectItem value="InReview">
-                                        In Review
-                                    </SelectItem>
-                                    <SelectItem value="Done">Done</SelectItem>
-                                    <SelectItem value="Cancelled">
-                                        Cancelled
-                                    </SelectItem>
-                                    <SelectItem value="Rejected">
-                                        Rejected
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-
-                            <Select
-                                value={activeFilters.assigned_to}
-                                onValueChange={(value) =>
-                                    handleFilterChange('assigned_to', value)
-                                }
-                            >
-                                <SelectTrigger className="w-48">
-                                    <SelectValue placeholder="Assigned To" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">
-                                        All Users
-                                    </SelectItem>
-                                    {users.map((user) => (
-                                        <SelectItem
-                                            key={user.id}
-                                            value={user.id.toString()}
-                                        >
-                                            {user.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            <Select
-                                value={activeFilters.assigned_department_id}
-                                onValueChange={(value) =>
-                                    handleFilterChange(
-                                        'assigned_department_id',
-                                        value,
-                                    )
-                                }
-                            >
-                                <SelectTrigger className="w-48">
-                                    <SelectValue placeholder="Department" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">
-                                        All Departments
-                                    </SelectItem>
-                                    {departments.map((dept) => (
-                                        <SelectItem
-                                            key={dept.id}
-                                            value={dept.id.toString()}
-                                        >
-                                            {dept.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <CheckCircle className="h-4 w-4 text-muted-foreground" />
                         </div>
-                    </CardContent>
-                </Card>
+                        <div className="text-xs text-muted-foreground">
+                            Done
+                        </div>
+                    </div>
+                </div>
 
                 {/* Tasks Table */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>All Tasks</CardTitle>
-                        <CardDescription>
-                            A list of all tasks in the system
-                        </CardDescription>
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <CardTitle>All Tasks</CardTitle>
+                                <CardDescription>
+                                    A list of all tasks in the system
+                                </CardDescription>
+                            </div>
+                            <div className="flex flex-wrap gap-4">
+                                <form
+                                    onSubmit={handleSearch}
+                                    className="flex gap-2"
+                                >
+                                    <Input
+                                        placeholder="Search tasks..."
+                                        value={searchQuery}
+                                        onChange={(e) =>
+                                            setSearchQuery(e.target.value)
+                                        }
+                                        className="w-48"
+                                    />
+                                    <Button type="submit" variant="outline">
+                                        <Search className="h-4 w-4" />
+                                    </Button>
+                                </form>
+
+                                <Select
+                                    value={activeFilters.assigned_to}
+                                    onValueChange={(value) =>
+                                        handleFilterChange('assigned_to', value)
+                                    }
+                                >
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue placeholder="Assigned To" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            All Users
+                                        </SelectItem>
+                                        {users.map((user) => (
+                                            <SelectItem
+                                                key={user.id}
+                                                value={user.id.toString()}
+                                            >
+                                                {user.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                <Select
+                                    value={activeFilters.state}
+                                    onValueChange={(value) =>
+                                        handleFilterChange('state', value)
+                                    }
+                                >
+                                    <SelectTrigger className="w-32">
+                                        <SelectValue placeholder="State" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            All States
+                                        </SelectItem>
+                                        <SelectItem value="Draft">
+                                            Draft
+                                        </SelectItem>
+                                        <SelectItem value="Assigned">
+                                            Assigned
+                                        </SelectItem>
+                                        <SelectItem value="InProgress">
+                                            In Progress
+                                        </SelectItem>
+                                        <SelectItem value="Blocked">
+                                            Blocked
+                                        </SelectItem>
+                                        <SelectItem value="InReview">
+                                            In Review
+                                        </SelectItem>
+                                        <SelectItem value="Done">
+                                            Done
+                                        </SelectItem>
+                                        <SelectItem value="Cancelled">
+                                            Cancelled
+                                        </SelectItem>
+                                        <SelectItem value="Rejected">
+                                            Rejected
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {filteredTasks.length === 0 ? (
@@ -583,11 +611,35 @@ export default function TasksIndex({
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Task</TableHead>
-                                        <TableHead>State</TableHead>
-                                        <TableHead>Priority</TableHead>
+                                        <TableHead
+                                            className="cursor-pointer select-none"
+                                            onClick={() => handleSort('state')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                <span>State</span>
+                                                {getSortIcon('state')}
+                                            </div>
+                                        </TableHead>
+                                        <TableHead
+                                            className="cursor-pointer select-none"
+                                            onClick={() => handleSort('priority')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                <span>Priority</span>
+                                                {getSortIcon('priority')}
+                                            </div>
+                                        </TableHead>
                                         <TableHead>Type</TableHead>
                                         <TableHead>Assigned To</TableHead>
-                                        <TableHead>Due Date</TableHead>
+                                        <TableHead
+                                            className="cursor-pointer select-none"
+                                            onClick={() => handleSort('due_at')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                <span>Due Date</span>
+                                                {getSortIcon('due_at')}
+                                            </div>
+                                        </TableHead>
                                         <TableHead>Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -663,7 +715,9 @@ export default function TasksIndex({
                                                 <TableCell>
                                                     <Badge
                                                         className={`${isDeleted ? 'opacity-60' : ''}`}
-                                                        color={getStatusColor(task.state)}
+                                                        color={getStatusColor(
+                                                            task.state,
+                                                        )}
                                                     >
                                                         <div className="flex items-center gap-1 py-2">
                                                             {getStatusIcon(
@@ -683,14 +737,29 @@ export default function TasksIndex({
                                                 <TableCell>
                                                     <Badge
                                                         className={`${isDeleted ? 'opacity-60' : ''}`}
-                                                        color={({ P1: 'red', P2: 'orange', P3: 'teal', P4: 'cyan' })[task.sla_policy?.priority || 'P4']}
+                                                        color={
+                                                            {
+                                                                P1: 'red',
+                                                                P2: 'orange',
+                                                                P3: 'teal',
+                                                                P4: 'cyan',
+                                                            }[
+                                                            task.sla_policy
+                                                                ?.priority ||
+                                                            'P4'
+                                                            ]
+                                                        }
                                                     >
                                                         <div className="flex items-center gap-1">
                                                             <AlertCircle className="mr-1 h-3 w-3" />
                                                             <span
                                                                 className={`capitalize${isDeleted ? 'line-through' : ''}`}
                                                             >
-                                                                {getPriorityCheck(task.sla_policy?.priority)}
+                                                                {getPriorityCheck(
+                                                                    task
+                                                                        .sla_policy
+                                                                        ?.priority,
+                                                                )}
                                                             </span>
                                                         </div>
                                                     </Badge>
@@ -715,15 +784,28 @@ export default function TasksIndex({
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {task.assigned_users && task.assigned_users.length > 0 ? (
+                                                    {task.assigned_users &&
+                                                        task.assigned_users.length >
+                                                        0 ? (
                                                         <div className="flex items-center gap-2">
                                                             <User className="h-4 w-4 text-muted-foreground" />
-                                                            <span className={`text-sm${isDeleted ? ' text-muted-foreground line-through' : ''}`}>
-                                                                {task.assigned_users.map(user => user.name).join(', ')}
+                                                            <span
+                                                                className={`text-sm${isDeleted ? 'text-muted-foreground line-through' : ''}`}
+                                                            >
+                                                                {task.assigned_users
+                                                                    .map(
+                                                                        (
+                                                                            user,
+                                                                        ) =>
+                                                                            user.name,
+                                                                    )
+                                                                    .join(', ')}
                                                             </span>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-sm text-muted-foreground">Unassigned</span>
+                                                        <span className="text-sm text-muted-foreground">
+                                                            Unassigned
+                                                        </span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
@@ -779,17 +861,28 @@ export default function TasksIndex({
                                                             {!isDeleted && (
                                                                 <>
                                                                     <DropdownMenuItem
-                                                                        onClick={(e) => {
+                                                                        onClick={(
+                                                                            e,
+                                                                        ) => {
                                                                             e.stopPropagation();
-                                                                            setSelectedTaskForAssignment(task.id);
-                                                                            setShowAssignmentModal(true);
+                                                                            setSelectedTaskForAssignment(
+                                                                                task.id,
+                                                                            );
+                                                                            setShowAssignmentModal(
+                                                                                true,
+                                                                            );
                                                                         }}
                                                                     >
                                                                         <UserPlus className="mr-2 h-4 w-4" />
-                                                                        Assign Users
+                                                                        Assign
+                                                                        Users
                                                                     </DropdownMenuItem>
-                                                                    <DropdownMenuItem asChild>
-                                                                        <Link href={`/admin/tasks/${task.id}/edit`}>
+                                                                    <DropdownMenuItem
+                                                                        asChild
+                                                                    >
+                                                                        <Link
+                                                                            href={`/admin/tasks/${task.id}/edit`}
+                                                                        >
                                                                             <BiSolidEdit className="mr-2 h-4 w-4" />
                                                                             Edit
                                                                             Task
@@ -823,29 +916,80 @@ export default function TasksIndex({
                 </Card>
 
                 {/* Pagination */}
-                {tasksData.last_page > 1 && (
-                    <div className="flex justify-center mt-4">
-                        <div className="flex items-center gap-2">
-                            {tasksData.links.map((link, index) => (
-                                <Button
-                                    key={index}
-                                    variant={link.active ? 'default' : 'outline'}
-                                    disabled={!link.url || link.active}
-                                    onClick={() => {
-                                        if (link.url) {
-                                            const url = new URL(link.url, window.location.origin);
-                                            const page = Number(url.searchParams.get('page') || '1');
-                                            loadTasksData({ page });
-                                        }
-                                    }}
-                                >
-                                    <span dangerouslySetInnerHTML={{ __html: link.label }} />
-                                </Button>
-                            ))}
+                {tasksData.total > 0 && (
+                    <div className="space-y-2">
+                        <div>
+                            <Select
+                                value={perPage.toString()}
+                                onValueChange={(value) => {
+                                    loadTasksData({
+                                        per_page: Number(value),
+                                        page: 1,
+                                    });
+                                }}
+                            >
+                                <SelectTrigger className="w-42">
+                                    <SelectValue placeholder="Per page" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="5">
+                                        5 per page
+                                    </SelectItem>
+                                    <SelectItem value="10">
+                                        10 per page
+                                    </SelectItem>
+                                    <SelectItem value="25">
+                                        25 per page
+                                    </SelectItem>
+                                    <SelectItem value="50">
+                                        50 per page
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-4">
+                            <div className="text-sm text-muted-foreground">
+                                Showing {showingFrom} to {showingTo} of{' '}
+                                {tasksData.total} tasks
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {tasksData.last_page > 1 &&
+                                    tasksData.links.map((link, index) => (
+                                        <Button
+                                            key={index}
+                                            variant={
+                                                link.active
+                                                    ? 'default'
+                                                    : 'outline'
+                                            }
+                                            disabled={!link.url || link.active}
+                                            onClick={() => {
+                                                if (link.url) {
+                                                    const url = new URL(
+                                                        link.url,
+                                                        window.location.origin,
+                                                    );
+                                                    const page = Number(
+                                                        url.searchParams.get(
+                                                            'page',
+                                                        ) || '1',
+                                                    );
+                                                    loadTasksData({ page });
+                                                }
+                                            }}
+                                        >
+                                            <span
+                                                dangerouslySetInnerHTML={{
+                                                    __html: link.label,
+                                                }}
+                                            />
+                                        </Button>
+                                    ))}
+                            </div>
                         </div>
                     </div>
                 )}
-
             </div>
             <TaskAssignmentModal
                 taskId={selectedTaskForAssignment}
