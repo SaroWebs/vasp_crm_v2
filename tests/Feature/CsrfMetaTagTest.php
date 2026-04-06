@@ -13,4 +13,12 @@ class CsrfMetaTagTest extends TestCase
         $response->assertOk();
         $response->assertSee('<meta name="csrf-token" content="', false);
     }
+
+    public function test_app_shell_sets_the_xsrf_cookie_used_by_frontend_requests(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+        $response->assertCookie('XSRF-TOKEN');
+    }
 }

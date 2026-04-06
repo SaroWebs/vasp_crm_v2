@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import { bootstrapHttp } from './lib/http';
 
 declare global {
     interface Window {
@@ -11,16 +12,8 @@ declare global {
 }
 
 window.Pusher = Pusher;
+bootstrapHttp();
 window.axios = axios;
-
-const csrfToken = document.head.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
-
-axios.defaults.withCredentials = true;
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-
-if (csrfToken) {
-    axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
-}
 
 window.Echo = new Echo({
     broadcaster: 'pusher',
