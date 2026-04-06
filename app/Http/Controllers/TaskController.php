@@ -14,6 +14,7 @@ use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -465,9 +466,11 @@ class TaskController extends Controller
 
         $showRecentOnly = $request->query('recent') === 'true';
 
-        $query = Task::whereHas('assignedUsers', function ($query) use ($user) {
-            $query->where('user_id', $user->id);
-        })
+        $query = Task::query()
+            ->select('tasks.*')
+            ->whereHas('assignedUsers', function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
             ->with([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
@@ -491,9 +494,8 @@ class TaskController extends Controller
                         'is_completed',
                     ])->orderBy('event_date', 'asc');
                 },
-            ])->withCount('comments')
-            ->orderByDesc('created_at')
-            ->select(['tasks.*']);
+            ])
+            ->withCount('comments');
 
         // If recent=true is passed, only return tasks completed in the last 2 days
         if ($showRecentOnly) {
@@ -501,6 +503,8 @@ class TaskController extends Controller
                 ->whereNotNull('completed_at')
                 ->where('completed_at', '>=', now()->subDays(2));
         }
+
+        $this->applySlaPriorityOrdering($query);
 
         $tasks = $query->paginate();
 
@@ -1175,9 +1179,11 @@ class TaskController extends Controller
             abort(403, 'Insufficient permissions');
         }
 
-        $tasks = Task::whereHas('assignedUsers', function ($query) {
-            $query->where('user_id', Auth::id());
-        })
+        $query = Task::query()
+            ->select('tasks.*')
+            ->whereHas('assignedUsers', function ($query) {
+                $query->where('user_id', Auth::id());
+            })
             ->with([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
@@ -1188,8 +1194,11 @@ class TaskController extends Controller
                 'auditEvents:id,task_id,action,actor_user_id,occurred_at',
                 'timeEntries',
             ])
-            ->latest()
-            ->paginate(5);
+            ->withCount('comments');
+
+        $this->applySlaPriorityOrdering($query);
+
+        $tasks = $query->paginate(5);
 
         return Inertia::render('tasks/MyTasks', [
             'tasks' => $tasks,
@@ -1403,5 +1412,16 @@ class TaskController extends Controller
                 'min_due_date' => $dueDate->format('Y-m-d\TH:i:sP'),
             ],
         ]);
+    }
+
+    /**
+     * Apply SLA priority ordering to a task query.
+     */
+    private function applySlaPriorityOrdering(Builder $query): Builder
+    {
+        return $query
+            ->leftJoin('sla_policies as sla_policy_order', 'tasks.sla_policy_id', '=', 'sla_policy_order.id')
+            ->orderByRaw("CASE sla_policy_order.priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 WHEN 'P4' THEN 4 ELSE 5 END")
+            ->orderByDesc('tasks.created_at');
     }
 }

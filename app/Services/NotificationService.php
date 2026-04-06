@@ -8,6 +8,7 @@ use App\Events\TaskForwardedNotificationEvent;
 use App\Events\TaskStatusChangedNotificationEvent;
 use App\Models\Department;
 use App\Models\Notification;
+use App\Models\Report;
 use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\Ticket;
@@ -705,6 +706,30 @@ class NotificationService
             $query->where('slug', 'manager')
                 ->orWhere('name', 'manager');
         })->get();
+    }
+
+    /**
+     * Send a report submission message to manager users only.
+     */
+    public function sendReportSubmissionNotificationToManagers(Report $report): void
+    {
+        $report->loadMissing('user');
+
+        $title = 'Daily Report Submitted';
+        $reportUrl = config('app.url').'/admin/reports/'.$report->id;
+        $submittedByName = $report->user?->name ?? 'System';
+        $message = "Daily report '{$report->title}' was submitted by {$submittedByName} for {$report->report_date->toDateString()}. View: {$reportUrl}";
+
+        foreach ($this->getManagerUsers() as $manager) {
+            $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
+
+            if (! $managerPhone) {
+                $this->logNotificationFailure($manager->id, $title, $message, null);
+                continue;
+            }
+
+            $this->sendWhatsApp($managerPhone, "{$title}\n\n{$message}");
+        }
     }
 
     /**

@@ -603,7 +603,7 @@ const MajorTasks = ({ employees: propEmployees = [] }: Props) => {
                                                                                 }
                                                                             </div>
 
-                                                                            <div className="font-medium text-xs line-clamp-2" >
+                                                                            <div className="font-medium text-sm line-clamp-2" >
                                                                                 {task.title}
                                                                             </div>
                                                                             {

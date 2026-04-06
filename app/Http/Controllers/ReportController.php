@@ -6,6 +6,7 @@ use App\Models\Report;
 use App\Models\ReportAttachment;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,6 +16,10 @@ use Inertia\Inertia;
 
 class ReportController extends Controller
 {
+    public function __construct(
+        protected NotificationService $notificationService
+    ) {}
+
     public function getDailyReportAll($date)
     {
         $reports = Report::where('report_date', $date)
@@ -100,6 +105,7 @@ class ReportController extends Controller
         }
 
         $report->calculateTotalHours();
+        $this->notificationService->sendReportSubmissionNotificationToManagers($report);
 
         return response()->json($report);
     }
