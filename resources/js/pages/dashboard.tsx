@@ -1,4 +1,5 @@
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
+import TaskTimeline from '@/components/admin/TaskTimeline';
 import NotificationMenu from '@/components/notifications/NotificationMenu';
 import RecentReportSection from '@/components/reports/RecentReportSection';
 import MajorTasks from '@/components/tasks/MajorTasks';
@@ -26,7 +27,7 @@ import {
     UserCheck,
     Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -116,6 +117,11 @@ export default function Dashboard(props: DashboardProps) {
 
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
 
+    useEffect(() => {
+        setSelectedEmployeeId('all');
+    }, []);
+
+
     const renderAdminDashboard = () => (
         <>
             {/* Charts and Recent Activity */}
@@ -167,6 +173,7 @@ export default function Dashboard(props: DashboardProps) {
                     </CardContent>
                 </Card>
             </div>
+            {/* <TaskTimeline/> */}
 
             <MajorTasks employees={employees || []} />
 
@@ -194,7 +201,6 @@ export default function Dashboard(props: DashboardProps) {
                                     }}
                                 >
                                     <option value="all">All employees</option>
-                                    <option value="">Select an employee</option>
                                     {(employees || []).map((employee) => (
                                         <option
                                             key={employee.id}

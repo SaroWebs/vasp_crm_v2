@@ -293,7 +293,7 @@ const MajorTasks = ({ employees: propEmployees = [] }: Props) => {
     };
 
     // Debounce timer ref
-    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const debounceTimerRef = useRef<any | null>(null);
 
     // Initial load
     useEffect(() => {
