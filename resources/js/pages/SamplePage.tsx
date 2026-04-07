@@ -15,7 +15,7 @@ export default function SamplePage() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Sample Page" />
             <div className="p-4">
-                <TaskTimeline/>
+                <TaskTimeline />
             </div>
         </AppLayout>
     );
