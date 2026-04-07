@@ -1,6 +1,5 @@
 import TaskDetailsModalContent from '@/components/admin/TaskDetailsModalContent';
 import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
-import axios from 'axios';
 import { Modal } from '@mantine/core';
 import axios from 'axios';
 import React, {
@@ -252,7 +251,7 @@ function formatEntryRange(entry: TimeEntry): string {
         month: 'short',
     });
 
-    return `${startLabel} → ${endLabel}`;
+    return `${startLabel} -> ${endLabel}`;
 }
 
 function overlapsRangeEntry(
@@ -297,6 +296,7 @@ function overlapsTaskRange(
     return taskStart <= rangeEnd && taskEnd >= rangeStart;
 }
 
+
 function getSchedulerType(task: Task, entry: TimeEntry): SchedulerType {
     if (entry.is_active) {
         return 'active_entry';
@@ -323,11 +323,6 @@ function getSchedulerType(task: Task, entry: TimeEntry): SchedulerType {
         default:
             return 'other';
     }
-}
-
-function hasActiveTimeEntry(task: Task): boolean {
-    const entries = task.time_entries;
-    return entries?.some((entry: TimeEntry) => entry.is_active) ?? false;
 }
 
 function getInitials(name: string): string {
@@ -461,29 +456,38 @@ function DailyTaskBlock({
     task,
     lane,
     onSelect,
+    isPlanned = false,
 }: {
     task: SchedulerDailyTask;
     lane: number;
     onSelect: (task: Task) => void;
+    isPlanned?: boolean;
 }) {
     const style = CHIP_STYLES[task.type];
     const totalHours = DAY_END - DAY_START;
     const leftPct = ((task.startHour - DAY_START) / totalHours) * 100;
     const widthPct = ((task.endHour - task.startHour) / totalHours) * 100;
     const showTime = task.endHour - task.startHour >= 0.75;
-    const isWorking = task.type === 'working';
+    const barHeight = isPlanned ? 18 : GANTT_BAR_H;
+    const isActiveEntry = task.timeEntry.is_active;
+    const titleSuffix = isPlanned
+        ? ' (Planned)'
+        : isActiveEntry
+          ? ' (Active)'
+          : '';
 
     return (
         <button
-            title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}${isWorking ? ' (Working)' : ''}`}
+            title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}${titleSuffix}`}
             onClick={() => onSelect(task.task)}
             style={{
                 top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
                 left: `calc(${leftPct}% + 2px)`,
                 width: `calc(${widthPct}% - 4px)`,
-                height: GANTT_BAR_H,
+                height: barHeight,
                 background: style.bg,
                 border: `0.5px solid ${style.border}`,
+                opacity: isPlanned ? 0.55 : 1,
             }}
             className='absolute rounded-lg px-2 py-1 text-left flex flex-col justify-center gap-1 overflow-hidden cursor-pointer'
         >
@@ -518,20 +522,21 @@ function DailyTaskBlock({
 }
 
 function GanttBar({
-        task,
-        lane,
-        left,
-        width,
-        onSelect,
-    }: {
-        task: SchedulerTask;
-        lane: number;
-        left: number;
-        width: number;
-        onSelect: (task: Task) => void;
-    }) {
+    task,
+    lane,
+    left,
+    width,
+    onSelect,
+}: {
+    task: SchedulerTask;
+    lane: number;
+    left: number;
+    width: number;
+    onSelect: (task: Task) => void;
+}) {
     const style = CHIP_STYLES[task.type];
     const rangeLabel = formatEntryRange(task.timeEntry);
+    const isWorking = task.type === 'working';
 
     return (
         <button
@@ -673,9 +678,7 @@ function DailyView({
                     <div
                         key={employee.id}
                         style={{
-                            height:
-                                dailyLayouts[index]?.rowHeight ??
-                                DAILY_ROW_MIN_H,
+                            height: dailyLayouts[index]?.rowHeight ?? DAILY_ROW_MIN_H,
                             display: 'flex',
                             alignItems: 'center',
                             padding: '0 16px',
@@ -872,13 +875,11 @@ function GridView({
     days,
     today,
     employees,
-    selectedTaskId,
     onSelectTask,
 }: {
     days: Date[];
     today: Date;
     employees: SchedulerEmployee[];
-    selectedTaskId: number | null;
     onSelectTask: (task: Task) => void;
 }) {
     const colWidth = days.length > 20 ? 190 : days.length > 10 ? 210 : 230;
@@ -1544,6 +1545,11 @@ const TaskTimeline = () => {
 
     function selectTask(task: Task): void {
         setSelectedTaskId(task.id);
+        setTaskDetails(null);
+        setTaskAttachments([]);
+        setTaskComments([]);
+        setDetailsError(null);
+        setDetailsLoading(true);
         setIsTaskModalOpen(true);
     }
 
@@ -1553,18 +1559,13 @@ const TaskTimeline = () => {
             detailsAbortRef.current = null;
         }
 
+        setTaskDetails(null);
+        setTaskAttachments([]);
+        setTaskComments([]);
+        setDetailsError(null);
+        setDetailsLoading(false);
         setIsTaskModalOpen(false);
     }
-
-    useEffect(() => {
-        if (!isTaskModalOpen) {
-            setTaskDetails(null);
-            setTaskAttachments([]);
-            setTaskComments([]);
-            setDetailsError(null);
-            setDetailsLoading(false);
-        }
-    }, [isTaskModalOpen]);
 
     useEffect(() => {
         if (!isTaskModalOpen || !selectedTaskId) {
@@ -1573,8 +1574,6 @@ const TaskTimeline = () => {
 
         const controller = new AbortController();
         detailsAbortRef.current = controller;
-        setDetailsLoading(true);
-        setDetailsError(null);
 
         Promise.all([
             axios.get(`/data/tasks/${selectedTaskId}`, {
@@ -1783,7 +1782,7 @@ const TaskTimeline = () => {
                             fontSize: 14,
                         }}
                     >
-                        {errorMessage ?? 'No time entries were found for the selected period.'}
+                        {errorMessage ?? 'No assigned tasks were found for the selected period.'}
                     </div>
                 ) : view === 'daily' ? (
                     <DailyView
@@ -1797,7 +1796,6 @@ const TaskTimeline = () => {
                         days={days}
                         today={today}
                         employees={schedulerEmployees}
-                        selectedTaskId={selectedTaskId}
                         onSelectTask={selectTask}
                     />
                 )}
