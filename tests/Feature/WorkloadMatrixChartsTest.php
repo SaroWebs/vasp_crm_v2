@@ -134,7 +134,7 @@ class WorkloadMatrixChartsTest extends TestCase
         ]);
 
         $row = $result['rows'][0] ?? [];
-        $this->assertSame(1, $row['active_task_count'] ?? null);
+        $this->assertSame(2, $row['active_task_count'] ?? null);
     }
 
     private function createTask(int $userId, string $state, array $overrides = []): Task

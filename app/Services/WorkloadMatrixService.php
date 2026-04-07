@@ -75,7 +75,7 @@ class WorkloadMatrixService
             ->whereHas('task', function ($query) use ($taskDateRange) {
                 $query->whereNull('deleted_at')
                     ->where(function ($query) use ($taskDateRange) {
-                        $query->whereBetween('due_at', $taskDateRange)
+                        $query->where('due_at', '>=', $taskDateRange[0])
                             ->orWhere(function ($query) use ($taskDateRange) {
                                 $query->whereNull('due_at')
                                     ->whereBetween('created_at', $taskDateRange);

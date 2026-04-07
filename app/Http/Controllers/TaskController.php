@@ -397,13 +397,22 @@ class TaskController extends Controller
         if ($request->query('from_date') && $request->query('to_date')) {
             $fromDate = Carbon::parse($request->query('from_date'))->startOfDay();
             $toDate = Carbon::parse($request->query('to_date'))->endOfDay();
-            $taskQuery->whereBetween('created_at', [$fromDate, $toDate]);
+            $taskQuery->where(function ($query) use ($fromDate, $toDate) {
+                $query->where('due_at', '>=', $fromDate)
+                    ->orWhere(function ($query) use ($fromDate) {
+                        $query->whereNull('due_at')
+                            ->where('created_at', '>=', $fromDate);
+                    });
+            });
         } elseif ($request->query('from_date')) {
             $fromDate = Carbon::parse($request->query('from_date'))->startOfDay();
-            $taskQuery->where('created_at', '>=', $fromDate);
+            $taskQuery->where(function ($query) use ($fromDate) {
+                $query->where('due_at', '>=', $fromDate)
+                    ->orWhereNull('due_at');
+            });
         } elseif ($request->query('to_date')) {
             $toDate = Carbon::parse($request->query('to_date'))->endOfDay();
-            $taskQuery->where('created_at', '<=', $toDate);
+            $taskQuery->where('due_at', '<=', $toDate);
         }
 
         // Filter by employee if provided

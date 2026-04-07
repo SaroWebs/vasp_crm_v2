@@ -256,7 +256,7 @@ export default function WorkloadMatrixIndex({
         () =>
             [
                 {
-                    name: 'Assigned Queue',
+                    name: 'Pending',
                     value: Math.max(
                         matrix.summary.total_active_tasks -
                             matrix.summary.total_in_progress_tasks,
@@ -287,7 +287,7 @@ export default function WorkloadMatrixIndex({
                             Workload Matrix
                         </h1>
                         <p className="text-muted-foreground">
-                            Assigned and in-progress task counts for each team
+                            Pending and in-progress task counts for each team
                             member
                         </p>
                     </div>
@@ -455,7 +455,7 @@ export default function WorkloadMatrixIndex({
                     </Card>
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardDescription>Assigned Tasks</CardDescription>
+                            <CardDescription>Pending Tasks</CardDescription>
                             <CardTitle className="text-3xl">
                                 {matrix.summary.total_active_tasks}
                             </CardTitle>
@@ -522,7 +522,7 @@ export default function WorkloadMatrixIndex({
                                         <Legend />
                                         <Bar
                                             dataKey="assignedQueue"
-                                            name="Assigned Queue"
+                                            name="Pending"
                                             stackId="assigned"
                                             fill="#f59e0b"
                                             radius={[0, 0, 0, 0]}
@@ -618,8 +618,8 @@ export default function WorkloadMatrixIndex({
                             </CardHeader>
                             <CardContent className="space-y-3 text-sm text-muted-foreground">
                                 <p>
-                                    `Assigned Queue` means assigned tasks that
-                                    are not yet in progress.
+                                    `Pending` means the tasks that
+                                    are not yet in progress or completed.
                                 </p>
                                 <p>
                                     `In Progress` means tasks actively being
@@ -638,7 +638,7 @@ export default function WorkloadMatrixIndex({
                     <CardHeader>
                         <CardTitle>Employee Workload</CardTitle>
                         <CardDescription>
-                            Assigned and in-progress task counts by employee
+                            Pending and in-progress task counts by employee
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -647,7 +647,7 @@ export default function WorkloadMatrixIndex({
                                 <TableRow>
                                     <TableHead>Employee</TableHead>
                                     <TableHead>Department</TableHead>
-                                    <TableHead>Assigned</TableHead>
+                                    <TableHead>Pending</TableHead>
                                     <TableHead>In Progress</TableHead>
                                 </TableRow>
                             </TableHeader>
