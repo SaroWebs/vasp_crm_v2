@@ -56,12 +56,10 @@ const HOURS = Array.from(
 const HOUR_W = 150;
 const ROW_H = 56;
 const DAILY_ROW_MIN_H = 64;
-const DAILY_TILE_MIN_W = 180;
-const DAILY_TILE_GAP = 12;
-const DAILY_TILE_V_GAP = 12;
 const NAME_W = 220;
 const HEADER_H = 44;
-const GRID_CARD_MIN_H = 118;
+const GANTT_BAR_H = 28;
+const GANTT_BAR_GAP = 8;
 
 const CHIP_STYLES: Record<
     SchedulerType,
@@ -143,67 +141,61 @@ function fmtHourFull(hour: number): string {
         : `${display} ${suffix}`;
 }
 
-function buildDailyTileLayout(
+function buildGanttLayout(
     tasks: SchedulerTask[],
-    day: Date,
-    timelineWidth: number,
+    days: Date[],
 ): {
-    tiles: Array<SchedulerTask & { left: number; width: number; lane: number }>;
+    bars: Array<SchedulerTask & { start: number; span: number; lane: number }>;
     rowHeight: number;
 } {
     if (tasks.length === 0) {
-        return { tiles: [], rowHeight: DAILY_ROW_MIN_H };
+        return { bars: [], rowHeight: ROW_H };
     }
 
-    const totalHours = DAY_END - DAY_START;
-    const tiles = tasks
+    const bars = tasks
         .map((task) => {
-            const window = getDailyWindow(task.task, day);
-            if (!window) {
+            const span = getTaskSpan(task.task, days);
+            if (!span) {
                 return null;
             }
 
-            const left = Math.max(
-                0,
-                ((window.startHour - DAY_START) / totalHours) * timelineWidth,
-            );
-            const right = Math.min(
-                timelineWidth,
-                ((window.endHour - DAY_START) / totalHours) * timelineWidth,
-            );
-            const width = Math.max(DAILY_TILE_MIN_W, right - left);
-            const clampedLeft = Math.min(
-                left,
-                Math.max(0, timelineWidth - width),
-            );
-
-            return { ...task, left: clampedLeft, width };
+            return { ...task, ...span };
         })
-        .filter((task): task is SchedulerTask & { left: number; width: number } => Boolean(task))
-        .sort((left, right) => left.left - right.left);
+        .filter(
+            (
+                task,
+            ): task is SchedulerTask & {
+                start: number;
+                span: number;
+            } => Boolean(task),
+        )
+        .sort((left, right) => left.start - right.start);
 
     const lanes: number[] = [];
-    const placed = tiles.map((task) => {
-        let lane = lanes.findIndex(
-            (rightEdge) => task.left >= rightEdge + DAILY_TILE_GAP,
-        );
+    const placed = bars.map((task) => {
+        const taskEnd = task.start + task.span - 1;
+        let lane = lanes.findIndex((endIndex) => task.start > endIndex);
 
         if (lane === -1) {
             lane = lanes.length;
-            lanes.push(task.left + task.width);
+            lanes.push(taskEnd);
         } else {
-            lanes[lane] = task.left + task.width;
+            lanes[lane] = taskEnd;
         }
 
         return { ...task, lane };
     });
 
     const rowHeight = Math.max(
-        DAILY_ROW_MIN_H,
-        lanes.length * GRID_CARD_MIN_H + (lanes.length + 1) * DAILY_TILE_V_GAP,
+        ROW_H,
+        placed.length === 0
+            ? ROW_H
+            : (Math.max(...placed.map((task) => task.lane)) + 1) *
+                  (GANTT_BAR_H + GANTT_BAR_GAP) +
+                  GANTT_BAR_GAP,
     );
 
-    return { tiles: placed, rowHeight };
+    return { bars: placed, rowHeight };
 }
 
 function parseDateValue(value?: string | null): Date | null {
@@ -236,6 +228,22 @@ function getTaskEnd(task: Task): Date {
         parseDateValue(task.created_at) ??
         endOfDay(new Date())
     );
+}
+
+function formatTaskRange(task: Task): string {
+    const start = getTaskStart(task);
+    const end = getTaskEnd(task);
+
+    const startLabel = start.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+    });
+    const endLabel = end.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+    });
+
+    return `${startLabel} → ${endLabel}`;
 }
 
 function overlapsRange(task: Task, rangeStart: Date, rangeEnd: Date): boolean {
@@ -297,53 +305,7 @@ function buildTaskLabel(task: Task): string {
     return base.length > 24 ? `${base.slice(0, 21)}...` : base;
 }
 
-function formatTaskDate(date?: string | null): string | null {
-    const parsedDate = parseDateValue(date);
-
-    if (!parsedDate) {
-        return null;
-    }
-
-    return parsedDate.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-    });
-}
-
-function formatTaskDateTime(date?: string | null): string | null {
-    const parsedDate = parseDateValue(date);
-
-    if (!parsedDate) {
-        return null;
-    }
-
-    return parsedDate.toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-}
-
-function getPriorityLabel(priority?: string | null): string | null {
-    if (!priority) {
-        return null;
-    }
-
-    const labels: Record<string, string> = {
-        P1: 'Critical',
-        P2: 'High',
-        P3: 'Medium',
-        P4: 'Low',
-    };
-
-    const normalized = priority.toUpperCase();
-
-    return labels[normalized] ?? priority;
-}
-
-function getDailyWindow(task: Task, day: Date): {startHour: number; endHour: number;} | null {
+function getDailyWindow(task: Task, day: Date): { startHour: number; endHour: number } | null {
     if (!intersectsDay(task, day)) {
         return null;
     }
@@ -381,6 +343,42 @@ function getDailyWindow(task: Task, day: Date): {startHour: number; endHour: num
     return { startHour, endHour };
 }
 
+function buildDailyBarLayout(
+    tasks: SchedulerDailyTask[],
+): { bars: Array<SchedulerDailyTask & { lane: number }>; rowHeight: number } {
+    if (tasks.length === 0) {
+        return { bars: [], rowHeight: DAILY_ROW_MIN_H };
+    }
+
+    const sorted = [...tasks].sort(
+        (left, right) => left.startHour - right.startHour,
+    );
+    const lanes: number[] = [];
+    const placed = sorted.map((task) => {
+        let lane = lanes.findIndex(
+            (endHour) => task.startHour >= endHour + 0.1,
+        );
+
+        if (lane === -1) {
+            lane = lanes.length;
+            lanes.push(task.endHour);
+        } else {
+            lanes[lane] = task.endHour;
+        }
+
+        return { ...task, lane };
+    });
+
+    const rowHeight = Math.max(
+        DAILY_ROW_MIN_H,
+        (Math.max(...placed.map((task) => task.lane)) + 1) *
+            (GANTT_BAR_H + GANTT_BAR_GAP) +
+            GANTT_BAR_GAP,
+    );
+
+    return { bars: placed, rowHeight };
+}
+
 function getTaskSpan(task: Task, days: Date[]): { start: number; span: number } | null {
     let startIndex = -1;
     let endIndex = -1;
@@ -401,161 +399,13 @@ function getTaskSpan(task: Task, days: Date[]): { start: number; span: number } 
     return { start: startIndex, span: endIndex - startIndex + 1 };
 }
 
-function TaskTile({task, isSelected, onSelect}: {
-        task: SchedulerTask;
-        isSelected: boolean;
-        onSelect: (task: Task) => void;
-    }){
-    const style = CHIP_STYLES[task.type];
-    const taskPriority = getPriorityLabel(task.task.priority);
-    const dueDate = formatTaskDate(task.task.due_at);
-    const assigneeCount = task.task.assigned_users?.length ?? 0;
-
-    return (
-        <button
-            title={task.task.title}
-            onClick={() => onSelect(task.task)}
-            style={{
-                display: 'flex',
-                width: '100%',
-                minHeight: GRID_CARD_MIN_H,
-                flexDirection: 'column',
-                gap: 8,
-                padding: 10,
-                borderRadius: 10,
-                background: isSelected ? '#bcccf1ea' : style.bg,
-                border: `1px solid ${isSelected ? '#378ADD' : style.border}`,
-                boxShadow: isSelected
-                    ? '0 0 0 1px rgba(55, 138, 221, 0.18), 0 1px 2px rgba(16, 24, 40, 0.06)'
-                    : '0 1px 2px rgba(16, 24, 40, 0.06)',
-                cursor: 'pointer',
-                textAlign: 'left',
-                overflow: 'hidden',
-            }}
-        >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                    <div
-                        style={{
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: style.color,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                        }}
-                    >
-                        {task.task.task_code || task.label}
-                    </div>
-                    <div
-                        style={{
-                            marginTop: 4,
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: 'var(--color-text-primary)',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            lineHeight: 1.35,
-                        }}
-                    >
-                        {task.task.title}
-                    </div>
-                </div>
-
-                <span
-                    style={{
-                        flexShrink: 0,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        padding: '3px 7px',
-                        borderRadius: 999,
-                        background: style.bg,
-                        color: style.color,
-                        border: `1px solid ${style.border}`,
-                        textTransform: 'capitalize',
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    {task.type.replace('_', ' ')}
-                </span>
-            </div>
-
-            <div
-                style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 6,
-                    marginTop: 'auto',
-                }}
-            >
-                {taskPriority ? (
-                    <span
-                        style={{
-                            fontSize: 10,
-                            fontWeight: 500,
-                            padding: '2px 6px',
-                            borderRadius: 999,
-                            background: style.bg,
-                            color: style.color,
-                            border: `1px solid ${style.border}`,
-                        }}
-                    >
-                        {taskPriority}
-                    </span>
-                ) : null}
-                {dueDate ? (
-                    <span
-                        style={{
-                            fontSize: 10,
-                            fontWeight: 500,
-                            padding: '2px 6px',
-                            borderRadius: 999,
-                            background: 'rgba(0, 0, 0, 0.04)',
-                            color: 'var(--color-text-secondary, #666)',
-                        }}
-                    >
-                        Due {dueDate}
-                    </span>
-                ) : null}
-                {task.task.estimate_hours ? (
-                    <span
-                        style={{
-                            fontSize: 10,
-                            fontWeight: 500,
-                            padding: '2px 6px',
-                            borderRadius: 999,
-                            background: 'rgba(0, 0, 0, 0.04)',
-                            color: 'var(--color-text-secondary, #666)',
-                        }}
-                    >
-                        {task.task.estimate_hours}h
-                    </span>
-                ) : null}
-                {assigneeCount > 0 ? (
-                    <span
-                        style={{
-                            fontSize: 10,
-                            fontWeight: 500,
-                            padding: '2px 6px',
-                            borderRadius: 999,
-                            background: 'rgba(0, 0, 0, 0.04)',
-                            color: 'var(--color-text-secondary, #666)',
-                        }}
-                    >
-                        {assigneeCount} assignee{assigneeCount === 1 ? '' : 's'}
-                    </span>
-                ) : null}
-            </div>
-        </button>
-    );
-}
-
-function DailyTaskBlock({task,onSelect}: {
+function DailyTaskBlock({
+        task,
+        lane,
+        onSelect,
+    }: {
         task: SchedulerDailyTask;
+        lane: number;
         onSelect: (task: Task) => void;
     }) {
     const style = CHIP_STYLES[task.type];
@@ -570,14 +420,14 @@ function DailyTaskBlock({task,onSelect}: {
             onClick={() => onSelect(task.task)}
             style={{
                 position: 'absolute',
-                top: 6,
-                bottom: 6,
+                top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
                 left: `calc(${leftPct}% + 2px)`,
                 width: `calc(${widthPct}% - 4px)`,
+                height: GANTT_BAR_H,
                 background: style.bg,
                 border: `0.5px solid ${style.border}`,
                 borderRadius: 6,
-                padding: '4px 7px',
+                padding: '4px 8px',
                 overflow: 'hidden',
                 cursor: 'pointer',
                 display: 'flex',
@@ -617,6 +467,77 @@ function DailyTaskBlock({task,onSelect}: {
     );
 }
 
+function GanttBar({
+        task,
+        lane,
+        isSelected,
+        left,
+        width,
+        onSelect,
+    }: {
+        task: SchedulerTask;
+        lane: number;
+        isSelected: boolean;
+        left: number;
+        width: number;
+        onSelect: (task: Task) => void;
+    }) {
+    const style = CHIP_STYLES[task.type];
+    const rangeLabel = formatTaskRange(task.task);
+
+    return (
+        <button
+            title={`${task.task.title} (${rangeLabel})`}
+            onClick={() => onSelect(task.task)}
+            style={{
+                position: 'absolute',
+                top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
+                left,
+                width,
+                height: GANTT_BAR_H,
+                background: isSelected ? '#bcccf1ea' : style.bg,
+                border: `1px solid ${isSelected ? '#378ADD' : style.border}`,
+                borderRadius: 8,
+                padding: '4px 10px',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: isSelected
+                    ? '0 0 0 1px rgba(55, 138, 221, 0.18)'
+                    : '0 1px 2px rgba(16, 24, 40, 0.06)',
+            }}
+        >
+            <span
+                style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: style.color,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {task.task.task_code || task.label}
+            </span>
+            <span
+                style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: 'var(--color-text-primary)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                }}
+            >
+                {task.task.title}
+            </span>
+        </button>
+    );
+}
+
 function DailyView({
         day,
         today,
@@ -639,13 +560,9 @@ function DailyView({
     const dailyLayouts = useMemo(
         () =>
             employees.map((employee) =>
-                buildDailyTileLayout(
-                    employee.tasks[dayKey] ?? [],
-                    day,
-                    timelineWidth,
-                ),
+                buildDailyBarLayout(employee.dailyTasks[dayKey] ?? []),
             ),
-        [employees, dayKey, day, timelineWidth],
+        [employees, dayKey],
     );
 
     return (
@@ -866,7 +783,7 @@ function DailyView({
 
                     {employees.map((employee, index) => {
                         const layout = dailyLayouts[index] ?? {
-                            tiles: [],
+                            bars: [],
                             rowHeight: DAILY_ROW_MIN_H,
                         };
 
@@ -883,26 +800,13 @@ function DailyView({
                                     zIndex: 1,
                                 }}
                             >
-                                {layout.tiles.map((task) => (
-                                    <div
-                                        key={`${employee.id}-${task.id}`}
-                                        style={{
-                                            position: 'absolute',
-                                            top:
-                                                DAILY_TILE_V_GAP +
-                                                task.lane *
-                                                    (GRID_CARD_MIN_H +
-                                                        DAILY_TILE_V_GAP),
-                                            left: task.left,
-                                            width: task.width,
-                                        }}
-                                    >
-                                        <TaskTile
-                                            task={task}
-                                            isSelected={false}
-                                            onSelect={onSelectTask}
-                                        />
-                                    </div>
+                                {layout.bars.map((task) => (
+                                    <DailyTaskBlock
+                                        key={`${employee.id}-${task.id}-${task.startHour}`}
+                                        task={task}
+                                        lane={task.lane}
+                                        onSelect={onSelectTask}
+                                    />
                                 ))}
                             </div>
                         );
@@ -928,6 +832,13 @@ function GridView({
     }) {
     const colWidth = days.length > 20 ? 190 : days.length > 10 ? 210 : 230;
     const gridMinWidth = NAME_W + days.length * colWidth;
+    const ganttLayouts = useMemo(
+        () =>
+            employees.map((employee) =>
+                buildGanttLayout(employee.allTasks, days),
+            ),
+        [employees, days],
+    );
 
     return (
         <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -1048,155 +959,141 @@ function GridView({
                     })}
                 </div>
 
-                {employees.map((employee, index) => (
-                    <div
-                        key={employee.id}
-                        style={{
-                            minHeight: ROW_H,
-                            height: 'auto',
-                            display: 'flex',
-                            borderBottom:
-                                index < employees.length - 1
-                                    ? '0.5px solid #e0e0d8'
-                                    : 'none',
-                        }}
-                    >
+                {employees.map((employee, index) => {
+                    const layout = ganttLayouts[index] ?? {
+                        bars: [],
+                        rowHeight: ROW_H,
+                    };
+
+                    return (
                         <div
+                            key={employee.id}
                             style={{
-                                minWidth: NAME_W,
-                                width: NAME_W,
-                                flexShrink: 0,
+                                minHeight: ROW_H,
+                                height: layout.rowHeight,
                                 display: 'flex',
-                                alignItems: 'center',
-                                padding: '12px 16px',
-                                gap: 10,
-                                borderRight: '0.5px solid #e0e0d8',
-                                background: '#fff',
-                                position: 'sticky',
-                                left: 0,
-                                zIndex: 2,
+                                borderBottom:
+                                    index < employees.length - 1
+                                        ? '0.5px solid #e0e0d8'
+                                        : 'none',
                             }}
                         >
                             <div
                                 style={{
-                                    width: 28,
-                                    height: 28,
-                                    borderRadius: '50%',
+                                    minWidth: NAME_W,
+                                    width: NAME_W,
                                     flexShrink: 0,
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: 11,
-                                    fontWeight: 500,
-                                    background: employee.avatarBg,
-                                    color: employee.avatarColor,
+                                    padding: '12px 16px',
+                                    gap: 10,
+                                    borderRight: '0.5px solid #e0e0d8',
+                                    background: '#fff',
+                                    position: 'sticky',
+                                    left: 0,
+                                    zIndex: 2,
                                 }}
                             >
-                                {employee.initials}
-                            </div>
-                            <div>
                                 <div
                                     style={{
-                                        fontSize: 13,
-                                        fontWeight: 500,
-                                        color: 'var(--color-text-primary)',
-                                    }}
-                                >
-                                    {employee.name}
-                                </div>
-                                <div
-                                    style={{
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: '50%',
+                                        flexShrink: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
                                         fontSize: 11,
-                                        color: 'var(--color-text-secondary, #888)',
+                                        fontWeight: 500,
+                                        background: employee.avatarBg,
+                                        color: employee.avatarColor,
                                     }}
                                 >
-                                    {employee.role}
+                                    {employee.initials}
                                 </div>
-                            </div>
-                        </div>
-
-                        <div
-                            style={{
-                                position: 'relative',
-                                width: days.length * colWidth,
-                                minHeight: ROW_H,
-                            }}
-                        >
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    display: 'flex',
-                                }}
-                            >
-                                {days.map((date) => {
-                                    const isWeekend =
-                                        date.getDay() === 0 ||
-                                        date.getDay() === 6;
-
-                                    return (
-                                        <div
-                                            key={`${employee.id}-bg-${formatDateKey(date)}`}
-                                            style={{
-                                                minWidth: colWidth,
-                                                width: colWidth,
-                                                flexShrink: 0,
-                                                borderRight:
-                                                    '0.5px solid #e0e0d8',
-                                                background: isWeekend
-                                                    ? 'var(--color-background-secondary, #f9f9f7)'
-                                                    : 'transparent',
-                                            }}
-                                        />
-                                    );
-                                })}
+                                <div>
+                                    <div
+                                        style={{
+                                            fontSize: 13,
+                                            fontWeight: 500,
+                                            color: 'var(--color-text-primary)',
+                                        }}
+                                    >
+                                        {employee.name}
+                                    </div>
+                                    <div
+                                        style={{
+                                            fontSize: 11,
+                                            color: 'var(--color-text-secondary, #888)',
+                                        }}
+                                    >
+                                        {employee.role}
+                                    </div>
+                                </div>
                             </div>
 
                             <div
                                 style={{
                                     position: 'relative',
-                                    display: 'grid',
-                                    gridTemplateColumns: `repeat(${days.length}, ${colWidth}px)`,
-                                    gap: 0,
-                                    padding: 0,
-                                    zIndex: 1,
+                                    width: days.length * colWidth,
+                                    height: layout.rowHeight,
                                 }}
                             >
-                                {employee.allTasks
-                                    .map((task) => {
-                                        const span = getTaskSpan(
-                                            task.task,
-                                            days,
-                                        );
-
-                                        if (!span) {
-                                            return null;
-                                        }
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        display: 'flex',
+                                    }}
+                                >
+                                    {days.map((date) => {
+                                        const isWeekend =
+                                            date.getDay() === 0 ||
+                                            date.getDay() === 6;
 
                                         return (
                                             <div
-                                                key={`${employee.id}-${task.id}`}
-                                                className='m-2'
+                                                key={`${employee.id}-bg-${formatDateKey(date)}`}
                                                 style={{
-                                                    gridColumn: `${span.start + 1} / span ${span.span}`,
+                                                    minWidth: colWidth,
+                                                    width: colWidth,
+                                                    flexShrink: 0,
+                                                    borderRight:
+                                                        '0.5px solid #e0e0d8',
+                                                    background: isWeekend
+                                                        ? 'var(--color-background-secondary, #f9f9f7)'
+                                                        : 'transparent',
                                                 }}
-                                            >
-                                                <TaskTile
-                                                    task={task}
-                                                    isSelected={
-                                                        task.id ===
-                                                        selectedTaskId
-                                                    }
-                                                    onSelect={onSelectTask}
-                                                />
-                                            </div>
+                                            />
                                         );
-                                    })
-                                    .filter(Boolean)}
+                                    })}
+                                </div>
+
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        zIndex: 1,
+                                    }}
+                                >
+                                    {layout.bars.map((task) => (
+                                        <GanttBar
+                                            key={`${employee.id}-${task.id}-${task.start}`}
+                                            task={task}
+                                            lane={task.lane}
+                                            isSelected={
+                                                task.id === selectedTaskId
+                                            }
+                                            left={task.start * colWidth + 8}
+                                            width={task.span * colWidth - 16}
+                                            onSelect={onSelectTask}
+                                        />
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
