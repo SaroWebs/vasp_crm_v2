@@ -360,6 +360,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         // Workload matrix routes
         Route::get('/workload-matrix', [WorkloadMatrixController::class, 'index'])->name('workload-matrix.index');
         Route::get('/api/workload-matrix', [WorkloadMatrixController::class, 'data'])->name('api.workload-matrix');
+        Route::get('/api/workload-matrix/tasks', [WorkloadMatrixController::class, 'tasks'])->name('api.workload-matrix.tasks');
         Route::get('/api/workload-matrix/export', [WorkloadMatrixController::class, 'export'])->name('api.workload-matrix.export');
 
         // Reports routes

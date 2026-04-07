@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -5,6 +6,13 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -16,7 +24,7 @@ import {
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Download, RefreshCw } from 'lucide-react';
+import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
     Bar,
@@ -64,6 +72,7 @@ interface ChartData {
     workloadByEmployee: Array<{
         name: string;
         fullName: string;
+        userId: number;
         assigned: number;
         inProgress: number;
         estimatedHours: number;
@@ -99,6 +108,27 @@ interface WorkloadMatrixProps {
     }>;
 }
 
+type TaskSegment = 'pending' | 'in_progress';
+
+interface WorkloadTask {
+    id: number;
+    task_code: string;
+    title: string;
+    state: string;
+    due_at: string | null;
+    estimate_hours: number | null;
+    assigned_department_id: number | null;
+    assigned_department?: {
+        id: number;
+        name: string;
+    } | null;
+    active_time_entry?: {
+        id: number;
+        start_time: string;
+        duration_seconds: number;
+    } | null;
+}
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -117,6 +147,17 @@ export default function WorkloadMatrixIndex({
 }: WorkloadMatrixProps) {
     const [matrix, setMatrix] = useState<MatrixPayload>(initialMatrix);
     const [loading, setLoading] = useState(false);
+    const [taskModalOpen, setTaskModalOpen] = useState(false);
+    const [taskModalLoading, setTaskModalLoading] = useState(false);
+    const [taskModalError, setTaskModalError] = useState<string | null>(null);
+    const [taskModalTasks, setTaskModalTasks] = useState<WorkloadTask[]>([]);
+    const [taskModalTotal, setTaskModalTotal] = useState(0);
+    const [taskModalSegment, setTaskModalSegment] =
+        useState<TaskSegment | null>(null);
+    const [taskModalEmployee, setTaskModalEmployee] = useState<{
+        userId: number;
+        name: string;
+    } | null>(null);
 
     const fetchMatrix = async (): Promise<void> => {
         setLoading(true);
@@ -170,6 +211,95 @@ export default function WorkloadMatrixIndex({
             matrix.summary.total_in_progress_tasks,
         ],
     );
+
+    const formatDuration = (seconds: number): string => {
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+            return '0m';
+        }
+
+        const totalMinutes = Math.floor(seconds / 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        if (hours <= 0) {
+            return `${minutes}m`;
+        }
+
+        return `${hours}h ${minutes}m`;
+    };
+
+    const closeTaskModal = (open: boolean): void => {
+        setTaskModalOpen(open);
+        if (!open) {
+            setTaskModalTasks([]);
+            setTaskModalTotal(0);
+            setTaskModalError(null);
+            setTaskModalSegment(null);
+            setTaskModalEmployee(null);
+        }
+    };
+
+    const openTaskModal = async (
+        segment: TaskSegment,
+        payload: {
+            userId?: number;
+            fullName?: string;
+            name?: string;
+            assignedQueue?: number;
+            inProgress?: number;
+        },
+    ): Promise<void> => {
+        if (!payload?.userId) {
+            return;
+        }
+
+        const segmentCount =
+            segment === 'pending'
+                ? payload.assignedQueue ?? 0
+                : payload.inProgress ?? 0;
+
+        if (segmentCount <= 0) {
+            return;
+        }
+
+        setTaskModalOpen(true);
+        setTaskModalLoading(true);
+        setTaskModalError(null);
+        setTaskModalTasks([]);
+        setTaskModalTotal(0);
+        setTaskModalSegment(segment);
+        setTaskModalEmployee({
+            userId: payload.userId,
+            name: payload.fullName ?? payload.name ?? 'Employee',
+        });
+
+        try {
+            const response = await fetch(
+                `/admin/api/workload-matrix/tasks?user_id=${payload.userId}&segment=${segment}`,
+            );
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    result?.message ??
+                        'Unable to load tasks for this workload segment.',
+                );
+            }
+
+            const tasksPayload = result?.tasks;
+            setTaskModalTasks(tasksPayload?.data ?? []);
+            setTaskModalTotal(
+                tasksPayload?.total ?? tasksPayload?.data?.length ?? 0,
+            );
+        } catch (error) {
+            console.error('Failed to load workload tasks', error);
+            setTaskModalError(
+                'Unable to load tasks for this workload segment.',
+            );
+        } finally {
+            setTaskModalLoading(false);
+        }
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -286,6 +416,13 @@ export default function WorkloadMatrixIndex({
                                             stackId="assigned"
                                             fill="#f59e0b"
                                             radius={[0, 0, 0, 0]}
+                                            cursor="pointer"
+                                            onClick={(data) =>
+                                                openTaskModal(
+                                                    'pending',
+                                                    data?.payload ?? {},
+                                                )
+                                            }
                                         >
                                             <LabelList
                                                 dataKey="assignedQueue"
@@ -303,6 +440,13 @@ export default function WorkloadMatrixIndex({
                                             stackId="assigned"
                                             fill="#3b82f6"
                                             radius={[0, 4, 4, 0]}
+                                            cursor="pointer"
+                                            onClick={(data) =>
+                                                openTaskModal(
+                                                    'in_progress',
+                                                    data?.payload ?? {},
+                                                )
+                                            }
                                         >
                                             <LabelList
                                                 dataKey="inProgress"
@@ -362,7 +506,7 @@ export default function WorkloadMatrixIndex({
                     </div>
                 ) : null}
 
-                <Card className='hidden'>
+                <Card className="hidden">
                     <CardHeader>
                         <CardTitle>Employee Workload</CardTitle>
                     </CardHeader>
@@ -419,6 +563,82 @@ export default function WorkloadMatrixIndex({
                     </CardContent>
                 </Card>
             </div>
+
+            <Dialog open={taskModalOpen} onOpenChange={closeTaskModal}>
+                <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {taskModalSegment === 'pending'
+                                ? 'Pending Tasks'
+                                : taskModalSegment === 'in_progress'
+                                  ? 'In Progress Tasks'
+                                  : 'Tasks'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {taskModalEmployee?.name
+                                ? `${taskModalEmployee.name} - ${taskModalTotal} tasks`
+                                : 'Task details'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {taskModalLoading ? (
+                        <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Loading tasks...
+                        </div>
+                    ) : taskModalError ? (
+                        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                            {taskModalError}
+                        </div>
+                    ) : taskModalTasks.length === 0 ? (
+                        <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                            No tasks found for this segment.
+                        </div>
+                    ) : (
+                        <div className="max-h-[420px] overflow-y-auto rounded-md border">
+                            <div className="divide-y">
+                                {taskModalTasks.map((task) => (
+                                    <div
+                                        key={task.id}
+                                        className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                                    >
+                                        <div>
+                                            <div className="text-sm font-semibold">
+                                                {task.task_code}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                                {task.title}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                                            <Badge variant="outline">
+                                                {task.state}
+                                            </Badge>
+                                            {task.active_time_entry ? (
+                                                <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20">
+                                                    Working{' '}
+                                                    {formatDuration(
+                                                        task.active_time_entry
+                                                            .duration_seconds,
+                                                    )}
+                                                </Badge>
+                                            ) : null}
+                                            <span className="text-muted-foreground">
+                                                Due:{' '}
+                                                {task.due_at
+                                                    ? new Date(
+                                                          task.due_at,
+                                                      ).toLocaleDateString()
+                                                    : 'Not set'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

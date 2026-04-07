@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\FetchWorkloadMatrixTasksRequest;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\User;
 use App\Services\WorkloadMatrixService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -127,6 +129,67 @@ class WorkloadMatrixController extends Controller
             fclose($file);
         }, 'workload_matrix.csv', [
             'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    public function tasks(
+        FetchWorkloadMatrixTasksRequest $request,
+        WorkloadMatrixService $workloadMatrixService
+    ): JsonResponse {
+        $user = User::find(Auth::id());
+        $this->authorizeAccess($user);
+
+        $validated = $request->validated();
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $targetUserId = (int) $validated['user_id'];
+
+        $tasks = $workloadMatrixService
+            ->segmentTasksQuery($targetUserId, (string) $validated['segment'])
+            ->with([
+                'assignedDepartment:id,name',
+                'timeEntries' => function ($query) use ($targetUserId) {
+                    $query
+                        ->where('is_active', true)
+                        ->where('user_id', $targetUserId)
+                        ->select('id', 'task_id', 'user_id', 'start_time', 'end_time', 'is_active');
+                },
+            ])
+            ->select([
+                'id',
+                'task_code',
+                'title',
+                'state',
+                'due_at',
+                'estimate_hours',
+                'assigned_department_id',
+                'created_at',
+            ])
+            ->latest('created_at')
+            ->paginate($perPage)
+            ->through(function ($task) {
+                $activeEntry = $task->timeEntries->first();
+
+                return [
+                    'id' => $task->id,
+                    'task_code' => $task->task_code,
+                    'title' => $task->title,
+                    'state' => $task->state,
+                    'due_at' => $task->due_at,
+                    'estimate_hours' => $task->estimate_hours,
+                    'assigned_department_id' => $task->assigned_department_id,
+                    'assigned_department' => $task->assignedDepartment,
+                    'active_time_entry' => $activeEntry
+                        ? [
+                            'id' => $activeEntry->id,
+                            'start_time' => $activeEntry->start_time,
+                            'duration_seconds' => $activeEntry->calculateDuration(),
+                        ]
+                        : null,
+                ];
+            });
+
+        return response()->json([
+            'tasks' => $tasks,
         ]);
     }
 

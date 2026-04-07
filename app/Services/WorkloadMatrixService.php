@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Employee;
+use App\Models\Task;
 use App\Models\TaskAssignment;
 use App\Models\TaskTimeEntry;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class WorkloadMatrixService
 {
@@ -226,6 +228,7 @@ class WorkloadMatrixService
             return [
                 'name' => explode(' ', $row['name'])[0], // First name only for shorter labels
                 'fullName' => $row['name'],
+                'userId' => $row['user_id'],
                 'assigned' => $row['active_task_count'],
                 'inProgress' => $row['in_progress_task_count'],
                 'estimatedHours' => $row['open_estimated_hours'],
@@ -267,6 +270,25 @@ class WorkloadMatrixService
             'workloadByDepartment' => $workloadByDepartment,
             'workloadTrend' => $workloadTrend,
         ];
+    }
+
+    public function segmentTasksQuery(int $userId, string $segment): Builder
+    {
+        $query = Task::query()
+            ->whereHas('taskAssignments', function ($assignmentQuery) use ($userId) {
+                $assignmentQuery
+                    ->where('user_id', $userId)
+                    ->where('is_active', true);
+            })
+            ->whereNotIn('state', self::TERMINAL_TASK_STATES);
+
+        if ($segment === 'in_progress') {
+            $query->whereIn('state', self::IN_PROGRESS_TASK_STATES);
+        } else {
+            $query->whereNotIn('state', self::IN_PROGRESS_TASK_STATES);
+        }
+
+        return $query;
     }
 
     private function resolveDateRange(array $filters): array
