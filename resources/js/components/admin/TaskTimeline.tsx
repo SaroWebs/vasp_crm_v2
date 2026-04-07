@@ -2,7 +2,14 @@ import TaskDetailsModalContent from '@/components/admin/TaskDetailsModalContent'
 import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
 import axios from 'axios';
 import { Modal } from '@mantine/core';
-import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
+import React, {
+    startTransition,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
 type SchedulerType =
     | 'active_entry'
@@ -12,6 +19,7 @@ type SchedulerType =
     | 'review'
     | 'blocked'
     | 'ticket'
+    | 'working'
     | 'other';
 
 interface SchedulerTask {
@@ -74,6 +82,7 @@ const CHIP_STYLES: Record<
     review: { bg: '#ffeed0', color: '#854F0B', border: '#FAC775' },
     blocked: { bg: '#F7D7D7', color: '#8E2A2A', border: '#F1B7B7' },
     ticket: { bg: '#FBEAF0', color: '#993556', border: '#F4C0D1' },
+    working: { bg: '#DCFCE7', color: '#16606D', border: '#86EFAC' },
     other: { bg: '#EDF4F4', color: '#16606D', border: '#B9DDE0' },
 };
 
@@ -316,6 +325,11 @@ function getSchedulerType(task: Task, entry: TimeEntry): SchedulerType {
     }
 }
 
+function hasActiveTimeEntry(task: Task): boolean {
+    const entries = task.time_entries;
+    return entries?.some((entry: TimeEntry) => entry.is_active) ?? false;
+}
+
 function getInitials(name: string): string {
     return name
         .split(' ')
@@ -361,8 +375,7 @@ function getDailyEntryWindow(
     const clippedStart = entryStart > dayStart ? entryStart : dayStart;
     const clippedEnd = entryEnd < dayEnd ? entryEnd : dayEnd;
 
-    let startHour =
-        clippedStart.getHours() + clippedStart.getMinutes() / 60;
+    let startHour = clippedStart.getHours() + clippedStart.getMinutes() / 60;
     let endHour = clippedEnd.getHours() + clippedEnd.getMinutes() / 60;
 
     if (endHour <= startHour) {
@@ -384,9 +397,10 @@ function getDailyEntryWindow(
     return { startHour, endHour };
 }
 
-function buildDailyBarLayout(
-    tasks: SchedulerDailyTask[],
-): { bars: Array<SchedulerDailyTask & { lane: number }>; rowHeight: number } {
+function buildDailyBarLayout(tasks: SchedulerDailyTask[]): {
+    bars: Array<SchedulerDailyTask & { lane: number }>;
+    rowHeight: number;
+} {
     if (tasks.length === 0) {
         return { bars: [], rowHeight: DAILY_ROW_MIN_H };
     }
@@ -444,23 +458,24 @@ function getEntrySpan(
 }
 
 function DailyTaskBlock({
-        task,
-        lane,
-        onSelect,
-    }: {
-        task: SchedulerDailyTask;
-        lane: number;
-        onSelect: (task: Task) => void;
-    }) {
+    task,
+    lane,
+    onSelect,
+}: {
+    task: SchedulerDailyTask;
+    lane: number;
+    onSelect: (task: Task) => void;
+}) {
     const style = CHIP_STYLES[task.type];
     const totalHours = DAY_END - DAY_START;
     const leftPct = ((task.startHour - DAY_START) / totalHours) * 100;
     const widthPct = ((task.endHour - task.startHour) / totalHours) * 100;
     const showTime = task.endHour - task.startHour >= 0.75;
+    const isWorking = task.type === 'working';
 
     return (
         <button
-            title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}`}
+            title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}${isWorking ? ' (Working)' : ''}`}
             onClick={() => onSelect(task.task)}
             style={{
                 top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
@@ -520,7 +535,7 @@ function GanttBar({
 
     return (
         <button
-            title={`${task.task.title} (${rangeLabel})`}
+            title={`${task.task.title} (${rangeLabel})${isWorking ? ' - Working' : ''}`}
             onClick={() => onSelect(task.task)}
             style={{
                 position: 'absolute',
@@ -570,16 +585,16 @@ function GanttBar({
 }
 
 function DailyView({
-        day,
-        today,
-        employees,
-        onSelectTask,
-    }: {
-        day: Date;
-        today: Date;
-        employees: SchedulerEmployee[];
-        onSelectTask: (task: Task) => void;
-    }) {
+    day,
+    today,
+    employees,
+    onSelectTask,
+}: {
+    day: Date;
+    today: Date;
+    employees: SchedulerEmployee[];
+    onSelectTask: (task: Task) => void;
+}) {
     const isToday = day.getTime() === today.getTime();
     const totalHours = DAY_END - DAY_START;
     const now = new Date();
@@ -617,7 +632,8 @@ function DailyView({
                         alignItems: 'center',
                         padding: '0 16px',
                         borderBottom: '0.5px solid #e0e0d8',
-                        background: 'var(--color-background-secondary, #f9f9f7)',
+                        background:
+                            'var(--color-background-secondary, #f9f9f7)',
                         gap: 8,
                         position: 'sticky',
                         top: 0,
@@ -657,7 +673,9 @@ function DailyView({
                     <div
                         key={employee.id}
                         style={{
-                            height: dailyLayouts[index]?.rowHeight ?? DAILY_ROW_MIN_H,
+                            height:
+                                dailyLayouts[index]?.rowHeight ??
+                                DAILY_ROW_MIN_H,
                             display: 'flex',
                             alignItems: 'center',
                             padding: '0 16px',
@@ -715,7 +733,8 @@ function DailyView({
                         height: HEADER_H,
                         display: 'flex',
                         borderBottom: '0.5px solid #e0e0d8',
-                        background: 'var(--color-background-secondary, #f9f9f7)',
+                        background:
+                            'var(--color-background-secondary, #f9f9f7)',
                         minWidth: timelineWidth,
                         position: 'sticky',
                         top: 0,
@@ -723,7 +742,8 @@ function DailyView({
                     }}
                 >
                     {HOURS.map((hour) => {
-                        const isCurrent = isToday && hour === Math.floor(nowHour);
+                        const isCurrent =
+                            isToday && hour === Math.floor(nowHour);
 
                         return (
                             <div
@@ -849,18 +869,18 @@ function DailyView({
 }
 
 function GridView({
-        days,
-        today,
-        employees,
-        selectedTaskId,
-        onSelectTask,
-    }: {
-        days: Date[];
-        today: Date;
-        employees: SchedulerEmployee[];
-        selectedTaskId: number | null;
-        onSelectTask: (task: Task) => void;
-    }) {
+    days,
+    today,
+    employees,
+    selectedTaskId,
+    onSelectTask,
+}: {
+    days: Date[];
+    today: Date;
+    employees: SchedulerEmployee[];
+    selectedTaskId: number | null;
+    onSelectTask: (task: Task) => void;
+}) {
     const colWidth = days.length > 20 ? 190 : days.length > 10 ? 210 : 230;
     const gridMinWidth = NAME_W + days.length * colWidth;
     const now = new Date();
@@ -925,7 +945,8 @@ function GridView({
                         height: HEADER_H,
                         display: 'flex',
                         borderBottom: '0.5px solid #e0e0d8',
-                        background: 'var(--color-background-secondary, #f9f9f7)',
+                        background:
+                            'var(--color-background-secondary, #f9f9f7)',
                         position: 'sticky',
                         top: 0,
                         zIndex: 3,
@@ -940,7 +961,8 @@ function GridView({
                             alignItems: 'center',
                             padding: '0 16px',
                             borderRight: '0.5px solid #e0e0d8',
-                            background: 'var(--color-background-secondary, #f9f9f7)',
+                            background:
+                                'var(--color-background-secondary, #f9f9f7)',
                             position: 'sticky',
                             left: 0,
                             zIndex: 4,
@@ -1178,7 +1200,9 @@ const TaskTimeline = () => {
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [taskDetails, setTaskDetails] = useState<Task | null>(null);
-    const [taskAttachments, setTaskAttachments] = useState<TaskAttachment[]>([]);
+    const [taskAttachments, setTaskAttachments] = useState<TaskAttachment[]>(
+        [],
+    );
     const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -1197,7 +1221,10 @@ const TaskTimeline = () => {
         );
     }, [anchorDate, view, weekStart]);
 
-    const rangeStart = useMemo(() => startOfDay(days[0] ?? today), [days, today]);
+    const rangeStart = useMemo(
+        () => startOfDay(days[0] ?? today),
+        [days, today],
+    );
     const rangeEnd = useMemo(
         () => endOfDay(days[days.length - 1] ?? today),
         [days, today],
@@ -1561,21 +1588,27 @@ const TaskTimeline = () => {
             }),
         ])
             .then(([taskResponse, attachmentResponse, commentResponse]) => {
-                const responseTask = taskResponse.data?.data ?? taskResponse.data;
+                const responseTask =
+                    taskResponse.data?.data ?? taskResponse.data;
                 const responseAttachments =
-                    attachmentResponse.data?.data ?? attachmentResponse.data ?? [];
+                    attachmentResponse.data?.data ??
+                    attachmentResponse.data ??
+                    [];
                 const responseComments =
                     commentResponse.data?.data ?? commentResponse.data ?? [];
 
                 setTaskDetails(responseTask ?? null);
                 setTaskAttachments(responseAttachments);
                 setTaskComments(responseComments);
-                if(responseTask){
+                if (responseTask) {
                     console.log(responseTask);
                 }
             })
             .catch((error) => {
-                if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') {
+                if (
+                    error?.name === 'CanceledError' ||
+                    error?.code === 'ERR_CANCELED'
+                ) {
                     return;
                 }
 
@@ -1624,6 +1657,12 @@ const TaskTimeline = () => {
                 minHeight: '100vh',
             }}
         >
+            <style>{`
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.5; transform: scale(1.2); }
+                }
+            `}</style>
             <div
                 style={{
                     display: 'flex',
@@ -1643,7 +1682,7 @@ const TaskTimeline = () => {
                             margin: 0,
                         }}
                     >
-                        Timeline Schedule
+                        Timeline Schedule - In Progress Tasks
                     </p>
                     <p
                         style={{
@@ -1774,35 +1813,37 @@ const TaskTimeline = () => {
                         alignItems: 'center',
                     }}
                 >
-                    {(Object.keys(CHIP_STYLES) as SchedulerType[]).map((type) => (
-                        <div
-                            key={type}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 5,
-                            }}
-                        >
+                    {(Object.keys(CHIP_STYLES) as SchedulerType[]).map(
+                        (type) => (
                             <div
+                                key={type}
                                 style={{
-                                    width: 10,
-                                    height: 10,
-                                    borderRadius: 3,
-                                    background: CHIP_STYLES[type].bg,
-                                    border: `0.5px solid ${CHIP_STYLES[type].border}`,
-                                }}
-                            />
-                            <span
-                                style={{
-                                    fontSize: 11,
-                                    color: 'var(--color-text-secondary, #888)',
-                                    textTransform: 'capitalize',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 5,
                                 }}
                             >
-                                {type.replace('_', ' ')}
-                            </span>
-                        </div>
-                    ))}
+                                <div
+                                    style={{
+                                        width: 10,
+                                        height: 10,
+                                        borderRadius: 3,
+                                        background: CHIP_STYLES[type].bg,
+                                        border: `0.5px solid ${CHIP_STYLES[type].border}`,
+                                    }}
+                                />
+                                <span
+                                    style={{
+                                        fontSize: 11,
+                                        color: 'var(--color-text-secondary, #888)',
+                                        textTransform: 'capitalize',
+                                    }}
+                                >
+                                    {type.replace('_', ' ')}
+                                </span>
+                            </div>
+                        ),
+                    )}
                     <div
                         style={{
                             display: 'flex',
@@ -1833,7 +1874,9 @@ const TaskTimeline = () => {
             <Modal
                 opened={isTaskModalOpen}
                 onClose={closeTaskModal}
-                title={taskDetails?.title ?? selectedTask?.title ?? 'Task details'}
+                title={
+                    taskDetails?.title ?? selectedTask?.title ?? 'Task details'
+                }
                 size="xl"
             >
                 <TaskDetailsModalContent
