@@ -59,7 +59,7 @@ class WorkloadMatrixService
             ->whereHas('task', function ($query) {
                 $query->whereNull('deleted_at');
             })
-            ->with(['task:id,state,due_at,estimate_hours,created_at'])
+            ->with(['task:id,state,due_at,start_at,estimate_hours,created_at'])
             ->get();
 
         $taskIds = $assignments->pluck('task_id')->unique()->values();

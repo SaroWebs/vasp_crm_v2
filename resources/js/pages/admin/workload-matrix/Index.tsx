@@ -116,6 +116,7 @@ interface WorkloadTask {
     title: string;
     state: string;
     due_at: string | null;
+    start_at: string | null;
     estimate_hours: number | null;
     assigned_department_id: number | null;
     assigned_department?: {
@@ -195,7 +196,7 @@ export default function WorkloadMatrixIndex({
                     name: 'Pending',
                     value: Math.max(
                         matrix.summary.total_active_tasks -
-                            matrix.summary.total_in_progress_tasks,
+                        matrix.summary.total_in_progress_tasks,
                         0,
                     ),
                     color: '#f59e0b',
@@ -282,7 +283,7 @@ export default function WorkloadMatrixIndex({
             if (!response.ok) {
                 throw new Error(
                     result?.message ??
-                        'Unable to load tasks for this workload segment.',
+                    'Unable to load tasks for this workload segment.',
                 );
             }
 
@@ -571,8 +572,8 @@ export default function WorkloadMatrixIndex({
                             {taskModalSegment === 'pending'
                                 ? 'Pending Tasks'
                                 : taskModalSegment === 'in_progress'
-                                  ? 'In Progress Tasks'
-                                  : 'Tasks'}
+                                    ? 'In Progress Tasks'
+                                    : 'Tasks'}
                         </DialogTitle>
                         <DialogDescription>
                             {taskModalEmployee?.name
@@ -609,11 +610,26 @@ export default function WorkloadMatrixIndex({
                                             <div className="text-sm text-muted-foreground">
                                                 {task.title}
                                             </div>
+                                            <div className="flex gap-2 text-xs">
+                                                <span className="text-muted-foreground">
+                                                    Start Date:{' '}
+                                                    {task.start_at
+                                                        ? new Date(
+                                                            task.start_at,
+                                                        ).toLocaleDateString()
+                                                        : 'Not set'}
+                                                </span>
+                                                <span className="text-muted-foreground">
+                                                    Due:{' '}
+                                                    {task.due_at
+                                                        ? new Date(
+                                                            task.due_at,
+                                                        ).toLocaleDateString()
+                                                        : 'Not set'}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                                            <Badge variant="outline">
-                                                {task.state}
-                                            </Badge>
                                             {task.active_time_entry ? (
                                                 <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20">
                                                     Working{' '}
@@ -623,14 +639,9 @@ export default function WorkloadMatrixIndex({
                                                     )}
                                                 </Badge>
                                             ) : null}
-                                            <span className="text-muted-foreground">
-                                                Due:{' '}
-                                                {task.due_at
-                                                    ? new Date(
-                                                          task.due_at,
-                                                      ).toLocaleDateString()
-                                                    : 'Not set'}
-                                            </span>
+                                            <Badge variant="outline">
+                                                {task.state}
+                                            </Badge>
                                         </div>
                                     </div>
                                 ))}
