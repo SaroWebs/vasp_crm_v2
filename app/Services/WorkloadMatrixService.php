@@ -19,32 +19,19 @@ class WorkloadMatrixService
 
     public function build(array $filters = []): array
     {
-        [$periodStart, $periodEnd, $period] = $this->resolveDateRange($filters);
+        [$periodStart, $periodEnd] = $this->resolveDateRange($filters);
 
-        $departmentId = $filters['department_id'] ?? null;
-        $userId = $filters['user_id'] ?? null;
-
-        $employeesQuery = Employee::query()
+        $employees = Employee::query()
             ->with(['user:id,name,email,status', 'department:id,name'])
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');
-            });
-
-        if (! empty($departmentId)) {
-            $employeesQuery->where('department_id', $departmentId);
-        }
-
-        if (! empty($userId)) {
-            $employeesQuery->where('user_id', $userId);
-        }
-
-        $employees = $employeesQuery->get()
+            })
+            ->get()
             ->filter(fn (Employee $employee) => $employee->user !== null)
             ->values();
 
         if ($employees->isEmpty()) {
             return [
-                'filters' => $this->formatFilters($periodStart, $periodEnd, $period, $departmentId, $userId),
                 'summary' => [
                     'employee_count' => 0,
                     'total_active_tasks' => 0,
@@ -64,23 +51,11 @@ class WorkloadMatrixService
         $userIds = $employees->pluck('user_id')->map(fn ($id) => (int) $id)->all();
         $now = now();
 
-        $taskDateRange = [
-            $periodStart->copy()->startOfDay(),
-            $periodEnd->copy()->endOfDay(),
-        ];
-
         $assignments = TaskAssignment::query()
             ->whereIn('user_id', $userIds)
             ->where('is_active', true)
-            ->whereHas('task', function ($query) use ($taskDateRange) {
-                $query->whereNull('deleted_at')
-                    ->where(function ($query) use ($taskDateRange) {
-                        $query->where('due_at', '>=', $taskDateRange[0])
-                            ->orWhere(function ($query) use ($taskDateRange) {
-                                $query->whereNull('due_at')
-                                    ->whereBetween('created_at', $taskDateRange);
-                            });
-                    });
+            ->whereHas('task', function ($query) {
+                $query->whereNull('deleted_at');
             })
             ->with(['task:id,state,due_at,estimate_hours,created_at'])
             ->get();
@@ -238,7 +213,6 @@ class WorkloadMatrixService
         ];
 
         return [
-            'filters' => $this->formatFilters($periodStart, $periodEnd, $period, $departmentId, $userId),
             'summary' => $summary,
             'rows' => $rows->all(),
             'charts' => $this->buildChartData($rows, $summary),
@@ -297,7 +271,6 @@ class WorkloadMatrixService
 
     private function resolveDateRange(array $filters): array
     {
-        $period = $filters['period'] ?? 'weekly';
         $fromDate = $filters['from_date'] ?? null;
         $toDate = $filters['to_date'] ?? null;
 
@@ -305,24 +278,15 @@ class WorkloadMatrixService
             $start = Carbon::parse($fromDate)->startOfDay();
             $end = Carbon::parse($toDate)->endOfDay();
         } else {
-            if ($period === 'daily') {
-                $start = now()->startOfDay();
-                $end = now()->endOfDay();
-            } elseif ($period === 'monthly') {
-                $start = now()->startOfMonth()->startOfDay();
-                $end = now()->endOfMonth()->endOfDay();
-            } else {
-                $start = now()->startOfWeek()->startOfDay();
-                $end = now()->endOfWeek()->endOfDay();
-                $period = 'weekly';
-            }
+            $start = now()->startOfWeek()->startOfDay();
+            $end = now()->endOfWeek()->endOfDay();
         }
 
         if ($start->gt($end)) {
             [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
         }
 
-        return [$start, $end, $period];
+        return [$start, $end];
     }
 
     private function calculateCapacityHours(Carbon $start, Carbon $end): float
@@ -358,22 +322,6 @@ class WorkloadMatrixService
             'overdue_task_ids' => [],
             'assignment_state_counts' => [],
             'open_estimated_hours' => 0.0,
-        ];
-    }
-
-    private function formatFilters(
-        Carbon $periodStart,
-        Carbon $periodEnd,
-        string $period,
-        mixed $departmentId,
-        mixed $userId
-    ): array {
-        return [
-            'period' => $period,
-            'from_date' => $periodStart->toDateString(),
-            'to_date' => $periodEnd->toDateString(),
-            'department_id' => $departmentId,
-            'user_id' => $userId,
         ];
     }
 }

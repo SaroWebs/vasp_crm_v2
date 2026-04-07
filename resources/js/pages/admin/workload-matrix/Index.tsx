@@ -2,19 +2,9 @@ import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -26,8 +16,7 @@ import {
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import axios from 'axios';
-import { BarChart3, Download, PieChart, RefreshCw } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
     Bar,
@@ -84,13 +73,6 @@ interface ChartData {
 }
 
 interface MatrixPayload {
-    filters: {
-        period: string;
-        from_date: string;
-        to_date: string;
-        department_id?: number | null;
-        user_id?: number | null;
-    };
     summary: {
         employee_count: number;
         total_active_tasks: number;
@@ -107,17 +89,8 @@ interface MatrixPayload {
     generated_at: string;
 }
 
-interface FilterState {
-    period: string;
-    from_date: string;
-    to_date: string;
-    department_id: string;
-    user_id: string;
-}
-
 interface WorkloadMatrixProps {
     matrix: MatrixPayload;
-    filters: MatrixPayload['filters'];
     departments: Array<{ id: number; name: string }>;
     employees: Array<{
         id: number;
@@ -139,73 +112,18 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function WorkloadMatrixIndex({
     matrix: initialMatrix,
-    filters,
     departments,
     employees,
 }: WorkloadMatrixProps) {
     const [matrix, setMatrix] = useState<MatrixPayload>(initialMatrix);
     const [loading, setLoading] = useState(false);
-    const [filterState, setFilterState] = useState<FilterState>({
-        period: filters.period || 'weekly',
-        from_date: filters.from_date || '',
-        to_date: filters.to_date || '',
-        department_id: filters.department_id
-            ? String(filters.department_id)
-            : '',
-        user_id: filters.user_id ? String(filters.user_id) : '',
-    });
-
-    const filteredEmployees = useMemo(() => {
-        if (!filterState.department_id) {
-            return employees;
-        }
-
-        return employees.filter(
-            (employee) =>
-                String(employee.department_id ?? '') ===
-                filterState.department_id,
-        );
-    }, [employees, filterState.department_id]);
-
-    const setFilter = (key: keyof FilterState, value: string) => {
-        setFilterState((prev) => ({
-            ...prev,
-            [key]: value,
-            ...(key === 'department_id' ? { user_id: '' } : {}),
-        }));
-    };
-
-    const buildQuery = (): Record<string, string> => {
-        const query: Record<string, string> = {
-            period: filterState.period,
-        };
-
-        if (filterState.from_date) {
-            query.from_date = filterState.from_date;
-        }
-
-        if (filterState.to_date) {
-            query.to_date = filterState.to_date;
-        }
-
-        if (filterState.department_id) {
-            query.department_id = filterState.department_id;
-        }
-
-        if (filterState.user_id) {
-            query.user_id = filterState.user_id;
-        }
-
-        return query;
-    };
 
     const fetchMatrix = async (): Promise<void> => {
         setLoading(true);
         try {
-            const response = await axios.get('/admin/api/workload-matrix', {
-                params: buildQuery(),
-            });
-            setMatrix(response.data.data);
+            const response = await fetch('/admin/api/workload-matrix');
+            const result = await response.json();
+            setMatrix(result.data);
         } catch (error) {
             console.error('Failed to load workload matrix', error);
         } finally {
@@ -213,31 +131,8 @@ export default function WorkloadMatrixIndex({
         }
     };
 
-    const clearFilters = async (): Promise<void> => {
-        setFilterState({
-            period: 'weekly',
-            from_date: '',
-            to_date: '',
-            department_id: '',
-            user_id: '',
-        });
-
-        setLoading(true);
-        try {
-            const response = await axios.get('/admin/api/workload-matrix', {
-                params: { period: 'weekly' },
-            });
-            setMatrix(response.data.data);
-        } catch (error) {
-            console.error('Failed to reset workload matrix', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const exportCsv = (): void => {
-        const params = new URLSearchParams(buildQuery());
-        window.location.href = `/admin/api/workload-matrix/export?${params.toString()}`;
+        window.location.href = '/admin/api/workload-matrix/export';
     };
 
     const stackedWorkloadData = useMemo(
@@ -287,8 +182,7 @@ export default function WorkloadMatrixIndex({
                             Workload Matrix
                         </h1>
                         <p className="text-muted-foreground">
-                            Pending and in-progress task counts for each team
-                            member
+                            Current task assignments for each team member
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -309,188 +203,54 @@ export default function WorkloadMatrixIndex({
                     </div>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Filters</CardTitle>
-                        <CardDescription>
-                            Refine workload view by period, team, and employee
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-5">
-                            <div className="space-y-2">
-                                <Label htmlFor="period">Period</Label>
-                                <Select
-                                    value={filterState.period}
-                                    onValueChange={(value) =>
-                                        setFilter('period', value)
-                                    }
-                                >
-                                    <SelectTrigger id="period">
-                                        <SelectValue placeholder="Select period" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="daily">
-                                            Daily
-                                        </SelectItem>
-                                        <SelectItem value="weekly">
-                                            Weekly
-                                        </SelectItem>
-                                        <SelectItem value="monthly">
-                                            Monthly
-                                        </SelectItem>
-                                        <SelectItem value="custom">
-                                            Custom
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="from-date">From Date</Label>
-                                <Input
-                                    id="from-date"
-                                    type="date"
-                                    value={filterState.from_date}
-                                    onChange={(event) =>
-                                        setFilter(
-                                            'from_date',
-                                            event.target.value,
-                                        )
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="to-date">To Date</Label>
-                                <Input
-                                    id="to-date"
-                                    type="date"
-                                    value={filterState.to_date}
-                                    onChange={(event) =>
-                                        setFilter('to_date', event.target.value)
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="department">Department</Label>
-                                <Select
-                                    value={filterState.department_id || 'all'}
-                                    onValueChange={(value) =>
-                                        setFilter(
-                                            'department_id',
-                                            value === 'all' ? '' : value,
-                                        )
-                                    }
-                                >
-                                    <SelectTrigger id="department">
-                                        <SelectValue placeholder="All departments" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            All Departments
-                                        </SelectItem>
-                                        {departments.map((department) => (
-                                            <SelectItem
-                                                key={department.id}
-                                                value={String(department.id)}
-                                            >
-                                                {department.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="employee">Employee</Label>
-                                <Select
-                                    value={filterState.user_id || 'all'}
-                                    onValueChange={(value) =>
-                                        setFilter(
-                                            'user_id',
-                                            value === 'all' ? '' : value,
-                                        )
-                                    }
-                                >
-                                    <SelectTrigger id="employee">
-                                        <SelectValue placeholder="All employees" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            All Employees
-                                        </SelectItem>
-                                        {filteredEmployees.map((employee) => (
-                                            <SelectItem
-                                                key={employee.id}
-                                                value={String(employee.id)}
-                                            >
-                                                {employee.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button onClick={fetchMatrix} disabled={loading}>
-                                {loading ? 'Applying...' : 'Apply Filters'}
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={clearFilters}
-                                disabled={loading}
-                            >
-                                Clear
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-
                 <div className="grid gap-4 md:grid-cols-4">
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardDescription>Employees</CardDescription>
                             <CardTitle className="text-3xl">
                                 {matrix.summary.employee_count}
                             </CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                Employees
+                            </p>
                         </CardHeader>
                     </Card>
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardDescription>Pending Tasks</CardDescription>
                             <CardTitle className="text-3xl">
                                 {matrix.summary.total_active_tasks}
                             </CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                Assigned Tasks
+                            </p>
                         </CardHeader>
                     </Card>
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardDescription>In Progress Tasks</CardDescription>
                             <CardTitle className="text-3xl">
                                 {matrix.summary.total_in_progress_tasks}
                             </CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                In Progress
+                            </p>
                         </CardHeader>
                     </Card>
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardDescription>Overdue Tasks</CardDescription>
                             <CardTitle className="text-3xl">
                                 {matrix.summary.total_overdue_tasks}
                             </CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                Overdue
+                            </p>
                         </CardHeader>
                     </Card>
                 </div>
 
                 {matrix.charts && matrix.rows.length > 0 ? (
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <Card className="md:col-span-2">
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <Card className="col-span-2">
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <BarChart3 className="h-5 w-5" />
-                                    Workload Overview
-                                </CardTitle>
-                                <CardDescription>
-                                    Stacked assigned load split into waiting
-                                    work and tasks currently in progress
-                                </CardDescription>
+                                <CardTitle>Workload Overview</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={500}>
@@ -561,14 +321,7 @@ export default function WorkloadMatrixIndex({
 
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <PieChart className="h-5 w-5" />
-                                    Assignment Distribution
-                                </CardTitle>
-                                <CardDescription>
-                                    Overall split between waiting assigned work
-                                    and tasks being worked
-                                </CardDescription>
+                                <CardTitle>Assignment Distribution</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={320}>
@@ -606,40 +359,12 @@ export default function WorkloadMatrixIndex({
                                 </ResponsiveContainer>
                             </CardContent>
                         </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Reading Guide</CardTitle>
-                                <CardDescription>
-                                    The simplified view keeps the older visual
-                                    structure without mixing in completed or
-                                    rejected work
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3 text-sm text-muted-foreground">
-                                <p>
-                                    `Pending` means the tasks that
-                                    are not yet in progress or completed.
-                                </p>
-                                <p>
-                                    `In Progress` means tasks actively being
-                                    worked right now.
-                                </p>
-                                <p>
-                                    Completed, cancelled, and rejected tasks are
-                                    excluded from both charts and table totals.
-                                </p>
-                            </CardContent>
-                        </Card>
                     </div>
                 ) : null}
 
-                <Card>
+                <Card className='hidden'>
                     <CardHeader>
                         <CardTitle>Employee Workload</CardTitle>
-                        <CardDescription>
-                            Pending and in-progress task counts by employee
-                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -647,19 +372,19 @@ export default function WorkloadMatrixIndex({
                                 <TableRow>
                                     <TableHead>Employee</TableHead>
                                     <TableHead>Department</TableHead>
-                                    <TableHead>Pending</TableHead>
+                                    <TableHead>Assigned</TableHead>
                                     <TableHead>In Progress</TableHead>
+                                    <TableHead>Overdue</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {matrix.rows.length === 0 ? (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={4}
+                                            colSpan={5}
                                             className="text-center text-muted-foreground"
                                         >
-                                            No records found for the selected
-                                            filters.
+                                            No records found.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
@@ -682,6 +407,9 @@ export default function WorkloadMatrixIndex({
                                             </TableCell>
                                             <TableCell>
                                                 {row.in_progress_task_count}
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.overdue_task_count}
                                             </TableCell>
                                         </TableRow>
                                     ))

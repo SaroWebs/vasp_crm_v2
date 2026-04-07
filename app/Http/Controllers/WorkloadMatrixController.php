@@ -17,15 +17,7 @@ class WorkloadMatrixController extends Controller
         $user = User::find(Auth::id());
         $this->authorizeAccess($user);
 
-        $filters = $this->normalizeFilters($request->validate([
-            'period' => ['nullable', 'string', 'in:daily,weekly,monthly,custom'],
-            'from_date' => ['nullable', 'date'],
-            'to_date' => ['nullable', 'date'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
-        ]));
-
-        $matrix = $workloadMatrixService->build($filters);
+        $matrix = $workloadMatrixService->build();
 
         $departments = Department::query()
             ->where('status', 'active')
@@ -52,7 +44,6 @@ class WorkloadMatrixController extends Controller
 
         return Inertia::render('admin/workload-matrix/Index', [
             'matrix' => $matrix,
-            'filters' => $matrix['filters'],
             'departments' => $departments,
             'employees' => $employees,
         ]);
@@ -63,17 +54,9 @@ class WorkloadMatrixController extends Controller
         $user = User::find(Auth::id());
         $this->authorizeAccess($user);
 
-        $filters = $this->normalizeFilters($request->validate([
-            'period' => ['nullable', 'string', 'in:daily,weekly,monthly,custom'],
-            'from_date' => ['nullable', 'date'],
-            'to_date' => ['nullable', 'date'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
-        ]));
-
         return response()->json([
             'success' => true,
-            'data' => $workloadMatrixService->build($filters),
+            'data' => $workloadMatrixService->build(),
         ]);
     }
 
@@ -82,26 +65,12 @@ class WorkloadMatrixController extends Controller
         $user = User::find(Auth::id());
         $this->authorizeAccess($user);
 
-        $filters = $this->normalizeFilters($request->validate([
-            'period' => ['nullable', 'string', 'in:daily,weekly,monthly,custom'],
-            'from_date' => ['nullable', 'date'],
-            'to_date' => ['nullable', 'date'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
-        ]));
-
-        $payload = $workloadMatrixService->build($filters);
-        $fromDate = $payload['filters']['from_date'];
-        $toDate = $payload['filters']['to_date'];
-        $filename = "workload_matrix_{$fromDate}_to_{$toDate}.csv";
+        $payload = $workloadMatrixService->build();
 
         return response()->streamDownload(function () use ($payload) {
             $file = fopen('php://output', 'w');
 
             fputcsv($file, ['Workload Matrix Export']);
-            fputcsv($file, ['From Date', $payload['filters']['from_date']]);
-            fputcsv($file, ['To Date', $payload['filters']['to_date']]);
-            fputcsv($file, ['Period', $payload['filters']['period']]);
             fputcsv($file, ['Generated At', $payload['generated_at']]);
             fputcsv($file, []);
 
@@ -156,34 +125,9 @@ class WorkloadMatrixController extends Controller
             }
 
             fclose($file);
-        }, $filename, [
+        }, 'workload_matrix.csv', [
             'Content-Type' => 'text/csv',
         ]);
-    }
-
-    private function normalizeFilters(array $filters): array
-    {
-        $normalized = [];
-        foreach ($filters as $key => $value) {
-            if ($value === '' || $value === null) {
-                continue;
-            }
-            $normalized[$key] = $value;
-        }
-
-        if (! empty($normalized['from_date']) && empty($normalized['to_date'])) {
-            $normalized['to_date'] = $normalized['from_date'];
-        }
-
-        if (! empty($normalized['to_date']) && empty($normalized['from_date'])) {
-            $normalized['from_date'] = $normalized['to_date'];
-        }
-
-        if (! empty($normalized['from_date']) || ! empty($normalized['to_date'])) {
-            $normalized['period'] = $normalized['period'] ?? 'custom';
-        }
-
-        return $normalized;
     }
 
     private function authorizeAccess(?User $user): void
