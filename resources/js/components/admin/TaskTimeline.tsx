@@ -1,15 +1,16 @@
 import TaskDetailsModalContent from '@/components/admin/TaskDetailsModalContent';
-import { Task, type TaskAttachment, type TaskComment } from '@/types';
+import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
 import axios from 'axios';
 import { Modal } from '@mantine/core';
 import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 type SchedulerType =
+    | 'active_entry'
+    | 'completed_entry'
+    | 'inactive_in_progress'
     | 'assigned'
-    | 'in_progress'
     | 'review'
     | 'blocked'
-    | 'done'
     | 'ticket'
     | 'other';
 
@@ -18,6 +19,7 @@ interface SchedulerTask {
     label: string;
     type: SchedulerType;
     task: Task;
+    timeEntry: TimeEntry;
 }
 
 interface SchedulerDailyTask extends SchedulerTask {
@@ -58,18 +60,19 @@ const ROW_H = 56;
 const DAILY_ROW_MIN_H = 64;
 const NAME_W = 220;
 const HEADER_H = 44;
-const GANTT_BAR_H = 28;
+const GANTT_BAR_H = 40;
 const GANTT_BAR_GAP = 8;
 
 const CHIP_STYLES: Record<
     SchedulerType,
     { bg: string; color: string; border: string }
 > = {
-    assigned: { bg: '#EEEDFE', color: '#534AB7', border: '#CECBF6' },
-    in_progress: { bg: '#E6F1FB', color: '#185FA5', border: '#B5D4F4' },
-    review: { bg: '#FAEEDA', color: '#854F0B', border: '#FAC775' },
-    blocked: { bg: '#FCEDEA', color: '#9E2F2F', border: '#F6C8C2' },
-    done: { bg: '#EAF3DE', color: '#3B6D11', border: '#C0DD97' },
+    active_entry: { bg: '#d4eab7', color: '#236246', border: '#98d07e' },
+    completed_entry: { bg: '#f9c4f7', color: '#6f1f92', border: '#f194f8' },
+    inactive_in_progress: { bg: '#c5f5ef', color: '#1dbdc2', border: '#B5D4F4' },
+    assigned: { bg: '#afafaf', color: '#424247', border: '#434246' },
+    review: { bg: '#ffeed0', color: '#854F0B', border: '#FAC775' },
+    blocked: { bg: '#F7D7D7', color: '#8E2A2A', border: '#F1B7B7' },
     ticket: { bg: '#FBEAF0', color: '#993556', border: '#F4C0D1' },
     other: { bg: '#EDF4F4', color: '#16606D', border: '#B9DDE0' },
 };
@@ -154,7 +157,7 @@ function buildGanttLayout(
 
     const bars = tasks
         .map((task) => {
-            const span = getTaskSpan(task.task, days);
+            const span = getEntrySpan(task.timeEntry, days);
             if (!span) {
                 return null;
             }
@@ -212,27 +215,24 @@ function parseDateValue(value?: string | null): Date | null {
     return parsed;
 }
 
-function getTaskStart(task: Task): Date {
-    return (
-        parseDateValue(task.start_at) ??
-        parseDateValue(task.created_at) ??
-        startOfDay(new Date())
-    );
+function getEntryStart(entry: TimeEntry): Date {
+    return parseDateValue(entry.start_time) ?? startOfDay(new Date());
 }
 
-function getTaskEnd(task: Task): Date {
-    return (
-        parseDateValue(task.completed_at) ??
-        parseDateValue(task.due_at) ??
-        parseDateValue(task.start_at) ??
-        parseDateValue(task.created_at) ??
-        endOfDay(new Date())
-    );
+function getEntryEnd(entry: TimeEntry): Date {
+    const start = getEntryStart(entry);
+    const end = parseDateValue(entry.end_time) ?? new Date();
+
+    if (end.getTime() <= start.getTime()) {
+        return new Date(start.getTime() + 30 * 60 * 1000);
+    }
+
+    return end;
 }
 
-function formatTaskRange(task: Task): string {
-    const start = getTaskStart(task);
-    const end = getTaskEnd(task);
+function formatEntryRange(entry: TimeEntry): string {
+    const start = getEntryStart(entry);
+    const end = getEntryEnd(entry);
 
     const startLabel = start.toLocaleDateString('en-GB', {
         day: '2-digit',
@@ -246,17 +246,61 @@ function formatTaskRange(task: Task): string {
     return `${startLabel} → ${endLabel}`;
 }
 
-function overlapsRange(task: Task, rangeStart: Date, rangeEnd: Date): boolean {
-    const taskStart = getTaskStart(task);
-    const taskEnd = getTaskEnd(task);
+function overlapsRangeEntry(
+    entry: TimeEntry,
+    rangeStart: Date,
+    rangeEnd: Date,
+): boolean {
+    const entryStart = getEntryStart(entry);
+    const entryEnd = getEntryEnd(entry);
+    return entryStart <= rangeEnd && entryEnd >= rangeStart;
+}
+
+function intersectsDayEntry(entry: TimeEntry, day: Date): boolean {
+    return overlapsRangeEntry(entry, startOfDay(day), endOfDay(day));
+}
+
+function getTaskScheduleStart(task: Task): Date {
+    return (
+        parseDateValue(task.start_at) ??
+        parseDateValue(task.created_at) ??
+        startOfDay(new Date())
+    );
+}
+
+function getTaskScheduleEnd(task: Task): Date {
+    return (
+        parseDateValue(task.completed_at) ??
+        parseDateValue(task.due_at) ??
+        parseDateValue(task.start_at) ??
+        parseDateValue(task.created_at) ??
+        endOfDay(new Date())
+    );
+}
+
+function overlapsTaskRange(
+    task: Task,
+    rangeStart: Date,
+    rangeEnd: Date,
+): boolean {
+    const taskStart = getTaskScheduleStart(task);
+    const taskEnd = getTaskScheduleEnd(task);
     return taskStart <= rangeEnd && taskEnd >= rangeStart;
 }
 
-function intersectsDay(task: Task, day: Date): boolean {
-    return overlapsRange(task, startOfDay(day), endOfDay(day));
-}
+function getSchedulerType(task: Task, entry: TimeEntry): SchedulerType {
+    if (entry.is_active) {
+        return 'active_entry';
+    }
 
-function getSchedulerType(task: Task): SchedulerType {
+    if (['Done', 'Cancelled', 'Rejected'].includes(task.state)) {
+        return 'completed_entry';
+    }
+
+    if (task.state === 'InProgress' || task.state === 'InReview') {
+        return 'inactive_in_progress';
+    }
+
     if (task.ticket) {
         return 'ticket';
     }
@@ -265,14 +309,8 @@ function getSchedulerType(task: Task): SchedulerType {
         case 'Assigned':
         case 'Draft':
             return 'assigned';
-        case 'InProgress':
-            return 'in_progress';
-        case 'InReview':
-            return 'review';
         case 'Blocked':
             return 'blocked';
-        case 'Done':
-            return 'done';
         default:
             return 'other';
     }
@@ -305,20 +343,23 @@ function buildTaskLabel(task: Task): string {
     return base.length > 24 ? `${base.slice(0, 21)}...` : base;
 }
 
-function getDailyWindow(task: Task, day: Date): { startHour: number; endHour: number } | null {
-    if (!intersectsDay(task, day)) {
+function getDailyEntryWindow(
+    entry: TimeEntry,
+    day: Date,
+): { startHour: number; endHour: number } | null {
+    if (!intersectsDayEntry(entry, day)) {
         return null;
     }
 
-    const taskStart = getTaskStart(task);
-    const taskEnd = getTaskEnd(task);
+    const entryStart = getEntryStart(entry);
+    const entryEnd = getEntryEnd(entry);
     const dayStart = new Date(day);
     dayStart.setHours(DAY_START, 0, 0, 0);
     const dayEnd = new Date(day);
     dayEnd.setHours(DAY_END, 0, 0, 0);
 
-    const clippedStart = taskStart > dayStart ? taskStart : dayStart;
-    const clippedEnd = taskEnd < dayEnd ? taskEnd : dayEnd;
+    const clippedStart = entryStart > dayStart ? entryStart : dayStart;
+    const clippedEnd = entryEnd < dayEnd ? entryEnd : dayEnd;
 
     let startHour =
         clippedStart.getHours() + clippedStart.getMinutes() / 60;
@@ -379,12 +420,15 @@ function buildDailyBarLayout(
     return { bars: placed, rowHeight };
 }
 
-function getTaskSpan(task: Task, days: Date[]): { start: number; span: number } | null {
+function getEntrySpan(
+    entry: TimeEntry,
+    days: Date[],
+): { start: number; span: number } | null {
     let startIndex = -1;
     let endIndex = -1;
 
     days.forEach((day, index) => {
-        if (intersectsDay(task, day)) {
+        if (intersectsDayEntry(entry, day)) {
             if (startIndex === -1) {
                 startIndex = index;
             }
@@ -419,23 +463,14 @@ function DailyTaskBlock({
             title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}`}
             onClick={() => onSelect(task.task)}
             style={{
-                position: 'absolute',
                 top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
                 left: `calc(${leftPct}% + 2px)`,
                 width: `calc(${widthPct}% - 4px)`,
                 height: GANTT_BAR_H,
                 background: style.bg,
                 border: `0.5px solid ${style.border}`,
-                borderRadius: 6,
-                padding: '4px 8px',
-                overflow: 'hidden',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                gap: 1,
-                textAlign: 'left',
             }}
+            className='absolute rounded-lg px-2 py-1 text-left flex flex-col justify-center gap-1 overflow-hidden cursor-pointer'
         >
             <span
                 style={{
@@ -448,7 +483,7 @@ function DailyTaskBlock({
                     lineHeight: 1.4,
                 }}
             >
-                {task.label}
+                {task.label} : {task.task.title}
             </span>
             {showTime ? (
                 <span
@@ -470,20 +505,18 @@ function DailyTaskBlock({
 function GanttBar({
         task,
         lane,
-        isSelected,
         left,
         width,
         onSelect,
     }: {
         task: SchedulerTask;
         lane: number;
-        isSelected: boolean;
         left: number;
         width: number;
         onSelect: (task: Task) => void;
     }) {
     const style = CHIP_STYLES[task.type];
-    const rangeLabel = formatTaskRange(task.task);
+    const rangeLabel = formatEntryRange(task.timeEntry);
 
     return (
         <button
@@ -495,8 +528,8 @@ function GanttBar({
                 left,
                 width,
                 height: GANTT_BAR_H,
-                background: isSelected ? '#bcccf1ea' : style.bg,
-                border: `1px solid ${isSelected ? '#378ADD' : style.border}`,
+                background: style.bg,
+                border: `1px solid ${style.border}`,
                 borderRadius: 8,
                 padding: '4px 10px',
                 overflow: 'hidden',
@@ -505,9 +538,7 @@ function GanttBar({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                boxShadow: isSelected
-                    ? '0 0 0 1px rgba(55, 138, 221, 0.18)'
-                    : '0 1px 2px rgba(16, 24, 40, 0.06)',
+                boxShadow: '0 1px 2px rgba(16, 24, 40, 0.06)',
             }}
         >
             <span
@@ -573,7 +604,7 @@ function DailyView({
                     width: NAME_W,
                     flexShrink: 0,
                     borderRight: '0.5px solid #e0e0d8',
-                    background: 'var(--color-background-primary, #fff)',
+                    background: 'var(--color-background-primary, #ffffff)',
                     position: 'sticky',
                     left: 0,
                     zIndex: 5,
@@ -832,6 +863,16 @@ function GridView({
     }) {
     const colWidth = days.length > 20 ? 190 : days.length > 10 ? 210 : 230;
     const gridMinWidth = NAME_W + days.length * colWidth;
+    const now = new Date();
+    const nowDayStart = startOfDay(now);
+    const nowPct = Math.min(
+        1,
+        Math.max(0, (now.getTime() - nowDayStart.getTime()) / (24 * 60 * 60 * 1000)),
+    );
+    const todayIndex = days.findIndex(
+        (date) => date.getTime() === today.getTime(),
+    );
+    const showNowLine = todayIndex >= 0;
     const ganttLayouts = useMemo(
         () =>
             employees.map((employee) =>
@@ -847,8 +888,38 @@ function GridView({
                     minWidth: gridMinWidth,
                     display: 'flex',
                     flexDirection: 'column',
+                    position: 'relative',
                 }}
             >
+                {showNowLine ? (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            left:
+                                NAME_W +
+                                todayIndex * colWidth +
+                                nowPct * colWidth,
+                            width: 2,
+                            background: '#E24B4A',
+                            zIndex: 5,
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        <div
+                            style={{
+                                position: 'absolute',
+                                top: HEADER_H + 4,
+                                left: -3,
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: '#E24B4A',
+                            }}
+                        />
+                    </div>
+                ) : null}
                 <div
                     style={{
                         height: HEADER_H,
@@ -1081,9 +1152,6 @@ function GridView({
                                             key={`${employee.id}-${task.id}-${task.start}`}
                                             task={task}
                                             lane={task.lane}
-                                            isSelected={
-                                                task.id === selectedTaskId
-                                            }
                                             left={task.start * colWidth + 8}
                                             width={task.span * colWidth - 16}
                                             onSelect={onSelectTask}
@@ -1180,12 +1248,19 @@ const TaskTimeline = () => {
                 }
 
                 const nextTasks = response.data.data ?? [];
+                const tasksWithEntries = nextTasks.filter((task: Task) =>
+                    (task.time_entries ?? []).some((entry: TimeEntry) =>
+                        overlapsRangeEntry(entry, rangeStart, rangeEnd),
+                    ),
+                );
+
                 setTasks(nextTasks);
-                if (nextTasks.length > 0) {
+                if (tasksWithEntries.length > 0) {
                     setSelectedTaskId((current) =>
-                        current && nextTasks.some((task: Task) => task.id === current)
+                        current &&
+                        tasksWithEntries.some((task: Task) => task.id === current)
                             ? current
-                            : nextTasks[0].id,
+                            : tasksWithEntries[0].id,
                     );
                 } else {
                     setSelectedTaskId(null);
@@ -1219,6 +1294,13 @@ const TaskTimeline = () => {
             employeeMap.set(employee.id, employee);
         });
 
+        const timeEntryRows = tasks.flatMap((task) =>
+            (task.time_entries ?? []).map((entry) => ({
+                task,
+                entry,
+            })),
+        );
+
         tasks.forEach((task) => {
             task.assigned_users?.forEach((user) => {
                 if (!employeeMap.has(user.id)) {
@@ -1231,10 +1313,19 @@ const TaskTimeline = () => {
             });
         });
 
+        timeEntryRows.forEach(({ entry }) => {
+            if (!employeeMap.has(entry.user_id)) {
+                employeeMap.set(entry.user_id, {
+                    id: entry.user_id,
+                    name: `User ${entry.user_id}`,
+                });
+            }
+        });
+
         return Array.from(employeeMap.values())
             .map((employee) => {
                 const palette = getAvatarPalette(employee.id);
-                const taskMap = new Map<number, SchedulerTask>();
+                const entryMap = new Map<number, SchedulerTask>();
                 const scheduleEmployee: SchedulerEmployee = {
                     id: employee.id,
                     name: employee.name,
@@ -1253,53 +1344,143 @@ const TaskTimeline = () => {
                     scheduleEmployee.dailyTasks[dayKey] = [];
                 });
 
-                tasks.forEach((task) => {
-                    const assignedToEmployee = task.assigned_users?.some(
-                        (user) => user.id === employee.id,
-                    );
+                const employeeEntries = timeEntryRows.filter(
+                    ({ entry }) => entry.user_id === employee.id,
+                );
 
-                    if (!assignedToEmployee) {
-                        return;
-                    }
-
-                    if (!taskMap.has(task.id)) {
-                        taskMap.set(task.id, {
-                            id: task.id,
-                            label: buildTaskLabel(task),
-                            type: getSchedulerType(task),
-                            task,
-                        });
-                    }
-
-                    days.forEach((day) => {
-                        if (!intersectsDay(task, day)) {
+                if (view === 'daily') {
+                    employeeEntries.forEach(({ task, entry }) => {
+                        if (!overlapsRangeEntry(entry, rangeStart, rangeEnd)) {
                             return;
                         }
 
-                        const dayKey = formatDateKey(day);
-                        const schedulerTask: SchedulerTask = {
-                            id: task.id,
+                        const schedulerEntry: SchedulerTask = {
+                            id: entry.id,
                             label: buildTaskLabel(task),
-                            type: getSchedulerType(task),
+                            type: getSchedulerType(task, entry),
                             task,
+                            timeEntry: entry,
                         };
 
-                        scheduleEmployee.tasks[dayKey].push(schedulerTask);
+                        entryMap.set(entry.id, schedulerEntry);
 
-                        const window = getDailyWindow(task, day);
-                        if (window) {
-                            scheduleEmployee.dailyTasks[dayKey].push({
-                                ...schedulerTask,
-                                ...window,
-                            });
-                        }
+                        days.forEach((day) => {
+                            if (!intersectsDayEntry(entry, day)) {
+                                return;
+                            }
+
+                            const dayKey = formatDateKey(day);
+                            const window = getDailyEntryWindow(entry, day);
+                            if (window) {
+                                scheduleEmployee.dailyTasks[dayKey].push({
+                                    ...schedulerEntry,
+                                    ...window,
+                                });
+                            }
+                        });
                     });
-                });
+                } else {
+                    const groupedEntries = new Map<
+                        number,
+                        { task: Task; entries: TimeEntry[] }
+                    >();
 
-                scheduleEmployee.allTasks = Array.from(taskMap.values()).sort(
+                    employeeEntries.forEach(({ task, entry }) => {
+                        if (!overlapsRangeEntry(entry, rangeStart, rangeEnd)) {
+                            return;
+                        }
+
+                        const bucket = groupedEntries.get(task.id) ?? {
+                            task,
+                            entries: [],
+                        };
+                        bucket.entries.push(entry);
+                        groupedEntries.set(task.id, bucket);
+                    });
+
+                    groupedEntries.forEach(({ task, entries }) => {
+                        const entryStarts = entries.map((entry) =>
+                            getEntryStart(entry).getTime(),
+                        );
+                        const entryEnds = entries.map((entry) =>
+                            getEntryEnd(entry).getTime(),
+                        );
+
+                        const aggregatedEntry: TimeEntry = {
+                            id: task.id,
+                            task_id: task.id,
+                            user_id: employee.id,
+                            start_time: new Date(
+                                Math.min(...entryStarts),
+                            ).toISOString(),
+                            end_time: new Date(Math.max(...entryEnds)).toISOString(),
+                            is_active: false,
+                        };
+
+                        const schedulerEntry: SchedulerTask = {
+                            id: task.id,
+                            label: buildTaskLabel(task),
+                            type: getSchedulerType(task, aggregatedEntry),
+                            task,
+                            timeEntry: aggregatedEntry,
+                        };
+
+                        entryMap.set(task.id, schedulerEntry);
+                    });
+
+                    const taskIdsWithEntries = new Set(groupedEntries.keys());
+                    const pendingStates = new Set([
+                        'Draft',
+                        'Assigned',
+                        'Blocked',
+                    ]);
+
+                    tasks.forEach((task) => {
+                        if (!pendingStates.has(task.state)) {
+                            return;
+                        }
+
+                        const assignedToEmployee = task.assigned_users?.some(
+                            (user) => user.id === employee.id,
+                        );
+
+                        if (!assignedToEmployee) {
+                            return;
+                        }
+
+                        if (taskIdsWithEntries.has(task.id)) {
+                            return;
+                        }
+
+                        if (!overlapsTaskRange(task, rangeStart, rangeEnd)) {
+                            return;
+                        }
+
+                        const plannedEntry: TimeEntry = {
+                            id: task.id,
+                            task_id: task.id,
+                            user_id: employee.id,
+                            start_time: getTaskScheduleStart(task).toISOString(),
+                            end_time: getTaskScheduleEnd(task).toISOString(),
+                            is_active: false,
+                        };
+
+                        const schedulerEntry: SchedulerTask = {
+                            id: task.id,
+                            label: buildTaskLabel(task),
+                            type: 'assigned',
+                            task,
+                            timeEntry: plannedEntry,
+                        };
+
+                        entryMap.set(task.id, schedulerEntry);
+                    });
+                }
+
+                scheduleEmployee.allTasks = Array.from(entryMap.values()).sort(
                     (left, right) =>
-                        getTaskStart(left.task).getTime() -
-                        getTaskStart(right.task).getTime(),
+                        getEntryStart(left.timeEntry).getTime() -
+                        getEntryStart(right.timeEntry).getTime(),
                 );
 
                 Object.keys(scheduleEmployee.tasks).forEach((dayKey) => {
@@ -1311,15 +1492,14 @@ const TaskTimeline = () => {
                 return scheduleEmployee;
             })
             .filter((employee) => {
-                return days.some((day) => {
-                    const dayKey = formatDateKey(day);
-                    return (
-                        (employee.tasks[dayKey] ?? []).length > 0 ||
-                        (employee.dailyTasks[dayKey] ?? []).length > 0
-                    );
-                });
+                if (view === 'daily') {
+                    const dayKey = formatDateKey(days[0] ?? today);
+                    return (employee.dailyTasks[dayKey] ?? []).length > 0;
+                }
+
+                return employee.allTasks.length > 0;
             });
-    }, [days, employees, tasks]);
+    }, [days, employees, rangeEnd, rangeStart, tasks, today, view]);
 
     function goToday(): void {
         setAnchorDate(today);
@@ -1472,7 +1652,7 @@ const TaskTimeline = () => {
                             color: 'var(--color-text-secondary, #888)',
                         }}
                     >
-                        Live task data in the sample scheduler, with real task cards for the visible period.
+                        Live time entry data in the sample scheduler, with real task cards for the visible period.
                     </p>
                 </div>
 
@@ -1564,7 +1744,7 @@ const TaskTimeline = () => {
                             fontSize: 14,
                         }}
                     >
-                        {errorMessage ?? 'No assigned tasks were found for the selected period.'}
+                        {errorMessage ?? 'No time entries were found for the selected period.'}
                     </div>
                 ) : view === 'daily' ? (
                     <DailyView

@@ -398,21 +398,32 @@ class TaskController extends Controller
             $fromDate = Carbon::parse($request->query('from_date'))->startOfDay();
             $toDate = Carbon::parse($request->query('to_date'))->endOfDay();
             $taskQuery->where(function ($query) use ($fromDate, $toDate) {
-                $query->where('due_at', '>=', $fromDate)
-                    ->orWhere(function ($query) use ($fromDate) {
-                        $query->whereNull('due_at')
-                            ->where('created_at', '>=', $fromDate);
-                    });
+                $query->where(function ($query) use ($fromDate, $toDate) {
+                    $query
+                        ->whereRaw('COALESCE(start_at, created_at) <= ?', [$toDate])
+                        ->whereRaw('COALESCE(completed_at, due_at, start_at, created_at) >= ?', [$fromDate]);
+                })->orWhereHas('timeEntries', function ($timeQuery) use ($fromDate, $toDate) {
+                    $timeQuery->whereBetween('start_time', [$fromDate, $toDate]);
+                });
             });
         } elseif ($request->query('from_date')) {
             $fromDate = Carbon::parse($request->query('from_date'))->startOfDay();
             $taskQuery->where(function ($query) use ($fromDate) {
-                $query->where('due_at', '>=', $fromDate)
-                    ->orWhereNull('due_at');
+                $query
+                    ->whereRaw('COALESCE(completed_at, due_at, start_at, created_at) >= ?', [$fromDate])
+                    ->orWhereHas('timeEntries', function ($timeQuery) use ($fromDate) {
+                        $timeQuery->where('start_time', '>=', $fromDate);
+                    });
             });
         } elseif ($request->query('to_date')) {
             $toDate = Carbon::parse($request->query('to_date'))->endOfDay();
-            $taskQuery->where('due_at', '<=', $toDate);
+            $taskQuery->where(function ($query) use ($toDate) {
+                $query
+                    ->whereRaw('COALESCE(start_at, created_at) <= ?', [$toDate])
+                    ->orWhereHas('timeEntries', function ($timeQuery) use ($toDate) {
+                        $timeQuery->where('start_time', '<=', $toDate);
+                    });
+            });
         }
 
         // Filter by employee if provided
