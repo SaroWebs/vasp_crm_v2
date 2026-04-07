@@ -1193,7 +1193,7 @@ function GridView({
 const TaskTimeline = () => {
     const today = useMemo(() => startOfDay(new Date()), []);
     const [anchorDate, setAnchorDate] = useState<Date>(() => today);
-    const [view, setView] = useState<ViewMode>('weekly');
+    const [view, setView] = useState<ViewMode>('daily');
     const [employees, setEmployees] = useState<AssignmentEmployee[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
