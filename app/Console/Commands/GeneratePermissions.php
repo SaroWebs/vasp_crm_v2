@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class GeneratePermissions extends Command
@@ -70,14 +69,14 @@ class GeneratePermissions extends Command
 
         foreach ($modelFiles as $file) {
             $modelName = basename($file, '.php');
-            
+
             // Skip base models and interfaces
             if (in_array($modelName, ['Model', 'Authenticatable', 'MustVerifyEmail'])) {
                 continue;
             }
 
             // Check if it's a valid model
-            $modelClass = 'App\\Models\\' . $modelName;
+            $modelClass = 'App\\Models\\'.$modelName;
             if (class_exists($modelClass)) {
                 $models[] = $modelName;
             }
@@ -85,7 +84,7 @@ class GeneratePermissions extends Command
 
         // If specific models are provided, filter them
         $selectedModels = $this->option('models');
-        if (!empty($selectedModels)) {
+        if (! empty($selectedModels)) {
             $models = array_intersect($models, $selectedModels);
         }
 
@@ -113,14 +112,14 @@ class GeneratePermissions extends Command
         }
 
         // Insert permissions
-        if (!empty($permissions)) {
+        if (! empty($permissions)) {
             foreach ($permissions as $permission) {
                 DB::table('permissions')->updateOrInsert(
                     ['slug' => $permission['slug']],
                     $permission
                 );
             }
-            $this->info('Generated ' . count($permissions) . ' model-based permissions.');
+            $this->info('Generated '.count($permissions).' model-based permissions.');
         }
     }
 
@@ -149,11 +148,11 @@ class GeneratePermissions extends Command
             // Extract controller and method
             if (isset($action['controller'])) {
                 $controllerAction = $action['controller'];
-                if (!is_string($controllerAction) || !str_contains($controllerAction, '@')) {
+                if (! is_string($controllerAction) || ! str_contains($controllerAction, '@')) {
                     continue;
                 }
                 [$controller, $method] = explode('@', $controllerAction, 2);
-                if (!$controller || !$method) {
+                if (! $controller || ! $method) {
                     continue;
                 }
 
@@ -173,21 +172,21 @@ class GeneratePermissions extends Command
         // Group and deduplicate route permissions
         $uniquePermissions = [];
         foreach ($routeActions as $action) {
-            $key = $action['module'] . '.' . $action['action'];
-            if (!isset($uniquePermissions[$key])) {
+            $key = $action['module'].'.'.$action['action'];
+            if (! isset($uniquePermissions[$key])) {
                 $uniquePermissions[$key] = $action;
             }
         }
 
         // Insert permissions
-        if (!empty($uniquePermissions)) {
+        if (! empty($uniquePermissions)) {
             foreach ($uniquePermissions as $permission) {
                 DB::table('permissions')->updateOrInsert(
                     ['slug' => $permission['slug']],
                     $permission
                 );
             }
-            $this->info('Generated ' . count($uniquePermissions) . ' route-based permissions.');
+            $this->info('Generated '.count($uniquePermissions).' route-based permissions.');
         }
     }
 
@@ -290,7 +289,7 @@ class GeneratePermissions extends Command
      */
     private function generatePermissionName(string $modelName, string $action): string
     {
-        return Str::title($modelName) . ' ' . Str::title(str_replace('_', ' ', $action));
+        return Str::title($modelName).' '.Str::title(str_replace('_', ' ', $action));
     }
 
     /**
@@ -298,7 +297,7 @@ class GeneratePermissions extends Command
      */
     private function generatePermissionSlug(string $module, string $action): string
     {
-        return $module . '.' . $action;
+        return $module.'.'.$action;
     }
 
     /**
@@ -307,15 +306,15 @@ class GeneratePermissions extends Command
     private function generatePermissionDescription(string $modelName, string $action): string
     {
         $descriptions = [
-            'create' => 'Create new ' . Str::snake($modelName, ' '),
-            'read' => 'View ' . Str::snake($modelName, ' '),
-            'update' => 'Update ' . Str::snake($modelName, ' '),
-            'delete' => 'Delete ' . Str::snake($modelName, ' '),
-            'view_all' => 'View all ' . Str::snake(Str::plural($modelName), ' '),
-            'view_own' => 'View own ' . Str::snake($modelName, ' '),
+            'create' => 'Create new '.Str::snake($modelName, ' '),
+            'read' => 'View '.Str::snake($modelName, ' '),
+            'update' => 'Update '.Str::snake($modelName, ' '),
+            'delete' => 'Delete '.Str::snake($modelName, ' '),
+            'view_all' => 'View all '.Str::snake(Str::plural($modelName), ' '),
+            'view_own' => 'View own '.Str::snake($modelName, ' '),
         ];
 
-        return $descriptions[$action] ?? 'Manage ' . Str::snake($modelName, ' ');
+        return $descriptions[$action] ?? 'Manage '.Str::snake($modelName, ' ');
     }
 
     /**
@@ -325,10 +324,10 @@ class GeneratePermissions extends Command
     {
         // Extract the controller class name
         $controllerClass = class_basename($controller);
-        
+
         // Remove 'Controller' suffix
         $modelName = str_replace('Controller', '', $controllerClass);
-        
+
         return $this->getModelModule($modelName);
     }
 
@@ -361,8 +360,8 @@ class GeneratePermissions extends Command
 
         if (isset($actionMap[$httpMethod][$method])) {
             $action = $actionMap[$httpMethod][$method];
-            $name = Str::title(Str::snake($module, ' ')) . ' ' . Str::title(str_replace('_', ' ', $action));
-            $slug = $module . '.' . $action;
+            $name = Str::title(Str::snake($module, ' ')).' '.Str::title(str_replace('_', ' ', $action));
+            $slug = $module.'.'.$action;
 
             return [
                 'name' => $name,

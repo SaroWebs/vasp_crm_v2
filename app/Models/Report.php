@@ -16,68 +16,68 @@ class Report extends Model
         'description',
         'total_hours',
         'status',
-        'metadata'
+        'metadata',
     ];
-    
+
     protected $casts = [
         'report_date' => 'date',
         'total_hours' => 'decimal:2',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
-    
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
-    
+
     public function tasks(): BelongsToMany
     {
         return $this->belongsToMany(Task::class, 'report_tasks')
-                    ->withPivot('remarks')
-                    ->withTimestamps();
+            ->withPivot('remarks')
+            ->withTimestamps();
     }
-    
+
     public function attachments(): HasMany
     {
         return $this->hasMany(ReportAttachment::class);
     }
-    
+
     public function calculateTotalHours(): float
     {
-        $totalSeconds = $this->tasks()->with(['timeEntries' => function($query) {
+        $totalSeconds = $this->tasks()->with(['timeEntries' => function ($query) {
             $query->where('is_active', false)
-                  ->where(function($q) {
-                      $q->whereDate('start_time', $this->report_date)
+                ->where(function ($q) {
+                    $q->whereDate('start_time', $this->report_date)
                         ->orWhereDate('end_time', $this->report_date);
-                  });
-        }])->get()->flatMap(function($task) {
+                });
+        }])->get()->flatMap(function ($task) {
             return $task->timeEntries;
-        })->reduce(function($sum, $timeEntry) {
-            return $sum + $timeEntry->calculateDuration();
+        })->reduce(function ($sum, $timeEntry) {
+            return $sum + $timeEntry->calculateDurationForDate($this->report_date);
         }, 0);
-        
+
         $this->total_hours = $totalSeconds / 3600;
         $this->save();
-        
+
         return $this->total_hours;
     }
-    
+
     public function getTasksWithDailyTimeAttribute()
     {
-        return $this->tasks()->with(['timeEntries' => function($query) {
+        return $this->tasks()->with(['timeEntries' => function ($query) {
             $query->where('is_active', false)
-                  ->where(function($q) {
-                      $q->whereDate('start_time', $this->report_date)
+                ->where(function ($q) {
+                    $q->whereDate('start_time', $this->report_date)
                         ->orWhereDate('end_time', $this->report_date);
-                  });
-        }])->get()->map(function($task) {
-            $dailySeconds = $task->timeEntries->reduce(function($sum, $timeEntry) {
-                return $sum + $timeEntry->calculateDuration();
+                });
+        }])->get()->map(function ($task) {
+            $dailySeconds = $task->timeEntries->reduce(function ($sum, $timeEntry) {
+                return $sum + $timeEntry->calculateDurationForDate($this->report_date);
             }, 0);
-            
+
             return [
                 'task' => $task,
-                'daily_time' => $dailySeconds / 3600
+                'daily_time' => $dailySeconds / 3600,
             ];
         });
     }

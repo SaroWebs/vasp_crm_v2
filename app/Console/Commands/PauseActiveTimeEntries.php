@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Services\TimeEntryAutoPauseService;
+use Illuminate\Console\Command;
 
 class PauseActiveTimeEntries extends Command
 {
@@ -32,6 +32,7 @@ class PauseActiveTimeEntries extends Command
         if ($this->option('force')) {
             $count = $autoPauseService->forceStopAllActiveEntries();
             $this->info("Forcefully stopped {$count} active time entries.");
+
             return Command::SUCCESS;
         }
 
@@ -41,16 +42,18 @@ class PauseActiveTimeEntries extends Command
             $maxHours = (int) $maxHours;
             if ($maxHours <= 0) {
                 $this->error('Max hours must be a positive integer');
+
                 return Command::FAILURE;
             }
             $count = $autoPauseService->stopEntriesExceedingMaxDuration($maxHours);
             $this->info("Stopped {$count} entries exceeding {$maxHours} hours.");
+
             return Command::SUCCESS;
         }
 
         // Default: process entries based on working hours
         $stats = $autoPauseService->processActiveTimeEntries();
-        
+
         $this->info("Processed {$stats['processed']} active time entries:");
         $this->info("  - Paused: {$stats['paused']}");
         $this->info("  - Split (multi-day): {$stats['split']}");

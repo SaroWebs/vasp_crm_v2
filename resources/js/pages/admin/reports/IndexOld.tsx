@@ -1,16 +1,18 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Employee } from '@/types';
 import { Head } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, Search, Clock, FileText, Tag, Plus, Download } from 'lucide-react';
+import { Users, Search, Clock, FileText, Tag, Plus, Edit, Trash2, Eye, Download } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { toast } from 'sonner';
+import { ActionIcon } from '@mantine/core';
+import { Badge } from '@/components/ui/badge';
 import axios from 'axios';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReportForm from '@/components/reports/ReportForm';
-import ReportGroup, { groupReportsByDate, groupReportsByEmployee } from '@/components/reports/ReportGroup';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -38,7 +40,6 @@ interface TaskTimeEntry {
     end_time: string;
     duration_hours: number;
     description: string;
-    working_duration?: number;
 }
 
 interface Task {
@@ -49,7 +50,6 @@ interface Task {
     state: string;
     time_entries: TaskTimeEntry[];
     total_time_spent: number;
-    total_working_seconds?: number;
     estimate_hours?: string;
     project_id?: number;
     department_id?: number;
@@ -126,12 +126,50 @@ export default function ReportsIndex(props: ReportsIndexProps) {
         setSelectedEmployeeFilter(employee);
     };
 
+    const handleViewDetails = (report: Report) => {
+        router.visit(`/admin/reports/${report.id}`);
+    };
+
+    const handleDeleteReport = (report: Report) => {
+        if (window.confirm('Are you sure you want to delete this report?')) {
+            axios.delete(`/admin/api/reports/${report.id}`)
+                .then(() => {
+                    toast.success('Report deleted successfully');
+                    if (activeTab === 'my-reports') {
+                        fetchMyReports();
+                    } else {
+                        fetchAllReports();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting report:', error);
+                    toast.error(error.response?.data?.error || 'Failed to delete report');
+                });
+        }
+    };
+
     const formatDuration = (hours: number): string => {
         const totalSeconds = Math.floor(hours * 3600);
         const hoursPart = Math.floor(totalSeconds / 3600);
         const minutesPart = Math.floor((totalSeconds % 3600) / 60);
         const secondsPart = totalSeconds % 60;
         return `${hoursPart}h ${minutesPart}m ${secondsPart}s`;
+    };
+
+    const getStatusColor = (status: string): string => {
+        const statusColors: Record<string, string> = {
+            'draft': 'bg-yellow-100 text-yellow-800',
+            'submitted': 'bg-blue-100 text-blue-800',
+            'approved': 'bg-green-100 text-green-800',
+        };
+        return statusColors[status] || 'bg-gray-100 text-gray-800';
+    };
+
+    const canEditOrDelete = (report: Report): boolean => {
+        const createdAt = new Date(report.created_at);
+        const now = new Date();
+        const diffHours = Math.abs(now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+        return report.user_id === authUser.id && diffHours <= 2;
     };
 
     // Computed statistics
@@ -219,14 +257,6 @@ export default function ReportsIndex(props: ReportsIndexProps) {
         isSuperAdmin ||
         userPermissions.includes('report.export') ||
         userPermissions.length === 0;
-
-    const shouldGroupByEmployee = !selectedEmployeeFilter;
-    const groupedReports = useMemo(() => {
-        if (shouldGroupByEmployee) {
-            return groupReportsByEmployee(filteredReports);
-        }
-        return groupReportsByDate(filteredReports);
-    }, [filteredReports, shouldGroupByEmployee]);
 
     const handleExportConsolidated = async () => {
         if (!startDate || !endDate) {
@@ -436,19 +466,79 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                                         Loading reports...
                                     </div>
                                 ) : filteredReports.length > 0 ? (
-                                    <div className="space-y-6">
-                                        {Array.from(groupReportsByDate(filteredReports).entries()).map(([dateKey, dateReports]) => (
-                                            <ReportGroup
-                                                key={dateKey}
-                                                reports={dateReports}
-                                                authUser={authUser}
-                                                groupBy="date"
-                                                showEmployee={false}
-                                                showDate={true}
-                                                onDelete={() => fetchMyReports()}
-                                                showTimeEntries={true}
-                                            />
-                                        ))}
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="border-b bg-gray-50">
+                                                    <th className="text-left p-4 font-semibold">Report Date</th>
+                                                    <th className="text-left p-4 font-semibold">Title</th>
+                                                    <th className="text-left p-4 font-semibold">Status</th>
+                                                    <th className="text-left p-4 font-semibold">Tasks</th>
+                                                    <th className="text-left p-4 font-semibold">Total Time</th>
+                                                    <th className="text-right p-4 font-semibold">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredReports.map(report => (
+                                                    <tr key={report.id} className="border-b hover:bg-gray-50 transition-colors">
+                                                        <td className="p-4">
+                                                            <span className="text-sm text-muted-foreground">
+                                                                {new Date(report.report_date).toLocaleDateString()}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="font-medium">{report.title}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <Badge className={getStatusColor(report.status)}>
+                                                                {report.status}
+                                                            </Badge>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="text-sm font-medium">{report.tasks?.length || 0} task{report.tasks?.length > 1 ? 's' : ''}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex items-center gap-1 text-sm font-medium">
+                                                                <Clock className="h-3 w-3" />
+                                                                {formatDuration(report.total_hours)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex justify-end gap-2">
+                                                                <ActionIcon
+                                                                    variant="filled"
+                                                                    color="gray"
+                                                                    aria-label="View Details"
+                                                                    onClick={() => handleViewDetails(report)}
+                                                                >
+                                                                    <Eye className='w-4' />
+                                                                </ActionIcon>
+                                                                {canEditOrDelete(report) && (
+                                                                    <>
+                                                                        <ActionIcon
+                                                                            variant="filled"
+                                                                            color="blue"
+                                                                            aria-label="Edit"
+                                                                            onClick={() => router.visit(`/admin/reports/${report.id}/edit`)}
+                                                                        >
+                                                                            <Edit className='w-4' />
+                                                                        </ActionIcon>
+                                                                        <ActionIcon
+                                                                            variant="filled"
+                                                                            color="red"
+                                                                            aria-label="Delete"
+                                                                            onClick={() => handleDeleteReport(report)}
+                                                                        >
+                                                                            <Trash2 className='w-4' />
+                                                                        </ActionIcon>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 ) : (
                                     <div className="text-center py-8 text-muted-foreground">
@@ -591,23 +681,63 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                                         Loading reports...
                                     </div>
                                 ) : filteredReports.length > 0 ? (
-                                    <div className="space-y-6">
-                                        {Array.from(groupedReports.entries()).map(([groupKey, groupReports]) => (
-                                            <ReportGroup
-                                                key={groupKey}
-                                                reports={groupReports}
-                                                authUser={authUser}
-                                                groupBy={shouldGroupByEmployee ? 'employee' : 'date'}
-                                                showEmployee={!selectedEmployeeFilter}
-                                                showDate={true}
-                                                onDelete={() => {
-                                                    if (activeTab === 'all-reports') {
-                                                        fetchAllReports();
-                                                    }
-                                                }}
-                                                showTimeEntries={true}
-                                            />
-                                        ))}
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="border-b bg-gray-50">
+                                                    <th className="text-left p-4 font-semibold">Report Date</th>
+                                                    <th className="text-left p-4 font-semibold">Employee</th>
+                                                    <th className="text-left p-4 font-semibold">Title</th>
+                                                    <th className="text-left p-4 font-semibold">Status</th>
+                                                    <th className="text-left p-4 font-semibold">Tasks</th>
+                                                    <th className="text-left p-4 font-semibold">Total Time</th>
+                                                    <th className="text-right p-4 font-semibold">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredReports.map(report => (
+                                                    <tr key={report.id} className="border-b hover:bg-gray-50 transition-colors">
+                                                        <td className="p-4">
+                                                            <span className="text-sm text-muted-foreground">
+                                                                {new Date(report.report_date).toLocaleDateString()}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="font-medium">{report.user?.name || 'N/A'}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="font-medium">{report.title}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <Badge className={getStatusColor(report.status)}>
+                                                                {report.status}
+                                                            </Badge>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="text-sm font-medium">{report.tasks?.length || 0} tasks</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex items-center gap-1 text-sm font-medium">
+                                                                <Clock className="h-3 w-3" />
+                                                                {formatDuration(report.total_hours)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex justify-end gap-2">
+                                                                <ActionIcon
+                                                                    variant="filled"
+                                                                    color="gray"
+                                                                    aria-label="View Details"
+                                                                    onClick={() => handleViewDetails(report)}
+                                                                >
+                                                                    <Eye className='w-4' />
+                                                                </ActionIcon>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 ) : (
                                     <div className="text-center py-8 text-muted-foreground">

@@ -13,6 +13,7 @@ class TicketCommentDeleted implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public int $ticketId;
+
     public int $commentId;
 
     /**
@@ -30,7 +31,7 @@ class TicketCommentDeleted implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('ticket.' . $this->ticketId),
+            new PrivateChannel('ticket.'.$this->ticketId),
         ];
     }
 

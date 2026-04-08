@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Jobs\CleanupOldActivityLogs;
+use Illuminate\Console\Command;
 
 class CleanupActivityLogs extends Command
 {
@@ -33,6 +33,6 @@ class CleanupActivityLogs extends Command
         // Dispatch the cleanup job
         CleanupOldActivityLogs::dispatch($days);
 
-        $this->info("Cleanup job dispatched successfully.");
+        $this->info('Cleanup job dispatched successfully.');
     }
 }

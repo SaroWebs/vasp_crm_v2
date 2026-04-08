@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Services\TimeCalculatorService;
+use App\Services\WorkingHoursService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 class TaskTimeEntry extends Model
 {
@@ -87,15 +90,49 @@ class TaskTimeEntry extends Model
      */
     public function calculateDuration(): float
     {
-        if (!$this->start_time) {
+        if (! $this->start_time) {
             return 0;
         }
 
         $endTime = $this->end_time ?? now();
-       
+
         // Use time calculator service to calculate working duration
-        $timeCalculator = app(\App\Services\TimeCalculatorService::class);
+        $timeCalculator = app(TimeCalculatorService::class);
+
         return $timeCalculator->calculateWorkingDuration($this->start_time, $endTime);
+    }
+
+    /**
+     * Calculate duration in seconds that falls within a specific report date.
+     * This clips the time entry to the report date boundaries (start/end of day).
+     */
+    public function calculateDurationForDate(string $reportDate): int
+    {
+        if (! $this->start_time || ! $this->end_time) {
+            return 0;
+        }
+
+        $start = Carbon::parse($this->start_time);
+        $end = Carbon::parse($this->end_time);
+        $reportDateObj = Carbon::parse($reportDate)->startOfDay();
+        $reportDateEnd = Carbon::parse($reportDate)->endOfDay();
+
+        // Clip start time to report date start
+        if ($start->lt($reportDateObj)) {
+            $start = $reportDateObj->copy();
+        }
+
+        // Clip end time to report date end
+        if ($end->gt($reportDateEnd)) {
+            $end = $reportDateEnd->copy();
+        }
+
+        // Return 0 if start >= end after clipping
+        if ($start->gte($end)) {
+            return 0;
+        }
+
+        return (int) $start->diffInSeconds($end);
     }
 
     /**
@@ -114,10 +151,10 @@ class TaskTimeEntry extends Model
     public static function start(Task $task, int $userId, ?string $description = null): self
     {
         // Get working hours service to check if current time is working time
-        $workingHoursService = app(\App\Services\WorkingHoursService::class);
+        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
-        
-        if (!$workingHoursService->isWorkingTime($now)) {
+
+        if (! $workingHoursService->isWorkingTime($now)) {
             throw new \Exception('Cannot start time entry outside working hours');
         }
 
@@ -136,12 +173,13 @@ class TaskTimeEntry extends Model
      */
     public function end(): bool
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return false;
         }
         $now = now();
         $this->end_time = $now;
         $this->is_active = false;
+
         return $this->save();
     }
 
@@ -220,11 +258,11 @@ class TaskTimeEntry extends Model
 
         $timeEntries = $query->get();
         $totalSeconds = 0;
-        
+
         foreach ($timeEntries as $entry) {
             $totalSeconds += $entry->calculateDuration();
         }
-        
+
         return $totalSeconds;
     }
 
@@ -267,13 +305,13 @@ class TaskTimeEntry extends Model
             ->where('is_active', false)
             ->forDate($date)
             ->get();
-            
+
         $totalSeconds = 0;
-        
+
         foreach ($timeEntries as $entry) {
             $totalSeconds += $entry->calculateDuration();
         }
-        
+
         return $totalSeconds;
     }
 }

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Report;
 use App\Models\ReportAttachment;
-use App\Models\Task;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
@@ -274,11 +273,7 @@ class ReportController extends Controller
             $totalWorkingSeconds = 0;
 
             foreach ($task->timeEntries as $timeEntry) {
-                $workingSeconds = $this->calculateWorkingTimeSeconds(
-                    $timeEntry->start_time,
-                    $timeEntry->end_time,
-                    $workingHoursService
-                );
+                $workingSeconds = $timeEntry->calculateDurationForDate($reportDate);
                 $timeEntry->working_duration = $workingSeconds;
                 $totalWorkingSeconds += $workingSeconds;
             }
@@ -331,11 +326,7 @@ class ReportController extends Controller
             $totalWorkingSeconds = 0;
 
             foreach ($task->timeEntries as $timeEntry) {
-                $workingSeconds = $this->calculateWorkingTimeSeconds(
-                    $timeEntry->start_time,
-                    $timeEntry->end_time,
-                    $workingHoursService
-                );
+                $workingSeconds = $timeEntry->calculateDurationForDate($reportDate);
                 $timeEntry->working_duration = $workingSeconds;
                 $totalWorkingSeconds += $workingSeconds;
             }

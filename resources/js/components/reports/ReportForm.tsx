@@ -59,6 +59,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
         total_hours: number;
     }>>([]);
     const [attachments, setAttachments] = useState<File[]>([]);
+    const [formSubmitting, setFormSubmitting] = useState(false);
 
     const fetchTasksWithTimeEntries = async (date: string) => {
         try {
@@ -138,7 +139,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
             alert('Please fill in the report title');
             return;
         }
-        
+        setFormSubmitting(true);
         // Create new report
         axios.post(`/admin/api/reports`, reportFormData)
             .then(reportRes => {
@@ -191,6 +192,9 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
             .catch(err => {
                 console.error(err);
                 alert('Failed to create report');
+            })
+            .finally(() => {
+                setFormSubmitting(false);
             });
     };
 
@@ -390,7 +394,8 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                     </Button>
                     <Button
                         onClick={handleReportSubmit}
-                        className=""
+                        className={formSubmitting ? 'pointer-events-none opacity-50' : ''}
+                        disabled={formSubmitting}
                     >
                         Submit Report
                     </Button>

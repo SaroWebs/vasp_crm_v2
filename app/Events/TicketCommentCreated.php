@@ -2,7 +2,6 @@
 
 namespace App\Events;
 
-use App\Models\TicketComment;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -27,12 +26,12 @@ class TicketCommentCreated implements ShouldBroadcast
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('ticket.' . $this->comment['ticket_id']),
+            new PrivateChannel('ticket.'.$this->comment['ticket_id']),
         ];
     }
 

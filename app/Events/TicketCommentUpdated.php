@@ -28,7 +28,7 @@ class TicketCommentUpdated implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('ticket.' . $this->comment['ticket_id']),
+            new PrivateChannel('ticket.'.$this->comment['ticket_id']),
         ];
     }
 
