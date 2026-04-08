@@ -173,9 +173,10 @@ export default function Dashboard(props: DashboardProps) {
                     </CardContent>
                 </Card>
             </div>
-            {/* <TaskTimeline/> */}
 
             <MajorTasks employees={employees || []} />
+            
+            <TaskTimeline/>
 
             {/* Employee Progress Section */}
             <Card>

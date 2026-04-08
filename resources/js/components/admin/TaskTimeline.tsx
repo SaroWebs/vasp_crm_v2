@@ -876,13 +876,15 @@ function GridView({
     today,
     employees,
     onSelectTask,
+    scale = 1,
 }: {
     days: Date[];
     today: Date;
     employees: SchedulerEmployee[];
     onSelectTask: (task: Task) => void;
+    scale?: number;
 }) {
-    const colWidth = days.length > 20 ? 190 : days.length > 10 ? 210 : 230;
+    const colWidth = (days.length > 20 ? 190 : days.length > 10 ? 210 : 230) * scale;
     const gridMinWidth = NAME_W + days.length * colWidth;
     const now = new Date();
     const nowDayStart = startOfDay(now);
@@ -1190,10 +1192,15 @@ function GridView({
     );
 }
 
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 2.0;
+const SCALE_STEP = 0.1;
+
 const TaskTimeline = () => {
     const today = useMemo(() => startOfDay(new Date()), []);
     const [anchorDate, setAnchorDate] = useState<Date>(() => today);
-    const [view, setView] = useState<ViewMode>('weekly');
+    const [view, setView] = useState<ViewMode>('daily');
+    const [gridScale, setGridScale] = useState(1);
     const [employees, setEmployees] = useState<AssignmentEmployee[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -1208,6 +1215,30 @@ const TaskTimeline = () => {
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
     const detailsAbortRef = useRef<AbortController | null>(null);
+    const gridContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                const delta = -Math.sign(e.deltaY) * SCALE_STEP;
+                setGridScale((prev) =>
+                    Math.max(MIN_SCALE, Math.min(MAX_SCALE, prev + delta)),
+                );
+            }
+        };
+
+        const container = gridContainerRef.current;
+        if (container) {
+            container.addEventListener('wheel', handleWheel, { passive: false });
+        }
+
+        return () => {
+            if (container) {
+                container.removeEventListener('wheel', handleWheel);
+            }
+        };
+    }, []);
 
     const weekStart = useMemo(() => mondayOf(anchorDate), [anchorDate]);
 
@@ -1692,6 +1723,15 @@ const TaskTimeline = () => {
                     >
                         Live time entry data in the sample scheduler, with real task cards for the visible period.
                     </p>
+                    <p
+                        style={{
+                            fontSize: 12,
+                            margin: '4px 0 0',
+                            color: 'var(--color-text-secondary, #888)',
+                        }}
+                    >
+                        Note: Please use <code>Shift + Scroll</code> to scroll horizontally and <code>Ctrl + Scroll</code> to zoom in/out the grid.
+                    </p>
                 </div>
 
                 <div
@@ -1754,6 +1794,7 @@ const TaskTimeline = () => {
             </div>
 
             <div
+                ref={gridContainerRef}
                 style={{
                     background: 'var(--color-background-primary, #fff)',
                     border: '0.5px solid #e0e0d8',
@@ -1762,6 +1803,13 @@ const TaskTimeline = () => {
                     overflowY: 'hidden',
                 }}
             >
+                <div
+                    style={{
+                        transform: `scale(${gridScale})`,
+                        transformOrigin: 'top left',
+                        width: gridScale === 1 ? '100%' : `${100 / gridScale}%`,
+                    }}
+                >
                 {loading ? (
                     <div
                         style={{
@@ -1790,6 +1838,7 @@ const TaskTimeline = () => {
                         today={today}
                         employees={schedulerEmployees}
                         onSelectTask={selectTask}
+                        scale={gridScale}
                     />
                 ) : (
                     <GridView
@@ -1797,8 +1846,10 @@ const TaskTimeline = () => {
                         today={today}
                         employees={schedulerEmployees}
                         onSelectTask={selectTask}
+                        scale={gridScale}
                     />
                 )}
+                </div>
             </div>
 
             {view === 'daily' ? (
