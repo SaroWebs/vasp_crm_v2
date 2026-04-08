@@ -74,15 +74,15 @@ const CHIP_STYLES: Record<
     SchedulerType,
     { bg: string; color: string; border: string }
 > = {
-    active_entry: { bg: '#d4eab7', color: '#236246', border: '#98d07e' },
-    completed_entry: { bg: '#f9c4f7', color: '#6f1f92', border: '#f194f8' },
-    inactive_in_progress: { bg: '#c5f5ef', color: '#1dbdc2', border: '#B5D4F4' },
-    assigned: { bg: '#afafaf', color: '#424247', border: '#434246' },
-    review: { bg: '#ffeed0', color: '#854F0B', border: '#FAC775' },
-    blocked: { bg: '#F7D7D7', color: '#8E2A2A', border: '#F1B7B7' },
-    ticket: { bg: '#FBEAF0', color: '#993556', border: '#F4C0D1' },
-    working: { bg: '#DCFCE7', color: '#16606D', border: '#86EFAC' },
-    other: { bg: '#EDF4F4', color: '#16606D', border: '#B9DDE0' },
+    active_entry:        { bg: '#dafbe1', color: '#1a7f37', border: '#82e09a' },
+    completed_entry:     { bg: '#f3d9fa', color: '#8250df', border: '#d2a8ff' },
+    inactive_in_progress:{ bg: '#d1ecf9', color: '#0969da', border: '#79c0ff' },
+    assigned:            { bg: '#eaeef2', color: '#57606a', border: '#c9d1d9' },
+    review:              { bg: '#fff3cd', color: '#9a6700', border: '#f1c40f' },
+    blocked:             { bg: '#ffdcd7', color: '#cf222e', border: '#ff9492' },
+    ticket:              { bg: '#ffeff7', color: '#bf3989', border: '#ff80c8' },
+    working:             { bg: '#d2f4ea', color: '#116329', border: '#56d364' },
+    other:               { bg: '#e8f4f8', color: '#0969a2', border: '#a0cfef' },
 };
 
 function startOfDay(date: Date): Date {
@@ -155,10 +155,8 @@ function fmtHourFull(hour: number): string {
 function buildGanttLayout(
     tasks: SchedulerTask[],
     days: Date[],
-): {
-    bars: Array<SchedulerTask & { start: number; span: number; lane: number }>;
-    rowHeight: number;
-} {
+    ):{bars: Array<SchedulerTask & { start: number; span: number; lane: number }>; rowHeight: number;}
+{
     if (tasks.length === 0) {
         return { bars: [], rowHeight: ROW_H };
     }
@@ -392,10 +390,8 @@ function getDailyEntryWindow(
     return { startHour, endHour };
 }
 
-function buildDailyBarLayout(tasks: SchedulerDailyTask[]): {
-    bars: Array<SchedulerDailyTask & { lane: number }>;
-    rowHeight: number;
-} {
+function buildDailyBarLayout(tasks: SchedulerDailyTask[]): {bars: Array<SchedulerDailyTask & { lane: number }>; rowHeight: number;}
+{
     if (tasks.length === 0) {
         return { bars: [], rowHeight: DAILY_ROW_MIN_H };
     }
@@ -484,12 +480,13 @@ function DailyTaskBlock({
                 top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
                 left: `calc(${leftPct}% + 2px)`,
                 width: `calc(${widthPct}% - 4px)`,
+                minWidth: `120px`,
                 height: barHeight,
                 background: style.bg,
                 border: `0.5px solid ${style.border}`,
                 opacity: isPlanned ? 0.55 : 1,
             }}
-            className='absolute rounded-lg px-2 py-1 text-left flex flex-col justify-center gap-1 overflow-hidden cursor-pointer'
+            className='absolute rounded-lg px-2 py-1 text-left flex flex-col justify-center gap-1 overflow-hidden cursor-pointer shadow-md'
         >
             <span
                 style={{
@@ -533,7 +530,8 @@ function GanttBar({
     left: number;
     width: number;
     onSelect: (task: Task) => void;
-}) {
+}) 
+{
     const style = CHIP_STYLES[task.type];
     const rangeLabel = formatEntryRange(task.timeEntry);
     const isWorking = task.type === 'working';
@@ -594,19 +592,23 @@ function DailyView({
     today,
     employees,
     onSelectTask,
+    scale = 1,
 }: {
     day: Date;
     today: Date;
     employees: SchedulerEmployee[];
     onSelectTask: (task: Task) => void;
-}) {
+    scale?: number;
+})
+{
+    const colWidth = HOUR_W * scale;
     const isToday = day.getTime() === today.getTime();
     const totalHours = DAY_END - DAY_START;
     const now = new Date();
     const nowHour = now.getHours() + now.getMinutes() / 60;
     const showNowLine = isToday && nowHour >= DAY_START && nowHour <= DAY_END;
     const nowPct = ((nowHour - DAY_START) / totalHours) * 100;
-    const timelineWidth = HOURS.length * HOUR_W;
+    const timelineWidth = HOURS.length * colWidth;
     const dayKey = formatDateKey(day);
     const dailyLayouts = useMemo(
         () =>
@@ -618,10 +620,10 @@ function DailyView({
 
     return (
         <div style={{ display: 'flex', overflowX: 'auto' }}>
-            <div
-                style={{
-                    minWidth: NAME_W,
-                    width: NAME_W,
+                <div
+                    style={{
+                        minWidth: NAME_W,
+                        width: NAME_W,
                     flexShrink: 0,
                     borderRight: '0.5px solid #e0e0d8',
                     background: 'var(--color-background-primary, #ffffff)',
@@ -752,8 +754,8 @@ function DailyView({
                             <div
                                 key={hour}
                                 style={{
-                                    minWidth: HOUR_W,
-                                    width: HOUR_W,
+                                    minWidth: colWidth,
+                                    width: colWidth,
                                     height: '100%',
                                     flexShrink: 0,
                                     display: 'flex',
@@ -795,8 +797,8 @@ function DailyView({
                             <div
                                 key={hour}
                                 style={{
-                                    minWidth: HOUR_W,
-                                    width: HOUR_W,
+                                    minWidth: colWidth,
+                                    width: colWidth,
                                     flexShrink: 0,
                                     borderRight: '0.5px solid #e0e0d8',
                                     background:
@@ -1219,7 +1221,7 @@ const TaskTimeline = () => {
 
     useEffect(() => {
         const handleWheel = (e: WheelEvent) => {
-            if (e.ctrlKey) {
+            if (e.ctrlKey && gridContainerRef.current) {
                 e.preventDefault();
                 const delta = -Math.sign(e.deltaY) * SCALE_STEP;
                 setGridScale((prev) =>
@@ -1805,7 +1807,7 @@ const TaskTimeline = () => {
             >
                 <div
                     style={{
-                        transform: `scale(${gridScale})`,
+                        transform: `scaleX(${gridScale})`,
                         transformOrigin: 'top left',
                         width: gridScale === 1 ? '100%' : `${100 / gridScale}%`,
                     }}
