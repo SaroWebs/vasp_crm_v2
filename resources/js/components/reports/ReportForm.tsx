@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
     Dialog,
@@ -19,8 +19,32 @@ import { Task } from '@/types';
 interface ReportFormProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    tasks: any[];
+    tasks: Task[];
 }
+
+type ApiTaskTimeEntry = {
+    start_time: string;
+    end_time: string | null;
+    duration_seconds_for_date?: number;
+};
+
+type ApiTimelineEvent = {
+    event_date: string;
+    event_type?: string | null;
+    event_name?: string | null;
+    event_description?: string | null;
+    is_completed?: boolean;
+};
+
+type ApiTaskWithEntries = {
+    id: number;
+    title?: string | null;
+    task_code?: string | null;
+    total_hours_for_date?: number;
+    time_entries?: ApiTaskTimeEntry[];
+    default_remarks?: string | null;
+    timeline_events?: ApiTimelineEvent[];
+};
 
 interface ReportFormData {
     title: string;
@@ -61,17 +85,65 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
     const [attachments, setAttachments] = useState<File[]>([]);
     const [formSubmitting, setFormSubmitting] = useState(false);
 
-    const fetchTasksWithTimeEntries = async (date: string) => {
+    const tasksById = useMemo(() => {
+        return new Map(tasks.map((task) => [task.id, task]));
+    }, [tasks]);
+
+    const buildDefaultRemarks = useCallback((task: ApiTaskWithEntries): string => {
+        if (typeof task?.default_remarks === 'string') {
+            return task.default_remarks;
+        }
+
+        const timelineEvents = task?.timeline_events;
+        if (!Array.isArray(timelineEvents) || timelineEvents.length === 0) {
+            return '';
+        }
+
+        const escapeHtml = (value: string): string => {
+            return value
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        };
+
+        const listItemsHtml = timelineEvents
+            .map((event) => {
+                if (!event?.event_date || !event?.event_name) {
+                    return null;
+                }
+
+                const time = format(new Date(event.event_date), 'HH:mm');
+                const status = event.is_completed ? 'Completed' : 'Pending';
+                const eventType = String(event.event_type ?? '').trim();
+                const eventName = String(event.event_name ?? '').trim();
+                const eventDescription = String(event.event_description ?? '').trim();
+
+                if (eventName === '') {
+                    return null;
+                }
+
+                const eventTypeHtml = eventType !== '' ? ` <span>[${escapeHtml(eventType)}]</span>` : '';
+                const descriptionHtml = eventDescription !== '' ? ` <span>: ${escapeHtml(eventDescription)}</span>` : '';
+
+                return `<li><span>${escapeHtml(time)}</span> <strong>[${escapeHtml(status)}]</strong>${eventTypeHtml} <span>${escapeHtml(eventName)}</span>${descriptionHtml}</li>`;
+            })
+            .filter(Boolean)
+            .join('');
+
+        return listItemsHtml === '' ? '' : `<ul>${listItemsHtml}</ul>`;
+    }, []);
+
+    const fetchTasksWithTimeEntries = useCallback(async (date: string) => {
         try {
             const response = await axios.get(`/my/tasks/time-entries?date=${date}`);
-            let tasksWithEntries = response.data.tasks;
-            if (!Array.isArray(tasksWithEntries)) {
-                if (tasksWithEntries && typeof tasksWithEntries === 'object') {
-                    tasksWithEntries = Object.values(tasksWithEntries);
-                } else {
-                    tasksWithEntries = [];
-                }
-            }
+            const tasksFromResponse: unknown = response.data.tasks;
+            const tasksWithEntries: ApiTaskWithEntries[] = Array.isArray(tasksFromResponse)
+                ? tasksFromResponse
+                : tasksFromResponse && typeof tasksFromResponse === 'object'
+                    ? Object.values(tasksFromResponse as Record<string, ApiTaskWithEntries>)
+                    : [];
             const calculateTimeDifference = (startTime: string, endTime: string | null): number => {
                 if (!endTime) {
                     return 0;
@@ -84,11 +156,14 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                 return diffInMs / (1000 * 60 * 60);
             };
 
-            const tasksWithTime = tasksWithEntries.map((task: any) => {
+            const tasksWithTime = tasksWithEntries.map((task) => {
+                const taskSummary = tasksById.get(task.id);
+                const title = taskSummary?.title ?? task.title ?? `Task #${task.id}`;
+                const taskCode = taskSummary?.task_code ?? task.task_code ?? undefined;
                 const totalHours =
                     typeof task.total_hours_for_date === 'number'
                         ? task.total_hours_for_date
-                        : task.time_entries?.reduce((sum: number, entry: any) => {
+                        : task.time_entries?.reduce((sum: number, entry: ApiTaskTimeEntry) => {
                               if (typeof entry.duration_seconds_for_date === 'number') {
                                   return sum + entry.duration_seconds_for_date / (60 * 60);
                               }
@@ -98,8 +173,8 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                 
                 return {
                     id: task.id,
-                    title: task.title,
-                    task_code: task.task_code,
+                    title,
+                    task_code: taskCode,
                     total_hours: totalHours,
                 };
             });
@@ -108,18 +183,28 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
             
             setReportFormData(prev => ({
                 ...prev,
-                selected_tasks: tasksWithEntries.map((task: any) => task.id),
-                tasks_remarks: {},
+                selected_tasks: tasksWithEntries.map((task) => task.id),
+                tasks_remarks: Object.fromEntries(
+                    tasksWithEntries.map((task) => {
+                        const existingValue = prev.tasks_remarks[task.id];
+                        const nextValue = buildDefaultRemarks(task);
+
+                        return [
+                            task.id,
+                            typeof existingValue === 'string' && existingValue.trim() !== '' ? existingValue : nextValue,
+                        ];
+                    })
+                ),
                 total_hours: Number(
                     tasksWithTime
-                        .reduce((sum:number, task:any) => sum + Number(task.total_hours), 0)
+                        .reduce((sum: number, task) => sum + Number(task.total_hours), 0)
                         .toFixed(2)
                 ),
             }));
         } catch (error) {
             console.error('Failed to fetch tasks with time entries:', error);
         }
-    };
+    }, [buildDefaultRemarks, tasksById]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -216,19 +301,21 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
     // Reset form when dialog opens
     useEffect(() => {
         if (open) {
-            setReportFormData({
-                title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
-                description: 'Completed tasks and work details for the day.',
-                selected_tasks: [],
-                report_date: format(new Date(), 'yyyy-MM-dd'),
-                tasks_remarks: {},
-                total_hours:0,
+            Promise.resolve().then(() => {
+                setReportFormData({
+                    title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
+                    description: 'Completed tasks and work details for the day.',
+                    selected_tasks: [],
+                    report_date: format(new Date(), 'yyyy-MM-dd'),
+                    tasks_remarks: {},
+                    total_hours:0,
+                });
+                setAttachments([]);
+                setTasksWithTimeEntries([]);
+                fetchTasksWithTimeEntries(format(new Date(), 'yyyy-MM-dd'));
             });
-            setAttachments([]);
-            setTasksWithTimeEntries([]);
-            fetchTasksWithTimeEntries(format(new Date(), 'yyyy-MM-dd'));
         }
-    }, [open]);
+    }, [fetchTasksWithTimeEntries, open]);
 
     const formatHours = (hours: number) => {
         const h = Math.floor(hours);
@@ -268,10 +355,17 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                             value={reportFormData.report_date}
                             onChange={(e) => {
                                 const newDate = e.target.value;
-                                setReportFormData({ ...reportFormData, report_date: newDate });
+                                setReportFormData((prev) => ({
+                                    ...prev,
+                                    report_date: newDate,
+                                    selected_tasks: [],
+                                    tasks_remarks: {},
+                                    total_hours: 0,
+                                }));
+                                setTasksWithTimeEntries([]);
                                 fetchTasksWithTimeEntries(newDate);
                             }}
-                            max={new Date().toISOString().split('T')[0]}
+                            max={format(new Date(), 'yyyy-MM-dd')}
                         />
                     </div>
                     <div className="col-span-1 md:col-span-2 space-y-2">

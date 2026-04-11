@@ -45,7 +45,27 @@ class UserTaskController extends TimeTrackingController
                             });
                         }
                     });
-            }, 'slaPolicy'])
+            }, 'slaPolicy', 'timelineEvents' => function ($query) use ($startOfDay, $endOfDay) {
+                $query
+                    ->select([
+                        'id',
+                        'task_id',
+                        'user_id',
+                        'event_type',
+                        'event_name',
+                        'event_description',
+                        'event_date',
+                        'is_milestone',
+                        'milestone_type',
+                        'target_date',
+                        'is_completed',
+                        'progress_percentage',
+                        'metadata',
+                    ])
+                    ->where('event_type', '!=', 'daily_report')
+                    ->whereBetween('event_date', [$startOfDay, $endOfDay])
+                    ->orderBy('event_date', 'asc');
+            }])
             ->get();
 
         // Filter tasks that have time entries for the selected date
@@ -68,6 +88,31 @@ class UserTaskController extends TimeTrackingController
 
             $task->total_seconds_for_date = $totalSecondsForDate;
             $task->total_hours_for_date = round($totalSecondsForDate / 3600, 2);
+
+            $timelineEventLines = $task->timelineEvents
+                ->map(function ($event) {
+                    $time = Carbon::parse($event->event_date)->format('H:i');
+                    $eventType = trim((string) $event->event_type);
+                    $eventName = trim((string) $event->event_name);
+                    $eventDescription = trim((string) ($event->event_description ?? ''));
+                    $status = $event->is_completed ? 'Completed' : 'Pending';
+
+                    $parts = [];
+                    $parts[] = '<strong>['.e($status).']</strong>';
+                    $parts[] = '<span>'.e($eventName).'</span>';
+                    if ($eventDescription !== '') {
+                        $parts[] = '<span>: '.e($eventDescription).'</span>';
+                    }
+
+                    return implode(' ', $parts);
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            $task->default_remarks = $timelineEventLines === []
+                ? ''
+                : '<ul><li>'.implode('</li><li>', $timelineEventLines).'</li></ul>';
         });
 
         return response()->json([
@@ -116,14 +161,14 @@ class UserTaskController extends TimeTrackingController
             $query->where('user_id', $user->id);
         })
             ->with([
-            'createdBy:id,name',
-            'assignedDepartment:id,name',
-            'assignedUsers:id,name',
-            'ticket:id,ticket_number,title',
-            'taskType:id,name,code',
-            'slaPolicy:id,name,priority',
-            'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
-        ])
+                'createdBy:id,name',
+                'assignedDepartment:id,name',
+                'assignedUsers:id,name',
+                'ticket:id,ticket_number,title',
+                'taskType:id,name,code',
+                'slaPolicy:id,name,priority',
+                'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
+            ])
             ->where(function ($query) use ($terminalStates) {
                 $query->whereNotIn('state', $terminalStates)
                     ->orWhere(function ($subQuery) use ($terminalStates) {

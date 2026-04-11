@@ -7,6 +7,7 @@ use App\Http\Middleware\ValidateUserSession;
 use App\Models\Task;
 use App\Models\TaskAssignment;
 use App\Models\TaskTimeEntry;
+use App\Models\TimelineEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -97,5 +98,65 @@ class UserTaskTimeEntriesTest extends TestCase
 
         $yesterdayResponse->assertOk();
         $yesterdayResponse->assertJsonCount(0, 'tasks');
+    }
+
+    public function test_it_includes_timeline_event_details_as_default_remarks(): void
+    {
+        $this->withoutMiddleware(AdminMiddleware::class);
+        $this->withoutMiddleware(ValidateUserSession::class);
+
+        Carbon::setTestNow(Carbon::parse('2026-04-13 10:00:00'));
+
+        $user = User::factory()->create();
+        $task = Task::query()->create([
+            'task_code' => 'TASK-'.Str::upper(Str::random(8)),
+            'title' => 'Test task',
+            'created_by' => $user->id,
+        ]);
+
+        TaskAssignment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'is_active' => true,
+        ]);
+
+        TaskTimeEntry::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'start_time' => Carbon::parse('2026-04-13 09:00:00'),
+            'end_time' => Carbon::parse('2026-04-13 10:00:00'),
+            'is_active' => false,
+        ]);
+
+        TimelineEvent::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'event_type' => 'note',
+            'event_name' => 'Client call',
+            'event_description' => 'Reviewed requirements',
+            'event_date' => Carbon::parse('2026-04-13 09:30:00'),
+            'is_milestone' => false,
+        ]);
+
+        TimelineEvent::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'event_type' => 'milestone',
+            'event_name' => 'Phase 1 completed',
+            'event_description' => null,
+            'event_date' => Carbon::parse('2026-04-10 11:00:00'),
+            'is_milestone' => true,
+            'is_completed' => true,
+        ]);
+
+        $response = $this->actingAs($user, 'web')
+            ->getJson('/my/tasks/time-entries?date=2026-04-13');
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'tasks');
+        $this->assertSame(
+            '<ul><li><span>09:30</span> <strong>[Pending]</strong> <span>[note]</span> <span>Client call</span> <span>: Reviewed requirements</span></li></ul>',
+            $response->json('tasks.0.default_remarks')
+        );
     }
 }
