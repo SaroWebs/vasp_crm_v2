@@ -178,6 +178,8 @@ class ReportController extends Controller
         $query = Report::where('user_id', $userId)
             ->with(['user', 'tasks' => function ($query) {
                 $query->withPivot('remarks'); // Include remarks from pivot table
+            }, 'tasks.timeEntries' => function ($query) {
+                $query->where('is_active', false);
             }, 'attachments'])
             ->orderBy('report_date', 'desc');
 
@@ -190,13 +192,20 @@ class ReportController extends Controller
 
         $perPage = $request->input('per_page', 10);
 
-        return response()->json($query->paginate($perPage));
+        $reports = $query->paginate($perPage);
+        $reports->getCollection()->each(function (Report $report) {
+            $this->applyReportTimeEntryDurations($report);
+        });
+
+        return response()->json($reports);
     }
 
     public function getAllReports(Request $request)
     {
         $query = Report::with(['user', 'tasks' => function ($query) {
             $query->withPivot('remarks'); // Include remarks from pivot table
+        }, 'tasks.timeEntries' => function ($query) {
+            $query->where('is_active', false);
         }, 'attachments'])
             ->orderBy('report_date', 'desc');
 
@@ -231,7 +240,41 @@ class ReportController extends Controller
 
         $perPage = $request->input('per_page', 10);
 
-        return response()->json($query->paginate($perPage));
+        $reports = $query->paginate($perPage);
+        $reports->getCollection()->each(function (Report $report) {
+            $this->applyReportTimeEntryDurations($report);
+        });
+
+        return response()->json($reports);
+    }
+
+    protected function applyReportTimeEntryDurations(Report $report): void
+    {
+        $reportDate = $report->report_date instanceof Carbon
+            ? $report->report_date->toDateString()
+            : (string) $report->report_date;
+
+        foreach ($report->tasks as $task) {
+            $totalWorkingSeconds = 0;
+            $filteredEntries = $task->timeEntries
+                ->map(function ($timeEntry) use ($reportDate, &$totalWorkingSeconds) {
+                    $workingSeconds = $timeEntry->calculateDurationForDate($reportDate);
+
+                    if ($workingSeconds <= 0) {
+                        return null;
+                    }
+
+                    $timeEntry->working_duration = $workingSeconds;
+                    $totalWorkingSeconds += $workingSeconds;
+
+                    return $timeEntry;
+                })
+                ->filter()
+                ->values();
+
+            $task->setRelation('timeEntries', $filteredEntries);
+            $task->total_working_seconds = $totalWorkingSeconds;
+        }
     }
 
     /**

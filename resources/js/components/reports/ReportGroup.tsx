@@ -1,4 +1,5 @@
 import ReportCard from './ReportCard';
+import { getReportDateRange, getSecondsOnReportDate } from '@/utils/reportDate';
 
 interface ReportAttachment {
     id: number;
@@ -60,23 +61,15 @@ const formatSeconds = (seconds: number): string => {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const getSecondsOnDate = (startTime: string, endTime: string, reportDate: string): number => {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const reportDateObj = new Date(reportDate);
-    const reportDateStart = new Date(reportDateObj);
-    reportDateStart.setHours(0, 0, 0, 0);
-    const reportDateEnd = new Date(reportDateObj);
-    reportDateEnd.setHours(23, 59, 59, 999);
-
-    const effectiveStart = start < reportDateStart ? reportDateStart : start;
-    const effectiveEnd = end > reportDateEnd ? reportDateEnd : end;
-
-    if (effectiveStart >= effectiveEnd) {
-        return 0;
+const getEntrySeconds = (
+    entry: TaskTimeEntry,
+    reportDate: string,
+): number => {
+    if (typeof entry.working_duration === 'number') {
+        return entry.working_duration;
     }
 
-    return (effectiveEnd.getTime() - effectiveStart.getTime()) / 1000;
+    return getSecondsOnReportDate(entry.start_time, entry.end_time, reportDate);
 };
 
 const getReportTotalSeconds = (report: Report): number => {
@@ -86,7 +79,7 @@ const getReportTotalSeconds = (report: Report): number => {
                 return taskAcc + task.total_working_seconds;
             }
             const taskSeconds = task.time_entries?.reduce((entryAcc, entry) => {
-                return entryAcc + getSecondsOnDate(entry.start_time, entry.end_time, report.report_date);
+                return entryAcc + getEntrySeconds(entry, report.report_date);
             }, 0) || 0;
             return taskAcc + taskSeconds;
         }, 0);
@@ -106,7 +99,8 @@ export default function ReportGroup({ reports, authUser, groupBy, showEmployee =
 
     const getGroupHeader = () => {
         if (groupBy === 'date') {
-            const date = new Date(reports[0].report_date);
+            const range = getReportDateRange(reports[0].report_date);
+            const date = range?.start ?? new Date(reports[0].report_date);
             return date.toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',

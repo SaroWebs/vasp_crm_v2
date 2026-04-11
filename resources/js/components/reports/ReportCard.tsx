@@ -6,6 +6,10 @@ import { ActionIcon } from '@mantine/core';
 import { Eye, Edit, Trash2, Clock, ChevronDown, ChevronUp, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import {
+    getEntryRangeOnReportDate,
+    getSecondsOnReportDate,
+} from '@/utils/reportDate';
 
 interface ReportAttachment {
     id: number;
@@ -72,25 +76,16 @@ const formatDuration = (hours: number): string => {
     return `${hoursPart}h ${minutesPart}m`;
 };
 
-const getSecondsOnDate = (startTime: string, endTime: string, reportDate: string): number => {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const reportDateObj = new Date(reportDate);
-    const reportDateStart = new Date(reportDateObj);
-    reportDateStart.setHours(0, 0, 0, 0);
-    const reportDateEnd = new Date(reportDateObj);
-    reportDateEnd.setHours(23, 59, 59, 999);
-
-    const effectiveStart = start < reportDateStart ? reportDateStart : start;
-    const effectiveEnd = end > reportDateEnd ? reportDateEnd : end;
-
-    if (effectiveStart >= effectiveEnd) {
-        return 0;
+const getEntrySeconds = (
+    entry: TaskTimeEntry,
+    reportDate: string,
+): number => {
+    if (typeof entry.working_duration === 'number') {
+        return entry.working_duration;
     }
 
-    return (effectiveEnd.getTime() - effectiveStart.getTime()) / 1000;
+    return getSecondsOnReportDate(entry.start_time, entry.end_time, reportDate);
 };
-
 
 const getStateColor = (state: string): string => {
     const stateColors: Record<string, string> = {
@@ -141,7 +136,7 @@ export default function ReportCard({ report, authUser, onDelete, isLast, showTim
                     return acc + task.total_working_seconds;
                 }
                 const taskSeconds = task.time_entries?.reduce((entryAcc, entry) => {
-                    return entryAcc + getSecondsOnDate(entry.start_time, entry.end_time, report.report_date);
+                    return entryAcc + getEntrySeconds(entry, report.report_date);
                 }, 0) || 0;
                 return acc + taskSeconds;
             }, 0);
@@ -173,7 +168,7 @@ export default function ReportCard({ report, authUser, onDelete, isLast, showTim
                             const taskTotalSeconds = task.total_working_seconds
                                 ? task.total_working_seconds
                                 : task.time_entries?.reduce((entryAcc, entry) => {
-                                    return entryAcc + getSecondsOnDate(entry.start_time, entry.end_time, report.report_date);
+                                    return entryAcc + getEntrySeconds(entry, report.report_date);
                                 }, 0) || 0;
                             const isExpanded = expandedTasks[task.id];
 
@@ -204,15 +199,28 @@ export default function ReportCard({ report, authUser, onDelete, isLast, showTim
                                     {showTimeEntries && task.time_entries && task.time_entries.length > 0 && isExpanded && (
                                         <div className="ml-4 mt-2 space-y-1 border-l-2 border-indigo-200 pl-3">
                                             {task.time_entries.map((entry) => {
-                                                const entrySeconds = getSecondsOnDate(entry.start_time, entry.end_time, report.report_date);
-                                                
+                                                const range = getEntryRangeOnReportDate(
+                                                    entry.start_time,
+                                                    entry.end_time,
+                                                    report.report_date,
+                                                );
+
+                                                if (!range) {
+                                                    return null;
+                                                }
+
+                                                const entrySeconds = getEntrySeconds(
+                                                    entry,
+                                                    report.report_date,
+                                                );
+
                                                 return (
                                                     <div key={entry.id} className="flex items-center justify-between text-xs">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-gray-500">
-                                                                {new Date(entry.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                                                {range.start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                                                 -
-                                                                {new Date(entry.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                                                {range.end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                             {entry.description && (
                                                                 <span className="text-gray-600">

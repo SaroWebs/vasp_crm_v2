@@ -134,16 +134,58 @@ export default function ReportsIndex(props: ReportsIndexProps) {
         return `${hoursPart}h ${minutesPart}m ${secondsPart}s`;
     };
 
+    const getEntrySeconds = (entry: TaskTimeEntry): number => {
+        if (typeof entry.working_duration === 'number') {
+            return entry.working_duration;
+        }
+
+        if (typeof entry.duration_hours === 'number') {
+            return entry.duration_hours * 3600;
+        }
+
+        const start = new Date(entry.start_time);
+        const end = new Date(entry.end_time);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            return 0;
+        }
+
+        return Math.max(0, (end.getTime() - start.getTime()) / 1000);
+    };
+
+    const getReportTotalSeconds = (report: Report): number => {
+        if (report.tasks && report.tasks.length > 0) {
+            return report.tasks.reduce((taskAcc, task) => {
+                if (typeof task.total_working_seconds === 'number') {
+                    return taskAcc + task.total_working_seconds;
+                }
+
+                const taskSeconds = task.time_entries?.reduce((entryAcc, entry) => {
+                    return entryAcc + getEntrySeconds(entry);
+                }, 0) || 0;
+
+                return taskAcc + taskSeconds;
+            }, 0);
+        }
+
+        return report.total_hours * 3600;
+    };
+
     // Computed statistics
     const stats = useMemo(() => {
         const totalReports = reports.length;
-        const totalTimeSpent = reports.reduce((sum, report) => {
-            return sum + (isNaN(report.total_hours) ? 0 : Number(report.total_hours));
+        const totalTimeSpentSeconds = reports.reduce((sum, report) => {
+            return sum + getReportTotalSeconds(report);
         }, 0);
         const uniqueTasks = new Set(reports.flatMap(e => e.tasks?.map(t => t.id) || [])).size;
         const withAttachments = reports.filter(e => e.attachments?.length > 0).length;
 
-        return { totalReports, totalTimeSpent, uniqueTasks, withAttachments };
+        return {
+            totalReports,
+            totalTimeSpent: totalTimeSpentSeconds / 3600,
+            uniqueTasks,
+            withAttachments,
+        };
     }, [reports]);
 
     // Filtered reports based on search and status
