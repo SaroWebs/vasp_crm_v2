@@ -104,35 +104,38 @@ class TaskTimeEntry extends Model
 
     /**
      * Calculate duration in seconds that falls within a specific report date.
-     * This clips the time entry to the report date boundaries (start/end of day).
+     * This clips the time entry to the report date boundaries (start/end of day),
+     * and then calculates only the working-time duration for that clipped window.
      */
-    public function calculateDurationForDate(string $reportDate): int
+    public function calculateDurationForDate(string $reportDate, ?Carbon $effectiveEndTime = null): int
     {
-        if (! $this->start_time || ! $this->end_time) {
+        if (! $this->start_time) {
             return 0;
         }
 
         $start = Carbon::parse($this->start_time);
-        $end = Carbon::parse($this->end_time);
-        $reportDateObj = Carbon::parse($reportDate)->startOfDay();
-        $reportDateEnd = Carbon::parse($reportDate)->endOfDay();
+        $endTime = $this->end_time ?? $effectiveEndTime;
 
-        // Clip start time to report date start
-        if ($start->lt($reportDateObj)) {
-            $start = $reportDateObj->copy();
-        }
-
-        // Clip end time to report date end
-        if ($end->gt($reportDateEnd)) {
-            $end = $reportDateEnd->copy();
-        }
-
-        // Return 0 if start >= end after clipping
-        if ($start->gte($end)) {
+        if (! $endTime) {
             return 0;
         }
 
-        return (int) $start->diffInSeconds($end);
+        $end = Carbon::parse($endTime);
+        $reportDateObj = Carbon::parse($reportDate)->startOfDay();
+        $reportDateEnd = Carbon::parse($reportDate)->endOfDay();
+
+        $clippedStart = $start->lt($reportDateObj) ? $reportDateObj->copy() : $start;
+        $clippedEnd = $end->gt($reportDateEnd) ? $reportDateEnd->copy() : $end;
+
+        // Return 0 if start >= end after clipping
+        if ($clippedStart->gte($clippedEnd)) {
+            return 0;
+        }
+
+        $timeCalculator = app(TimeCalculatorService::class);
+        $durationSeconds = $timeCalculator->calculateWorkingDuration($clippedStart, $clippedEnd);
+
+        return (int) round($durationSeconds);
     }
 
     /**

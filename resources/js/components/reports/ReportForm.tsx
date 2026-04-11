@@ -48,7 +48,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
         title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
         description: 'Completed tasks and work details for the day.',
         selected_tasks: [],
-        report_date: new Date().toISOString().split('T')[0],
+        report_date: format(new Date(), 'yyyy-MM-dd'),
         tasks_remarks: {},
         total_hours:0,
     });
@@ -73,17 +73,28 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                 }
             }
             const calculateTimeDifference = (startTime: string, endTime: string | null): number => {
-                if (!endTime) return 0;
+                if (!endTime) {
+                    return 0;
+                }
+
                 const start = new Date(startTime);
                 const end = new Date(endTime);
                 const diffInMs = end.getTime() - start.getTime();
-                return diffInMs / (1000 * 60 * 60);
-              };
 
-            const tasksWithTime = tasksWithEntries.map((task: Task) => {
-                const totalHours = task.time_entries?.reduce((sum, entry) => {
-                    return sum + calculateTimeDifference(entry.start_time, entry.end_time);
-                  }, 0) || 0;;
+                return diffInMs / (1000 * 60 * 60);
+            };
+
+            const tasksWithTime = tasksWithEntries.map((task: any) => {
+                const totalHours =
+                    typeof task.total_hours_for_date === 'number'
+                        ? task.total_hours_for_date
+                        : task.time_entries?.reduce((sum: number, entry: any) => {
+                              if (typeof entry.duration_seconds_for_date === 'number') {
+                                  return sum + entry.duration_seconds_for_date / (60 * 60);
+                              }
+
+                              return sum + calculateTimeDifference(entry.start_time, entry.end_time);
+                          }, 0) || 0;
                 
                 return {
                     id: task.id,
@@ -99,7 +110,11 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                 ...prev,
                 selected_tasks: tasksWithEntries.map((task: any) => task.id),
                 tasks_remarks: {},
-                total_hours: tasksWithTime.reduce((sum:number, task:any) => sum + Number(task.total_hours), 0).toFixed(2),
+                total_hours: Number(
+                    tasksWithTime
+                        .reduce((sum:number, task:any) => sum + Number(task.total_hours), 0)
+                        .toFixed(2)
+                ),
             }));
         } catch (error) {
             console.error('Failed to fetch tasks with time entries:', error);
@@ -165,7 +180,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                                 title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
                                 description: 'Completed tasks and work details for the day.',
                                 selected_tasks: [],
-                                report_date: new Date().toISOString().split('T')[0],
+                                report_date: format(new Date(), 'yyyy-MM-dd'),
                                 tasks_remarks: {},
                                 total_hours:0,
                             });
@@ -182,7 +197,7 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                         title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
                         description: 'Completed tasks and work details for the day.',
                         selected_tasks: [],
-                        report_date: new Date().toISOString().split('T')[0],
+                        report_date: format(new Date(), 'yyyy-MM-dd'),
                         tasks_remarks: {},
                         total_hours:0,
                     });
@@ -205,13 +220,13 @@ export default function ReportForm({ open, onOpenChange, tasks }: ReportFormProp
                 title: `Daily Report - ${format(new Date(), 'yyyy-MM-dd')}`,
                 description: 'Completed tasks and work details for the day.',
                 selected_tasks: [],
-                report_date: new Date().toISOString().split('T')[0],
+                report_date: format(new Date(), 'yyyy-MM-dd'),
                 tasks_remarks: {},
                 total_hours:0,
             });
             setAttachments([]);
             setTasksWithTimeEntries([]);
-            fetchTasksWithTimeEntries(new Date().toISOString().split('T')[0]);
+            fetchTasksWithTimeEntries(format(new Date(), 'yyyy-MM-dd'));
         }
     }, [open]);
 
