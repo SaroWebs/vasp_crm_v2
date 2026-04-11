@@ -69,7 +69,7 @@ const RecentReportSection = () => {
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-64 overflow-y-auto">
                     {recentReports &&
                         recentReports.map((report) => (
                             <Link
@@ -87,9 +87,6 @@ const RecentReportSection = () => {
                                 </div>
                                 <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                                     <span>
-                                        {new Date(report.report_date).toLocaleDateString()}
-                                    </span>
-                                    <span>
                                         {report.task_count} tasks
                                     </span>
                                     <span>
@@ -102,7 +99,7 @@ const RecentReportSection = () => {
                 <div className="mt-4 text-right">
                     <Link href="/admin/reports">
                         <Button variant="outline" size="sm">
-                            View All Reports
+                            View Report Details
                         </Button>
                     </Link>
                 </div>
