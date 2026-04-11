@@ -111,7 +111,7 @@ export default function TaskDetailsModalContent({
     const status = task.state?.replace('_', ' ') ?? 'Unknown';
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className='flex flex-col gap-3 max-h-[300px] overflow-y-auto px-4 py-3'>
             <div
                 style={{
                     display: 'flex',
@@ -145,7 +145,7 @@ export default function TaskDetailsModalContent({
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div className='flex gap-2 flex-wrap'>
                     <span
                         style={{
                             fontSize: 12,
@@ -197,145 +197,9 @@ export default function TaskDetailsModalContent({
                     </div>
                 </div>
             ) : null}
-
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                    gap: 12,
-                }}
-            >
+            <div className="flex justify-between">
                 <div>
-                    <div
-                        style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: '#667085',
-                        }}
-                    >
-                        Start
-                    </div>
-                    <div
-                        style={{ marginTop: 4, fontSize: 13, color: '#344054' }}
-                    >
-                        {formatDateTime(task.start_at)}
-                    </div>
-                </div>
-                <div>
-                    <div
-                        style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: '#667085',
-                        }}
-                    >
-                        Due
-                    </div>
-                    <div
-                        style={{ marginTop: 4, fontSize: 13, color: '#344054' }}
-                    >
-                        {formatDateTime(task.due_at)}
-                    </div>
-                </div>
-                <div>
-                    <div
-                        style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: '#667085',
-                        }}
-                    >
-                        Estimate
-                    </div>
-                    <div
-                        style={{ marginTop: 4, fontSize: 13, color: '#344054' }}
-                    >
-                        {task.estimate_hours
-                            ? `${task.estimate_hours}h`
-                            : 'Not set'}
-                    </div>
-                </div>
-            </div>
-
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                    gap: 12,
-                }}
-            >
-                <div>
-                    <div
-                        style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: '#667085',
-                        }}
-                    >
-                        Assigned By
-                    </div>
-                    <div
-                        style={{ marginTop: 4, fontSize: 13, color: '#344054' }}
-                    >
-                        {assignedBy
-                            ? assignedUsers.some((user) => {
-                                  // Handle assignedBy as User object
-                                  if (
-                                      typeof assignedBy === 'object' &&
-                                      assignedBy !== null &&
-                                      'id' in assignedBy
-                                  ) {
-                                      return (
-                                          (assignedBy as { id?: number }).id ===
-                                          user.id
-                                      );
-                                  }
-                                  // Handle assignedBy as number (user ID)
-                                  if (typeof assignedBy === 'number') {
-                                      return assignedBy === user.id;
-                                  }
-                                  // Handle assignedBy as string (username)
-                                  if (typeof assignedBy === 'string') {
-                                      return assignedBy === user.name;
-                                  }
-                                  return false;
-                              })
-                                ? 'Self'
-                                : typeof assignedBy === 'string'
-                                  ? assignedBy
-                                  : typeof assignedBy === 'number'
-                                    ? `User #${assignedBy}`
-                                    : assignedBy &&
-                                        typeof assignedBy === 'object' &&
-                                        'name' in assignedBy
-                                      ? String(
-                                            (assignedBy as { name?: string })
-                                                .name || 'Unknown',
-                                        )
-                                      : 'Unknown'
-                            : 'Unassigned'}
-                    </div>
-                </div>
-                <div>
-                    <div
-                        style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: '#667085',
-                        }}
-                    >
-                        Assigned To
-                    </div>
-                    <div
-                        style={{ marginTop: 4, fontSize: 13, color: '#344054' }}
-                    >
-                        {assignedUsers.length > 0
-                            ? assignedUsers.map((user) => user.name).join(', ')
-                            : 'Unassigned'}
-                    </div>
-                </div>
-                {task.assigned_department ? (
-                    <div>
+                    <div className='flex gap-2'>
                         <div
                             style={{
                                 fontSize: 12,
@@ -343,20 +207,145 @@ export default function TaskDetailsModalContent({
                                 color: '#667085',
                             }}
                         >
-                            Department
+                            Assigned By : 
                         </div>
                         <div
-                            style={{
-                                marginTop: 4,
-                                fontSize: 13,
-                                color: '#344054',
-                            }}
+                            style={{ fontSize: 13, color: '#344054' }}
                         >
-                            {task.assigned_department.name}
+                            {assignedBy
+                                ? assignedUsers.some((user) => {
+                                    // Handle assignedBy as User object
+                                    if (
+                                        typeof assignedBy === 'object' &&
+                                        assignedBy !== null &&
+                                        'id' in assignedBy
+                                    ) {
+                                        return (
+                                            (assignedBy as { id?: number }).id ===
+                                            user.id
+                                        );
+                                    }
+                                    // Handle assignedBy as number (user ID)
+                                    if (typeof assignedBy === 'number') {
+                                        return assignedBy === user.id;
+                                    }
+                                    // Handle assignedBy as string (username)
+                                    if (typeof assignedBy === 'string') {
+                                        return assignedBy === user.name;
+                                    }
+                                    return false;
+                                })
+                                    ? 'Self'
+                                    : typeof assignedBy === 'string'
+                                        ? assignedBy
+                                        : typeof assignedBy === 'number'
+                                            ? `User #${assignedBy}`
+                                            : assignedBy &&
+                                                typeof assignedBy === 'object' &&
+                                                'name' in assignedBy
+                                                ? String(
+                                                    (assignedBy as { name?: string })
+                                                        .name || 'Unknown',
+                                                )
+                                                : 'Unknown'
+                                : 'Unassigned'}
                         </div>
                     </div>
-                ) : null}
+                    <div className='flex gap-2'>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#667085',
+                            }}
+                        >
+                            Assigned To : 
+                        </div>
+                        <div
+                            style={{ fontSize: 13, color: '#344054' }}
+                        >
+                            {assignedUsers.length > 0
+                                ? assignedUsers.map((user) => user.name).join(', ')
+                                : 'Unassigned'}
+                        </div>
+                    </div>
+                    {task.assigned_department ? (
+                        <div>
+                            <div
+                                style={{
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: '#667085',
+                                }}
+                            >
+                                Department
+                            </div>
+                            <div
+                                style={{
+                                    marginTop: 4,
+                                    fontSize: 13,
+                                    color: '#344054',
+                                }}
+                            >
+                                {task.assigned_department.name}
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+                <div>
+                    <div className='flex gap-2'>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#667085',
+                            }}
+                        >
+                            Start :
+                        </div>
+                        <div
+                            style={{ fontSize: 13, color: '#344054' }}
+                        >
+                            {formatDateTime(task.start_at)}
+                        </div>
+                    </div>
+                    <div className='flex gap-2'>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#667085',
+                            }}
+                        >
+                            Due :
+                        </div>
+                        <div
+                            style={{ fontSize: 13, color: '#344054' }}
+                        >
+                            {formatDateTime(task.due_at)}
+                        </div>
+                    </div>
+                    <div className='flex gap-2'>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#667085',
+                            }}
+                        >
+                            Estimate
+                        </div>
+                        <div
+                            style={{ fontSize: 13, color: '#344054' }}
+                        >
+                            {task.estimate_hours
+                                ? `${task.estimate_hours}h`
+                                : 'Not set'}
+                        </div>
+                    </div>
+                </div>
             </div>
+
 
             <div
                 style={{

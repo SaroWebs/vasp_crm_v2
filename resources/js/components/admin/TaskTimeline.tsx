@@ -1,6 +1,12 @@
 import TaskDetailsModalContent from '@/components/admin/TaskDetailsModalContent';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
-import { Modal } from '@mantine/core';
 import axios from 'axios';
 import React, {
     startTransition,
@@ -252,6 +258,48 @@ function formatEntryRange(entry: TimeEntry): string {
     return `${startLabel} -> ${endLabel}`;
 }
 
+function formatEntryDateTime(date: Date): string {
+    return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function formatEntryDuration(entry: TimeEntry): string {
+    const start = getEntryStart(entry);
+    const end = getEntryEnd(entry);
+    return formatDurationFromRange(start, end);
+}
+
+function formatDurationFromRange(start: Date, end: Date): string {
+    const totalMinutes = Math.max(
+        1,
+        Math.round((end.getTime() - start.getTime()) / (60 * 1000)),
+    );
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours <= 0) {
+        return `${minutes}m`;
+    }
+
+    if (minutes === 0) {
+        return `${hours}h`;
+    }
+
+    return `${hours}h ${minutes}m`;
+}
+
+function hasDailyWindow(
+    task: SchedulerTask,
+): task is SchedulerTask & Pick<SchedulerDailyTask, 'startHour' | 'endHour'> {
+    return 'startHour' in task && 'endHour' in task;
+}
+
 function overlapsRangeEntry(
     entry: TimeEntry,
     rangeStart: Date,
@@ -456,7 +504,7 @@ function DailyTaskBlock({
 }: {
     task: SchedulerDailyTask;
     lane: number;
-    onSelect: (task: Task) => void;
+    onSelect: (task: SchedulerTask) => void;
     isPlanned?: boolean;
 }) {
     const style = CHIP_STYLES[task.type];
@@ -475,7 +523,7 @@ function DailyTaskBlock({
     return (
         <button
             title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}${titleSuffix}`}
-            onClick={() => onSelect(task.task)}
+            onClick={() => onSelect(task)}
             style={{
                 top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
                 left: `calc(${leftPct}% + 2px)`,
@@ -529,7 +577,7 @@ function GanttBar({
     lane: number;
     left: number;
     width: number;
-    onSelect: (task: Task) => void;
+    onSelect: (task: SchedulerTask) => void;
 }) 
 {
     const style = CHIP_STYLES[task.type];
@@ -539,7 +587,7 @@ function GanttBar({
     return (
         <button
             title={`${task.task.title} (${rangeLabel})${isWorking ? ' - Working' : ''}`}
-            onClick={() => onSelect(task.task)}
+            onClick={() => onSelect(task)}
             style={{
                 position: 'absolute',
                 top: GANTT_BAR_GAP + lane * (GANTT_BAR_H + GANTT_BAR_GAP),
@@ -597,7 +645,7 @@ function DailyView({
     day: Date;
     today: Date;
     employees: SchedulerEmployee[];
-    onSelectTask: (task: Task) => void;
+    onSelectTask: (task: SchedulerTask) => void;
     scale?: number;
 })
 {
@@ -883,7 +931,7 @@ function GridView({
     days: Date[];
     today: Date;
     employees: SchedulerEmployee[];
-    onSelectTask: (task: Task) => void;
+    onSelectTask: (task: SchedulerTask) => void;
     scale?: number;
 }) {
     const colWidth = (days.length > 20 ? 190 : days.length > 10 ? 210 : 230) * scale;
@@ -1208,6 +1256,12 @@ const TaskTimeline = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+    const [selectedSchedulerTask, setSelectedSchedulerTask] =
+        useState<SchedulerTask | null>(null);
+    const [selectedEntryWindow, setSelectedEntryWindow] = useState<{
+        start: Date;
+        end: Date;
+    } | null>(null);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [taskDetails, setTaskDetails] = useState<Task | null>(null);
     const [taskAttachments, setTaskAttachments] = useState<TaskAttachment[]>(
@@ -1562,6 +1616,12 @@ const TaskTimeline = () => {
             });
     }, [days, employees, rangeEnd, rangeStart, tasks, today, view]);
 
+    const schedulerEmployeeById = useMemo(() => {
+        const map = new Map<number, SchedulerEmployee>();
+        schedulerEmployees.forEach((employee) => map.set(employee.id, employee));
+        return map;
+    }, [schedulerEmployees]);
+
     function goToday(): void {
         setAnchorDate(today);
     }
@@ -1576,8 +1636,31 @@ const TaskTimeline = () => {
         });
     }
 
-    function selectTask(task: Task): void {
-        setSelectedTaskId(task.id);
+    function selectTask(schedulerTask: SchedulerTask): void {
+        setSelectedTaskId(schedulerTask.task.id);
+        setSelectedSchedulerTask(schedulerTask);
+        if (view === 'daily' && hasDailyWindow(schedulerTask)) {
+            const dayStart = startOfDay(anchorDate);
+            const start = new Date(dayStart);
+            start.setHours(
+                Math.floor(schedulerTask.startHour),
+                Math.round((schedulerTask.startHour % 1) * 60),
+                0,
+                0,
+            );
+
+            const end = new Date(dayStart);
+            end.setHours(
+                Math.floor(schedulerTask.endHour),
+                Math.round((schedulerTask.endHour % 1) * 60),
+                0,
+                0,
+            );
+
+            setSelectedEntryWindow({ start, end });
+        } else {
+            setSelectedEntryWindow(null);
+        }
         setTaskDetails(null);
         setTaskAttachments([]);
         setTaskComments([]);
@@ -1592,6 +1675,8 @@ const TaskTimeline = () => {
             detailsAbortRef.current = null;
         }
 
+        setSelectedSchedulerTask(null);
+        setSelectedEntryWindow(null);
         setTaskDetails(null);
         setTaskAttachments([]);
         setTaskComments([]);
@@ -1632,9 +1717,6 @@ const TaskTimeline = () => {
                 setTaskDetails(responseTask ?? null);
                 setTaskAttachments(responseAttachments);
                 setTaskComments(responseComments);
-                if (responseTask) {
-                    console.log(responseTask);
-                }
             })
             .catch((error) => {
                 if (
@@ -1669,6 +1751,60 @@ const TaskTimeline = () => {
 
         return tasks.find((task) => task.id === selectedTaskId) ?? null;
     }, [selectedTaskId, tasks]);
+
+    const selectedEntryOwner = useMemo(() => {
+        if (!selectedSchedulerTask) {
+            return null;
+        }
+
+        const employee =
+            schedulerEmployeeById.get(selectedSchedulerTask.timeEntry.user_id) ??
+            null;
+
+        if (employee) {
+            return employee;
+        }
+
+        return {
+            id: selectedSchedulerTask.timeEntry.user_id,
+            name: `User ${selectedSchedulerTask.timeEntry.user_id}`,
+            role: 'Task Owner',
+            initials: 'U',
+            avatarBg: '#eaeef2',
+            avatarColor: '#57606a',
+            tasks: {},
+            dailyTasks: {},
+            allTasks: [],
+        } satisfies SchedulerEmployee;
+    }, [schedulerEmployeeById, selectedSchedulerTask]);
+
+    const selectedEntryStyle = selectedSchedulerTask
+        ? CHIP_STYLES[selectedSchedulerTask.type]
+        : null;
+    const selectedEntryStart = selectedSchedulerTask
+        ? (selectedEntryWindow?.start ?? getEntryStart(selectedSchedulerTask.timeEntry))
+        : null;
+    const selectedEntryEnd = selectedSchedulerTask
+        ? (selectedEntryWindow?.end ?? getEntryEnd(selectedSchedulerTask.timeEntry))
+        : null;
+    const selectedEntryDuration = selectedSchedulerTask
+        ? selectedEntryStart && selectedEntryEnd
+            ? formatDurationFromRange(selectedEntryStart, selectedEntryEnd)
+            : formatEntryDuration(selectedSchedulerTask.timeEntry)
+        : null;
+    const selectedEntrySubtitle =
+        selectedEntryStart && selectedEntryEnd
+            ? `${formatEntryDateTime(selectedEntryStart)} - ${formatEntryDateTime(selectedEntryEnd)}`
+            : selectedSchedulerTask
+              ? formatEntryRange(selectedSchedulerTask.timeEntry)
+              : null;
+    const selectedEntryStateLabel = selectedSchedulerTask
+        ? selectedSchedulerTask.timeEntry.is_active
+            ? 'Live now'
+            : selectedSchedulerTask.timeEntry.end_time
+              ? 'Completed'
+              : 'Scheduled'
+        : null;
 
     const buttonStyle: React.CSSProperties = {
         fontSize: 12,
@@ -1922,24 +2058,199 @@ const TaskTimeline = () => {
                 </div>
             ) : null}
 
-            <Modal
-                opened={isTaskModalOpen}
-                onClose={closeTaskModal}
-                title={
-                    taskDetails?.title ?? selectedTask?.title ?? 'Task details'
-                }
-                size="xl"
+            <Dialog
+                open={isTaskModalOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        closeTaskModal();
+                    }
+                }}
             >
-                <TaskDetailsModalContent
-                    task={taskDetails ?? selectedTask}
-                    attachments={taskAttachments}
-                    comments={taskComments}
-                    loading={detailsLoading}
-                    errorMessage={detailsError}
-                />
-            </Modal>
+                <DialogContent className="max-w-6xl overflow-hidden p-0">
+                    <div className="border-b bg-gradient-to-br from-muted/70 via-background to-background px-7 pb-6 pt-7">
+                        <DialogHeader className="space-y-4">
+                            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0 space-y-2">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                        {taskDetails?.task_code ??
+                                            selectedTask?.task_code ??
+                                            (taskDetails?.id || selectedTask?.id
+                                                ? `Task #${taskDetails?.id ?? selectedTask?.id}`
+                                                : 'Task details')}
+                                    </div>
+                                    <DialogTitle className="text-3xl font-semibold leading-tight tracking-tight">
+                                        {taskDetails?.title ??
+                                            selectedTask?.title ??
+                                            'Task details'}
+                                    </DialogTitle>
+                                    {selectedSchedulerTask ? (
+                                        <DialogDescription className="text-sm text-muted-foreground">
+                                            {selectedSchedulerTask.label}{' '}
+                                            |{' '}
+                                            {selectedEntrySubtitle}
+                                        </DialogDescription>
+                                    ) : (
+                                        <DialogDescription className="text-sm text-muted-foreground">
+                                            Click a timeline bar to see the
+                                            exact time entry details.
+                                        </DialogDescription>
+                                    )}
+                                </div>
+
+                                {selectedSchedulerTask ? (
+                                    <div className="flex flex-wrap items-center justify-end gap-3">
+                                        {selectedEntryOwner ? (
+                                            <div className="flex items-center gap-3 rounded-xl border bg-background/80 px-3 py-2 shadow-sm">
+                                                <span
+                                                    className="inline-flex size-9 items-center justify-center rounded-full text-sm font-semibold"
+                                                    style={{
+                                                        background:
+                                                            selectedEntryOwner.avatarBg,
+                                                        color: selectedEntryOwner.avatarColor,
+                                                    }}
+                                                >
+                                                    {selectedEntryOwner.initials}
+                                                </span>
+                                                <div className="hidden sm:block">
+                                                    <div className="text-sm font-semibold leading-5 tracking-tight">
+                                                        {selectedEntryOwner.name}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {selectedEntryOwner.role}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        <span
+                                            className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold capitalize"
+                                            style={{
+                                                background: selectedEntryStyle?.bg,
+                                                borderColor:
+                                                    selectedEntryStyle?.border,
+                                                color: selectedEntryStyle?.color,
+                                            }}
+                                        >
+                                            <span
+                                                className="size-2 rounded-full"
+                                                style={{
+                                                    background:
+                                                        selectedEntryStyle?.color,
+                                                }}
+                                            />
+                                            {selectedSchedulerTask.type.replaceAll(
+                                                '_',
+                                                ' ',
+                                            )}
+                                            {selectedSchedulerTask.timeEntry
+                                                .is_active ? (
+                                                <span className="ml-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
+                                                    <span
+                                                        className="size-1.5 rounded-full"
+                                                        style={{
+                                                            background: '#E24B4A',
+                                                            animation:
+                                                                'pulse 1.2s infinite',
+                                                        }}
+                                                    />
+                                                    Live
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    </div>
+                                ) : null}
+                            </div>
+                        </DialogHeader>
+
+                        {selectedSchedulerTask ? (
+                            <div className="mt-6 rounded-2xl border bg-background/85 p-5 shadow-sm">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                        Selected Time Entry
+                                    </div>
+                                    <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs font-semibold text-foreground">
+                                        Entry #{selectedSchedulerTask.timeEntry.id}
+                                        <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
+                                        {selectedEntryDuration}
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+                                    <div className="rounded-xl border bg-background p-4">
+                                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                            Start
+                                        </div>
+                                        <div className="mt-2 text-base font-semibold tracking-tight">
+                                            {selectedEntryStart
+                                                ? formatEntryDateTime(
+                                                      selectedEntryStart,
+                                                  )
+                                                : 'Not set'}
+                                        </div>
+                                    </div>
+
+                                    <div className="hidden items-center gap-2 md:flex">
+                                        <span
+                                            className="size-2 rounded-full"
+                                            style={{
+                                                background:
+                                                    selectedEntryStyle?.color,
+                                            }}
+                                        />
+                                        <div className="h-[2px] w-20 rounded-full bg-muted-foreground/25" />
+                                        
+                                        <div className="h-[2px] w-20 rounded-full bg-muted-foreground/25" />
+                                        <span className="size-2 rounded-full bg-[#E24B4A]" />
+                                    </div>
+
+                                    <div className="rounded-xl border bg-background p-4">
+                                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                            End
+                                        </div>
+                                        <div className="mt-2 text-base font-semibold tracking-tight">
+                                            {selectedEntryWindow
+                                                ? selectedEntryEnd
+                                                    ? formatEntryDateTime(
+                                                          selectedEntryEnd,
+                                                      )
+                                                    : 'Not set'
+                                                : selectedSchedulerTask.timeEntry
+                                                      .end_time
+                                                  ? selectedEntryEnd
+                                                    ? formatEntryDateTime(
+                                                          selectedEntryEnd,
+                                                      )
+                                                    : 'Not set'
+                                                  : selectedSchedulerTask
+                                                        .timeEntry.is_active &&
+                                                      selectedEntryEnd
+                                                    ? `Now (${formatEntryDateTime(
+                                                          selectedEntryEnd,
+                                                      )})`
+                                                    : 'Not set'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="max-h-[75vh] overflow-y-auto bg-background p-6">
+                        <TaskDetailsModalContent
+                            task={taskDetails ?? selectedTask}
+                            attachments={taskAttachments}
+                            comments={taskComments}
+                            loading={detailsLoading}
+                            errorMessage={detailsError}
+                        />
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };
 
 export default TaskTimeline;
+
