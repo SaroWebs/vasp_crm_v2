@@ -63,7 +63,7 @@ interface EmployeeTaskProgressProps {
 const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
     employeeId,
 }) => {
-    const [period, setPeriod] = useState<ProgressPeriod>('monthly');
+    const [period, setPeriod] = useState<ProgressPeriod>('daily');
     const [selectedDate, setSelectedDate] = useState<string>(
         new Date().toISOString().split('T')[0],
     );
@@ -210,34 +210,97 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
         );
     }, [currentEmployeeProgress]);
 
+    const getRecentDailyReports = (
+        dailyReports: Record<string, EmployeeProgressDailyReport> | undefined,
+    ): EmployeeProgressDailyReport[] => {
+        return Object.values(dailyReports ?? {})
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 5);
+    };
+
     const recentDailyReports = useMemo(() => {
         if (!currentEmployeeProgress) return [];
 
-        return Object.values(currentEmployeeProgress.daily_reports || {})
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .slice(0, 5);
+        return getRecentDailyReports(currentEmployeeProgress.daily_reports);
     }, [currentEmployeeProgress]);
 
-    const averageTimePerEmployee = useMemo(() => {
-        if (!progressPayload || progressPayload.total_employees === 0) {
-            return 0;
-        }
+    const renderWorkflow = (reports: EmployeeProgressDailyReport[]) => {
+        return reports.length > 0 ? (
+            <div className="space-y-2">
+                {reports.map((report) => (
+                    <div
+                        key={report.date}
+                        className="space-y-3 rounded-lg border p-3 text-sm"
+                    >
+                        <div className="flex items-center justify-between">
+                            <span>
+                                {new Date(report.date).toLocaleDateString(
+                                    'en-US',
+                                    {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                    },
+                                )}
+                            </span>
+                            <span className="text-muted-foreground">
+                                {Number(report.total_time).toFixed(2)}h
+                            </span>
+                        </div>
 
-        return (
-            Number(progressPayload.total_time) / progressPayload.total_employees
+                        {report.events?.length > 0 ? (
+                            <div className="space-y-2 border-t pt-2">
+                                {report.events.map((event, index) => (
+                                    <div
+                                        key={`${report.date}-${event.event_name}-${index}`}
+                                        className="space-y-1"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium">
+                                                {event.event_name}
+                                            </span>
+                                            {event.duration_hours !==
+                                                undefined && (
+                                                <span className="text-xs text-muted-foreground">
+                                                    (
+                                                    {Number(
+                                                        event.duration_hours,
+                                                    ).toFixed(2)}
+                                                    h)
+                                                </span>
+                                            )}
+                                        </div>
+                                        {event.event_description && (
+                                            <p className="text-muted-foreground">
+                                                {event.event_description}
+                                            </p>
+                                        )}
+
+                                        {event.remarks && (
+                                            <div
+                                                className="text-xs font-medium text-blue-600"
+                                                dangerouslySetInnerHTML={{
+                                                    __html: event.remarks,
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="border-t pt-2 text-muted-foreground">
+                                No report details available.
+                            </p>
+                        )}
+                    </div>
+                ))}
+            </div>
+        ) : (
+            <p className="text-sm text-muted-foreground">
+                No daily reports available for this period.
+            </p>
         );
-    }, [progressPayload]);
-
-    const averageTasksPerEmployee = useMemo(() => {
-        if (!progressPayload || progressPayload.total_employees === 0) {
-            return 0;
-        }
-
-        return (
-            Number(progressPayload.total_tasks) /
-            progressPayload.total_employees
-        );
-    }, [progressPayload]);
+    };
 
     const renderEmployeeMetrics = () => {
         if (!currentEmployeeProgress || !progressPayload) {
@@ -287,91 +350,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
 
                 <div className="space-y-2">
                     <h4 className="text-sm font-medium">Workflow</h4>
-                    {recentDailyReports.length > 0 ? (
-                        <div className="space-y-2">
-                            {recentDailyReports.map((report) => (
-                                <div
-                                    key={report.date}
-                                    className="space-y-3 rounded-lg border p-3 text-sm"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span>
-                                            {new Date(
-                                                report.date,
-                                            ).toLocaleDateString('en-US', {
-                                                year: 'numeric',
-                                                month: 'short',
-                                                day: 'numeric',
-                                            })}
-                                        </span>
-                                        <span className="text-muted-foreground">
-                                            {Number(report.total_time).toFixed(
-                                                2,
-                                            )}
-                                            h
-                                        </span>
-                                    </div>
-
-                                    {report.events?.length > 0 ? (
-                                        <div className="space-y-2 border-t pt-2">
-                                            {report.events.map(
-                                                (event, index) => (
-                                                    <div
-                                                        key={`${report.date}-${event.event_name}-${index}`}
-                                                        className="space-y-1"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-medium">
-                                                                {
-                                                                    event.event_name
-                                                                }
-                                                            </span>
-                                                            {event.duration_hours !==
-                                                                undefined && (
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    (
-                                                                    {Number(
-                                                                        event.duration_hours,
-                                                                    ).toFixed(
-                                                                        2,
-                                                                    )}
-                                                                    h)
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        {event.event_description && (
-                                                            <p className="text-muted-foreground">
-                                                                {
-                                                                    event.event_description
-                                                                }
-                                                            </p>
-                                                        )}
-
-                                                        {event.remarks && (
-                                                            <div
-                                                                className="text-xs font-medium text-blue-600"
-                                                                dangerouslySetInnerHTML={{
-                                                                    __html: event.remarks,
-                                                                }}
-                                                            />
-                                                        )}
-                                                    </div>
-                                                ),
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <p className="border-t pt-2 text-muted-foreground">
-                                            No report details available.
-                                        </p>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            No daily reports available for this period.
-                        </p>
-                    )}
+                    {renderWorkflow(recentDailyReports)}
                 </div>
             </>
         );
@@ -384,167 +363,55 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
 
         return (
             <>
-                <div className="grid gap-2 md:grid-cols-5">
-                    <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">
-                            Employees
-                        </p>
-                        <p className="mt-1 text-xl font-semibold">
-                            {progressPayload.total_employees}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">
-                            Total Time
-                        </p>
-                        <p className="mt-1 text-xl font-semibold">
-                            {Number(progressPayload.total_time).toFixed(2)}h
-                        </p>
-                    </div>
-                    <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">
-                            Tasks Completed
-                        </p>
-                        <p className="mt-1 text-xl font-semibold">
-                            {progressPayload.total_tasks}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">
-                            Avg / Employee
-                        </p>
-                        <p className="mt-1 text-xl font-semibold">
-                            {averageTimePerEmployee.toFixed(2)}h
-                        </p>
-                    </div>
-                    <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">
-                            Avg Tasks / Employee
-                        </p>
-                        <p className="mt-1 text-xl font-semibold">
-                            {averageTasksPerEmployee.toFixed(2)}
-                        </p>
-                    </div>
-                </div>
+                {sortedEmployeeProgress.length > 0 ? (
+                    <div className="space-y-4">
+                        {sortedEmployeeProgress.map((employee) => {
+                            const employeeRecentReports = getRecentDailyReports(
+                                employee.daily_reports,
+                            );
 
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium">Overall breakdown</h4>
-                        <span className="text-xs text-muted-foreground">
-                            Sorted by total time
-                        </span>
-                    </div>
-
-                    {sortedEmployeeProgress.length > 0 ? (
-                        <div className="space-y-3">
-                            {sortedEmployeeProgress.map((employee) => {
-                                const sharePercent =
-                                    Number(progressPayload.total_time) > 0
-                                        ? (Number(employee.total_time) /
-                                              Number(
-                                                  progressPayload.total_time,
-                                              )) *
-                                          100
-                                        : 0;
-
-                                return (
-                                    <div
-                                        key={employee.id}
-                                        className="space-y-3 rounded-lg border p-3"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <p className="font-medium">
-                                                    {employee.user_name}
-                                                </p>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {employee.email}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-semibold">
-                                                    {Number(
-                                                        employee.total_time,
-                                                    ).toFixed(2)}
-                                                    h
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {employee.tasks_completed}{' '}
-                                                    tasks
-                                                </p>
-                                            </div>
+                            return (
+                                <div
+                                    key={employee.id}
+                                    className="space-y-3 rounded-lg border p-4"
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="font-medium">
+                                                {employee.user_name}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {employee.email}
+                                            </p>
                                         </div>
-
-                                        <div className="space-y-1">
-                                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                                <span>Overall share</span>
-                                                <span>
-                                                    {sharePercent.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                            <div className="h-2 overflow-hidden rounded-full bg-muted">
-                                                <div
-                                                    className="h-full rounded-full bg-primary transition-all duration-300"
-                                                    style={{
-                                                        width: `${sharePercent}%`,
-                                                    }}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid gap-2 sm:grid-cols-3">
-                                            <div className="rounded-md bg-muted/50 px-3 py-2">
-                                                <p className="text-xs text-muted-foreground">
-                                                    Avg / task
-                                                </p>
-                                                <p className="text-sm font-medium">
-                                                    {employee.tasks_completed >
-                                                    0
-                                                        ? (
-                                                              Number(
-                                                                  employee.total_time,
-                                                              ) /
-                                                              employee.tasks_completed
-                                                          ).toFixed(2)
-                                                        : '0.00'}
-                                                    h
-                                                </p>
-                                            </div>
-                                            <div className="rounded-md bg-muted/50 px-3 py-2">
-                                                <p className="text-xs text-muted-foreground">
-                                                    Daily reports
-                                                </p>
-                                                <p className="text-sm font-medium">
-                                                    {
-                                                        Object.keys(
-                                                            employee.daily_reports ||
-                                                                {},
-                                                        ).length
-                                                    }
-                                                </p>
-                                            </div>
-                                            <div className="rounded-md bg-muted/50 px-3 py-2">
-                                                <p className="text-xs text-muted-foreground">
-                                                    Task refs
-                                                </p>
-                                                <p className="text-sm font-medium">
-                                                    {
-                                                        employee.task_details
-                                                            .length
-                                                    }
-                                                </p>
-                                            </div>
+                                        <div className="text-right">
+                                            <p className="font-semibold">
+                                                {Number(employee.total_time).toFixed(
+                                                    2,
+                                                )}
+                                                h
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {employee.tasks_completed} tasks
+                                            </p>
                                         </div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            No progress records found for the selected period.
-                        </p>
-                    )}
-                </div>
+
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-medium">
+                                            Workflow
+                                        </h4>
+                                        {renderWorkflow(employeeRecentReports)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        No progress records found for the selected period.
+                    </p>
+                )}
             </>
         );
     };
@@ -560,7 +427,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
                     </CardTitle>
                     <CardDescription>
                         {isAllEmployeesView
-                            ? 'Team-wide time tracking and task completion overview'
+                            ? 'Workflow for every employee in the selected period'
                             : 'Time tracking and completed task overview'}
                     </CardDescription>
                 </div>
