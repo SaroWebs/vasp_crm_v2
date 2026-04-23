@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AdminClientSsoTestController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminTaskController;
+use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
 use App\Http\Controllers\Client\ClientCommentAttachmentController;
 use App\Http\Controllers\Client\ClientPortalAuthController;
@@ -262,6 +263,14 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::post('/tasks/{task}/restore', [AdminTaskController::class, 'restore'])->name('tasks.admin.restore');
         Route::delete('/tasks/{task}/force-delete', [AdminTaskController::class, 'forceDelete'])->name('tasks.admin.force-delete');
         Route::patch('/tasks/{task}/dates', [AdminTaskController::class, 'updateDates'])->name('tasks.admin.update-dates');
+
+        // Admin task time entries (manual add + gantt adjustments)
+        Route::post('/tasks/{task}/time-entries/manual', [AdminTaskTimeEntryController::class, 'store'])
+            ->name('tasks.admin.time-entries.manual.store');
+        Route::patch('/tasks/{task}/time-entries/batch', [AdminTaskTimeEntryController::class, 'batchUpdate'])
+            ->name('tasks.admin.time-entries.batch.update');
+        Route::delete('/tasks/{task}/time-entries/{timeEntry}', [AdminTaskTimeEntryController::class, 'destroy'])
+            ->name('tasks.admin.time-entries.destroy');
 
         // Task assignment routes within admin
         Route::get('/tasks/{task}/available-users', [TaskAssignmentController::class, 'getAvailableUsers']);

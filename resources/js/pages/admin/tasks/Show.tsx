@@ -1,4 +1,5 @@
 import TaskAssignmentModal from '@/components/TaskAssignmentModal';
+import TaskTimeEntriesGanttEditor from '@/components/admin/TaskTimeEntriesGanttEditor';
 import TaskComments from '@/components/tasks/task-comments';
 import { TaskFileAttachment } from '@/components/tasks/TaskFileAttachment';
 import { TaskMetrics } from '@/components/tasks/TaskMetrics';
@@ -848,7 +849,20 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         </div>
                                     </div>
                                 </div>
-
+                                <TaskTimeEntriesGanttEditor
+                                    taskId={localTask.id}
+                                    timeEntries={
+                                        (localTask as any).time_entries ??
+                                        (localTask as any).timeEntries ??
+                                        []
+                                    }
+                                    onChange={(updatedEntries) =>
+                                        setLocalTask((prev) => ({
+                                            ...(prev as any),
+                                            time_entries: updatedEntries,
+                                        }))
+                                    }
+                                />
                                 <Separator />
 
                                 {/* People & Assignment */}
@@ -933,7 +947,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         ) : null}
                                     </div>
                                 </div>
-
+                                
                                 <Separator />
 
                                 {/* Milestones */}

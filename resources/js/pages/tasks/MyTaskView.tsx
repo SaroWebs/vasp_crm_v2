@@ -4,6 +4,7 @@ import { TaskMilestones } from '@/components/tasks/TaskMilestones';
 import TaskAssignmentModal from '@/components/TaskAssignmentModal';
 import { TaskFileAttachment } from '@/components/tasks/TaskFileAttachment';
 import { TaskMetrics } from '@/components/tasks/TaskMetrics';
+import TaskTimeEntriesGanttEditor from '@/components/admin/TaskTimeEntriesGanttEditor';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,14 +15,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -31,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
-import { Task, type BreadcrumbItem } from '@/types';
+import { Task, TimeEntry, TimelineEvent, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -45,7 +38,6 @@ import {
     FileText,
     Pause,
     Play,
-    RotateCcw,
     Target,
     Trash,
     User,
@@ -138,34 +130,28 @@ interface MyTaskViewProps {
 export default function MyTaskView({ taskId }: MyTaskViewProps) {
     const [taskData, setTaskData] = useState<Task | null>(null);
     const [loading, setLoading] = useState(false);
-    const [timeEntries, setTimeEntries] = useState<any[]>([]);
+    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
     const [authUser, setAuthUser] = useState<{id: number; is_super_admin: boolean} | null>(null);
     const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         loadTaskData();
-        loadTimeEntries();
     }, [taskId]);
 
     const loadTaskData = async () => {
         try {
             const response = await axios.get(`/data/tasks/${taskId}`);
-            setTaskData(response.data.data);
+            const task = response.data.data as Task;
+            const taskTimeEntries = (task as unknown as { time_entries?: TimeEntry[]; timeEntries?: TimeEntry[] }).time_entries
+                ?? (task as unknown as { time_entries?: TimeEntry[]; timeEntries?: TimeEntry[] }).timeEntries
+                ?? [];
+
+            setTaskData(task);
+            setTimeEntries(taskTimeEntries);
             setAuthUser(response.data.authUser || null);
         } catch (error) {
             console.error('Error loading task data:', error);
-        }
-    };
-
-    const loadTimeEntries = async () => {
-        try {
-            const response = await axios.get(
-                `/data/tasks/${taskId}/time-entries`,
-            );
-            setTimeEntries(response.data.data || response.data || []);
-        } catch (error) {
-            console.error('Error loading time entries:', error);
         }
     };
 
@@ -197,7 +183,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                 setTaskData(response.data.data);
             }
 
-            loadTimeEntries();
+            loadTaskData();
         } catch (error) {
             console.error('Error performing task action:', error);
         } finally {
@@ -273,6 +259,19 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
             </AppLayout>
         );
     }
+
+    type AssignedUser = { id: number; name: string };
+    type AuditEvent = {
+        id: number;
+        occurred_at: string;
+        action?: string | null;
+        reason?: string | null;
+        actor_user?: { name?: string | null } | null;
+    };
+
+    const assignedUsers: AssignedUser[] = (taskData as unknown as { assigned_users?: AssignedUser[] }).assigned_users ?? [];
+    const timelineEvents: TimelineEvent[] = (taskData as unknown as { timeline_events?: TimelineEvent[] }).timeline_events ?? [];
+    const auditEvents: AuditEvent[] = (taskData as unknown as { audit_events?: AuditEvent[] }).audit_events ?? [];
 
     // Determine if current user is the task creator (own task) or super admin
     const isOwnTask = taskData.created_by?.id === authUser?.id || taskData.createdBy?.id === authUser?.id;
@@ -484,7 +483,11 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                         </div>
                                     </div>
                                 </div>
-
+                                                 <TaskTimeEntriesGanttEditor
+                            taskId={taskData.id}
+                            timeEntries={timeEntries}
+                            onChange={setTimeEntries}
+                        />
                                 <Separator />
 
                                 {/* People & Assignment */}
@@ -509,12 +512,12 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                                 <span>Assigned To</span>
                                             </div>
                                             <div className="text-sm font-medium">
-                                                {taskData.assigned_users && taskData.assigned_users.length > 0 ? (
+                                                {assignedUsers.length > 0 ? (
                                                     <div className="flex flex-wrap gap-1">
-                                                        {taskData.assigned_users.map((user: any, index: number) => (
+                                                        {assignedUsers.map((user, index) => (
                                                             <span key={user.id}>
                                                                 {user.name}
-                                                                {index < (taskData.assigned_users?.length || 0) - 1 ? ', ' : ''}
+                                                                {index < assignedUsers.length - 1 ? ', ' : ''}
                                                             </span>
                                                         ))}
                                                     </div>
@@ -546,7 +549,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                     taskId={taskData.id}
                                     taskStartAt={taskData.start_at}
                                     taskDueAt={taskData.due_at}
-                                    initialMilestones={taskData.timeline_events?.filter((e: any) => e.is_milestone) || []}
+                                    initialMilestones={timelineEvents.filter((event) => event.is_milestone)}
                                     isOwnTask={isOwnTask}
                                     isSuperAdmin={isSuperAdmin}
                                     taskState={taskData.state}
@@ -555,7 +558,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                 <Separator />
 
                                 {/* Task Audit Events */}
-                                {taskData.audit_events && taskData.audit_events.length > 0 && (
+                                {auditEvents.length > 0 && (
                                     <>
                                         <Separator />
                                         <div>
@@ -564,7 +567,7 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                                 Task Audit Events
                                             </h4>
                                             <div className="space-y-4 max-h-[300px] overflow-y-auto">
-                                                {taskData.audit_events.map((event: any) => (
+                                                {auditEvents.map((event) => (
                                                     <div
                                                         key={event.id}
                                                         className="rounded-lg border p-4"
@@ -629,78 +632,13 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                 <div className="space-y-4">
                                     <TaskTimeTracker
                                         taskId={taskData.id}
-                                        onTimeUpdate={() => loadTimeEntries()}
+                                        onTimeUpdate={() => loadTaskData()}
                                         onTaskAction={handleTaskAction}
                                     />
                                 </div>
                             </CardContent>
                         </Card>
 
-                        {/* Time Entries History */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Time Entries</CardTitle>
-                                <CardDescription>
-                                    History of time tracking for this task
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {timeEntries.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Start Time</TableHead>
-                                                <TableHead>End Time</TableHead>
-                                                <TableHead>Duration</TableHead>
-                                                <TableHead>Status</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {timeEntries.map((entry) => (
-                                                <TableRow key={entry.id}>
-                                                    <TableCell>
-                                                        {format(
-                                                            new Date(entry.start_time),
-                                                            'MMM dd, yyyy HH:mm',
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {entry.end_time
-                                                            ? format(
-                                                                  new Date(entry.end_time),
-                                                                  'MMM dd, yyyy HH:mm',
-                                                              )
-                                                            : 'Active'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {entry.duration_hours
-                                                            ? `${entry.duration_hours} hours`
-                                                            : 'Active'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant={
-                                                                entry.is_active
-                                                                    ? 'secondary'
-                                                                    : 'outline'
-                                                            }
-                                                        >
-                                                            {entry.is_active
-                                                                ? 'Active'
-                                                                : 'Completed'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <p className="text-sm text-gray-500">
-                                        No time entries yet.
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
 
                         {/* Task Comments */}
                         <TaskComments taskId={taskId} />

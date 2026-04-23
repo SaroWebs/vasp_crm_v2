@@ -487,6 +487,12 @@ export interface TimeEntry {
   start_time: string;
   end_time: string | null;
   is_active: boolean;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  user?: {
+      id: number;
+      name: string;
+  } | null;
 }
 
 export interface TimelineEvent {
