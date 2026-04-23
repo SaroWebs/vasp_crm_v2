@@ -10,6 +10,7 @@ import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/t
 import axios from 'axios';
 import React, {
     startTransition,
+    useCallback,
     useEffect,
     useMemo,
     useRef,
@@ -80,15 +81,15 @@ const CHIP_STYLES: Record<
     SchedulerType,
     { bg: string; color: string; border: string }
 > = {
-    active_entry:        { bg: '#dafbe1', color: '#1a7f37', border: '#82e09a' },
-    completed_entry:     { bg: '#f3d9fa', color: '#8250df', border: '#d2a8ff' },
-    inactive_in_progress:{ bg: '#d1ecf9', color: '#0969da', border: '#79c0ff' },
-    assigned:            { bg: '#eaeef2', color: '#57606a', border: '#c9d1d9' },
-    review:              { bg: '#fff3cd', color: '#9a6700', border: '#f1c40f' },
-    blocked:             { bg: '#ffdcd7', color: '#cf222e', border: '#ff9492' },
-    ticket:              { bg: '#ffeff7', color: '#bf3989', border: '#ff80c8' },
-    working:             { bg: '#d2f4ea', color: '#116329', border: '#56d364' },
-    other:               { bg: '#e8f4f8', color: '#0969a2', border: '#a0cfef' },
+    active_entry: { bg: '#dafbe1', color: '#1a7f37', border: '#82e09a' },
+    completed_entry: { bg: '#f3d9fa', color: '#8250df', border: '#d2a8ff' },
+    inactive_in_progress: { bg: '#d1ecf9', color: '#0969da', border: '#79c0ff' },
+    assigned: { bg: '#eaeef2', color: '#57606a', border: '#c9d1d9' },
+    review: { bg: '#fff3cd', color: '#9a6700', border: '#f1c40f' },
+    blocked: { bg: '#ffdcd7', color: '#cf222e', border: '#ff9492' },
+    ticket: { bg: '#ffeff7', color: '#bf3989', border: '#ff80c8' },
+    working: { bg: '#d2f4ea', color: '#116329', border: '#56d364' },
+    other: { bg: '#e8f4f8', color: '#0969a2', border: '#a0cfef' },
 };
 
 function startOfDay(date: Date): Date {
@@ -161,8 +162,7 @@ function fmtHourFull(hour: number): string {
 function buildGanttLayout(
     tasks: SchedulerTask[],
     days: Date[],
-    ):{bars: Array<SchedulerTask & { start: number; span: number; lane: number }>; rowHeight: number;}
-{
+): { bars: Array<SchedulerTask & { start: number; span: number; lane: number }>; rowHeight: number; } {
     if (tasks.length === 0) {
         return { bars: [], rowHeight: ROW_H };
     }
@@ -206,8 +206,8 @@ function buildGanttLayout(
         placed.length === 0
             ? ROW_H
             : (Math.max(...placed.map((task) => task.lane)) + 1) *
-                  (GANTT_BAR_H + GANTT_BAR_GAP) +
-                  GANTT_BAR_GAP,
+            (GANTT_BAR_H + GANTT_BAR_GAP) +
+            GANTT_BAR_GAP,
     );
 
     return { bars: placed, rowHeight };
@@ -394,8 +394,8 @@ function getAvatarPalette(seed: number): { bg: string; color: string } {
 }
 
 function buildTaskLabel(task: Task): string {
-    const base = task.task_code ? `${task.task_code}` : task.title;
-    return base.length > 24 ? `${base.slice(0, 21)}...` : base;
+    const base = task.title;
+    return base.length > 40 ? `${base.slice(0, 37)}...` : base;
 }
 
 function getDailyEntryWindow(
@@ -438,8 +438,7 @@ function getDailyEntryWindow(
     return { startHour, endHour };
 }
 
-function buildDailyBarLayout(tasks: SchedulerDailyTask[]): {bars: Array<SchedulerDailyTask & { lane: number }>; rowHeight: number;}
-{
+function buildDailyBarLayout(tasks: SchedulerDailyTask[]): { bars: Array<SchedulerDailyTask & { lane: number }>; rowHeight: number; } {
     if (tasks.length === 0) {
         return { bars: [], rowHeight: DAILY_ROW_MIN_H };
     }
@@ -466,8 +465,8 @@ function buildDailyBarLayout(tasks: SchedulerDailyTask[]): {bars: Array<Schedule
     const rowHeight = Math.max(
         DAILY_ROW_MIN_H,
         (Math.max(...placed.map((task) => task.lane)) + 1) *
-            (GANTT_BAR_H + GANTT_BAR_GAP) +
-            GANTT_BAR_GAP,
+        (GANTT_BAR_H + GANTT_BAR_GAP) +
+        GANTT_BAR_GAP,
     );
 
     return { bars: placed, rowHeight };
@@ -517,11 +516,12 @@ function DailyTaskBlock({
     const titleSuffix = isPlanned
         ? ' (Planned)'
         : isActiveEntry
-          ? ' (Active)'
-          : '';
+            ? ' (Active)'
+            : '';
 
     return (
         <button
+            data-scheduler-task="true"
             title={`${task.task.title} / ${fmtHourFull(task.startHour)} - ${fmtHourFull(task.endHour)}${titleSuffix}`}
             onClick={() => onSelect(task)}
             style={{
@@ -537,6 +537,7 @@ function DailyTaskBlock({
             className='absolute rounded-lg px-2 py-1 text-left flex flex-col justify-center gap-1 overflow-hidden cursor-pointer shadow-md'
         >
             <span
+                className='capitalize'
                 style={{
                     fontSize: 11,
                     fontWeight: 500,
@@ -547,7 +548,7 @@ function DailyTaskBlock({
                     lineHeight: 1.4,
                 }}
             >
-                {task.label} : {task.task.title}
+                {task.task.title}
             </span>
             {showTime ? (
                 <span
@@ -578,14 +579,14 @@ function GanttBar({
     left: number;
     width: number;
     onSelect: (task: SchedulerTask) => void;
-}) 
-{
+}) {
     const style = CHIP_STYLES[task.type];
     const rangeLabel = formatEntryRange(task.timeEntry);
     const isWorking = task.type === 'working';
 
     return (
         <button
+            data-scheduler-task="true"
             title={`${task.task.title} (${rangeLabel})${isWorking ? ' - Working' : ''}`}
             onClick={() => onSelect(task)}
             style={{
@@ -647,8 +648,7 @@ function DailyView({
     employees: SchedulerEmployee[];
     onSelectTask: (task: SchedulerTask) => void;
     scale?: number;
-})
-{
+}) {
     const colWidth = HOUR_W * scale;
     const isToday = day.getTime() === today.getTime();
     const totalHours = DAY_END - DAY_START;
@@ -668,10 +668,10 @@ function DailyView({
 
     return (
         <div style={{ display: 'flex', overflowX: 'auto' }}>
-                <div
-                    style={{
-                        minWidth: NAME_W,
-                        width: NAME_W,
+            <div
+                style={{
+                    minWidth: NAME_W,
+                    width: NAME_W,
                     flexShrink: 0,
                     borderRight: '0.5px solid #e0e0d8',
                     background: 'var(--color-background-primary, #ffffff)',
@@ -1272,6 +1272,40 @@ const TaskTimeline = () => {
     const [detailsError, setDetailsError] = useState<string | null>(null);
     const detailsAbortRef = useRef<AbortController | null>(null);
     const gridContainerRef = useRef<HTMLDivElement>(null);
+    const contextMenuRef = useRef<HTMLDivElement>(null);
+    const [gridContextMenu, setGridContextMenu] = useState<{
+        isOpen: boolean;
+        x: number;
+        y: number;
+    }>({ isOpen: false, x: 0, y: 0 });
+
+    const closeGridContextMenu = useCallback(() => {
+        setGridContextMenu((prev) =>
+            prev.isOpen ? { ...prev, isOpen: false } : prev,
+        );
+    }, []);
+
+    const openGridContextMenu = useCallback((x: number, y: number) => {
+        setGridContextMenu({ isOpen: true, x, y });
+    }, []);
+
+    const handleGridContextMenu = useCallback(
+        (event: React.MouseEvent<HTMLDivElement>) => {
+            event.preventDefault();
+            const target = event.target as HTMLElement | null;
+            if (!target) {
+                return;
+            }
+
+            if (target.closest('[data-scheduler-task="true"]')) {
+                closeGridContextMenu();
+                return;
+            }
+
+            openGridContextMenu(event.clientX, event.clientY);
+        },
+        [closeGridContextMenu, openGridContextMenu],
+    );
 
     useEffect(() => {
         const handleWheel = (e: WheelEvent) => {
@@ -1295,6 +1329,63 @@ const TaskTimeline = () => {
             }
         };
     }, []);
+
+    useEffect(() => {
+        if (!gridContextMenu.isOpen) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                closeGridContextMenu();
+            }
+        };
+
+        const handleResize = () => {
+            closeGridContextMenu();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('resize', handleResize);
+        };
+    }, [closeGridContextMenu, gridContextMenu.isOpen]);
+
+    useEffect(() => {
+        if (!gridContextMenu.isOpen) {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(() => {
+            const menu = contextMenuRef.current;
+            if (!menu) {
+                return;
+            }
+
+            const rect = menu.getBoundingClientRect();
+            const padding = 8;
+            const maxX = window.innerWidth - padding - rect.width;
+            const maxY = window.innerHeight - padding - rect.height;
+
+            const nextX = Math.max(padding, Math.min(gridContextMenu.x, maxX));
+            const nextY = Math.max(padding, Math.min(gridContextMenu.y, maxY));
+
+            if (nextX === gridContextMenu.x && nextY === gridContextMenu.y) {
+                return;
+            }
+
+            setGridContextMenu((prev) =>
+                prev.isOpen ? { ...prev, x: nextX, y: nextY } : prev,
+            );
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frame);
+        };
+    }, [gridContextMenu.isOpen, gridContextMenu.x, gridContextMenu.y]);
 
     const weekStart = useMemo(() => mondayOf(anchorDate), [anchorDate]);
 
@@ -1373,7 +1464,7 @@ const TaskTimeline = () => {
                 if (tasksWithEntries.length > 0) {
                     setSelectedTaskId((current) =>
                         current &&
-                        tasksWithEntries.some((task: Task) => task.id === current)
+                            tasksWithEntries.some((task: Task) => task.id === current)
                             ? current
                             : tasksWithEntries[0].id,
                     );
@@ -1796,15 +1887,8 @@ const TaskTimeline = () => {
         selectedEntryStart && selectedEntryEnd
             ? `${formatEntryDateTime(selectedEntryStart)} - ${formatEntryDateTime(selectedEntryEnd)}`
             : selectedSchedulerTask
-              ? formatEntryRange(selectedSchedulerTask.timeEntry)
-              : null;
-    const selectedEntryStateLabel = selectedSchedulerTask
-        ? selectedSchedulerTask.timeEntry.is_active
-            ? 'Live now'
-            : selectedSchedulerTask.timeEntry.end_time
-              ? 'Completed'
-              : 'Scheduled'
-        : null;
+                ? formatEntryRange(selectedSchedulerTask.timeEntry)
+                : null;
 
     const buttonStyle: React.CSSProperties = {
         fontSize: 12,
@@ -1931,13 +2015,16 @@ const TaskTimeline = () => {
                 </div>
             </div>
 
-            <div
-                ref={gridContainerRef}
-                style={{
-                    background: 'var(--color-background-primary, #fff)',
-                    border: '0.5px solid #e0e0d8',
-                    borderRadius: 12,
-                    overflowX: 'auto',
+                <div
+                    ref={gridContainerRef}
+                    onContextMenuCapture={handleGridContextMenu}
+                    onContextMenu={handleGridContextMenu}
+                    onScroll={closeGridContextMenu}
+                    style={{
+                        background: 'var(--color-background-primary, #fff)',
+                        border: '0.5px solid #e0e0d8',
+                        borderRadius: 12,
+                        overflowX: 'auto',
                     overflowY: 'hidden',
                 }}
             >
@@ -1948,47 +2035,99 @@ const TaskTimeline = () => {
                         width: gridScale === 1 ? '100%' : `${100 / gridScale}%`,
                     }}
                 >
-                {loading ? (
-                    <div
-                        style={{
-                            padding: '40px 20px',
-                            textAlign: 'center',
-                            color: 'var(--color-text-secondary, #888)',
-                            fontSize: 14,
-                        }}
-                    >
-                        Loading scheduler data...
-                    </div>
-                ) : schedulerEmployees.length === 0 ? (
-                    <div
-                        style={{
-                            padding: '40px 20px',
-                            textAlign: 'center',
-                            color: 'var(--color-text-secondary, #888)',
-                            fontSize: 14,
-                        }}
-                    >
-                        {errorMessage ?? 'No assigned tasks were found for the selected period.'}
-                    </div>
-                ) : view === 'daily' ? (
-                    <DailyView
-                        day={anchorDate}
-                        today={today}
-                        employees={schedulerEmployees}
-                        onSelectTask={selectTask}
-                        scale={gridScale}
-                    />
-                ) : (
-                    <GridView
-                        days={days}
-                        today={today}
-                        employees={schedulerEmployees}
-                        onSelectTask={selectTask}
-                        scale={gridScale}
-                    />
-                )}
+                    {loading ? (
+                        <div
+                            style={{
+                                padding: '40px 20px',
+                                textAlign: 'center',
+                                color: 'var(--color-text-secondary, #888)',
+                                fontSize: 14,
+                            }}
+                        >
+                            Loading scheduler data...
+                        </div>
+                    ) : schedulerEmployees.length === 0 ? (
+                        <div
+                            style={{
+                                padding: '40px 20px',
+                                textAlign: 'center',
+                                color: 'var(--color-text-secondary, #888)',
+                                fontSize: 14,
+                            }}
+                        >
+                            {errorMessage ?? 'No assigned tasks were found for the selected period.'}
+                        </div>
+                    ) : view === 'daily' ? (
+                        <DailyView
+                            day={anchorDate}
+                            today={today}
+                            employees={schedulerEmployees}
+                            onSelectTask={selectTask}
+                            scale={gridScale}
+                        />
+                    ) : (
+                        <GridView
+                            days={days}
+                            today={today}
+                            employees={schedulerEmployees}
+                            onSelectTask={selectTask}
+                            scale={gridScale}
+                        />
+                    )}
                 </div>
             </div>
+
+            {gridContextMenu.isOpen ? (
+                <>
+                    <div
+                        className="fixed inset-0 z-[9998]"
+                        onMouseDown={closeGridContextMenu}
+                        onContextMenu={(event) => {
+                            event.preventDefault();
+                            closeGridContextMenu();
+                        }}
+                    />
+                    <div
+                        ref={contextMenuRef}
+                        role="menu"
+                        aria-label="Grid actions"
+                        className="fixed z-[9999] min-w-[12rem] rounded-md border bg-background p-1 shadow-lg"
+                        style={{ left: gridContextMenu.x, top: gridContextMenu.y }}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onContextMenu={(event) => event.preventDefault()}
+                    >
+                        <button
+                            type="button"
+                            role="menuitem"
+                            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-sm hover:bg-muted"
+                            onClick={closeGridContextMenu}
+                        >
+                            Refresh
+                            <span className="text-xs text-muted-foreground">R</span>
+                        </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-sm hover:bg-muted"
+                            onClick={closeGridContextMenu}
+                        >
+                            Create task
+                            <span className="text-xs text-muted-foreground">+</span>
+                        </button>
+                        
+                        <div className="my-1 h-px bg-border" />
+                        <button
+                            type="button"
+                            role="menuitem"
+                            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-sm hover:bg-muted"
+                            onClick={closeGridContextMenu}
+                        >
+                            Copy date range
+                            <span className="text-xs text-muted-foreground">C</span>
+                        </button>
+                    </div>
+                </>
+            ) : null}
 
             {view === 'daily' ? (
                 <div
@@ -2183,8 +2322,8 @@ const TaskTimeline = () => {
                                         <div className="mt-2 text-base font-semibold tracking-tight">
                                             {selectedEntryStart
                                                 ? formatEntryDateTime(
-                                                      selectedEntryStart,
-                                                  )
+                                                    selectedEntryStart,
+                                                )
                                                 : 'Not set'}
                                         </div>
                                     </div>
@@ -2198,7 +2337,7 @@ const TaskTimeline = () => {
                                             }}
                                         />
                                         <div className="h-[2px] w-20 rounded-full bg-muted-foreground/25" />
-                                        
+
                                         <div className="h-[2px] w-20 rounded-full bg-muted-foreground/25" />
                                         <span className="size-2 rounded-full bg-[#E24B4A]" />
                                     </div>
@@ -2211,28 +2350,28 @@ const TaskTimeline = () => {
                                             {selectedEntryWindow
                                                 ? selectedEntryEnd
                                                     ? formatEntryDateTime(
-                                                          selectedEntryEnd,
-                                                      )
+                                                        selectedEntryEnd,
+                                                    )
                                                     : 'Not set'
                                                 : selectedSchedulerTask.timeEntry
-                                                      .end_time
-                                                  ? selectedEntryEnd
-                                                    ? formatEntryDateTime(
-                                                          selectedEntryEnd,
-                                                      )
-                                                    : 'Not set'
-                                                  : selectedSchedulerTask
+                                                    .end_time
+                                                    ? selectedEntryEnd
+                                                        ? formatEntryDateTime(
+                                                            selectedEntryEnd,
+                                                        )
+                                                        : 'Not set'
+                                                    : selectedSchedulerTask
                                                         .timeEntry.is_active &&
-                                                      selectedEntryEnd
-                                                    ? `Now (${formatEntryDateTime(
-                                                          selectedEntryEnd,
-                                                      )})`
-                                                    : 'Not set'}
+                                                        selectedEntryEnd
+                                                        ? `Now (${formatEntryDateTime(
+                                                            selectedEntryEnd,
+                                                        )})`
+                                                        : 'Not set'}
                                         </div>
                                     </div>
                                 </div>
 
-                                
+
                             </div>
                         ) : null}
                     </div>
@@ -2253,4 +2392,3 @@ const TaskTimeline = () => {
 };
 
 export default TaskTimeline;
-
