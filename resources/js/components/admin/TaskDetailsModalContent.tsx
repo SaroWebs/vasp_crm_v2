@@ -1,4 +1,5 @@
 import { Task, TaskAttachment, TaskComment } from '@/types';
+import { Link } from '@inertiajs/react';
 
 interface TaskDetailsModalContentProps {
     task: Task | null;
@@ -107,8 +108,33 @@ export default function TaskDetailsModalContent({
         task.created_by ??
         task.createdBy ??
         null;
+    const assignedByName = assignedBy
+        ? assignedUsers.some((user) => {
+            if (
+                typeof assignedBy === 'object' &&
+                assignedBy !== null &&
+                'id' in assignedBy
+            ) {
+                return (assignedBy as { id?: number }).id === user.id;
+            }
+
+            if (typeof assignedBy === 'number') {
+                return assignedBy === user.id;
+            }
+
+            if (typeof assignedBy === 'string') {
+                return assignedBy === user.name;
+            }
+
+            return false;
+        })
+            ? 'Self'
+            : resolvePersonName(assignedBy, 'Unknown')
+        : 'Unassigned';
     const priority = task.priority ? task.priority.toUpperCase() : 'low';
     const status = task.state?.replace('_', ' ') ?? 'Unknown';
+    const taskViewUrl = `/admin/tasks/${task.id}`;
+    const taskEditUrl = `/admin/tasks/${task.id}/edit`;
 
     return (
         <div className='flex flex-col gap-3 max-h-[300px] overflow-y-auto px-4 py-3'>
@@ -197,6 +223,32 @@ export default function TaskDetailsModalContent({
                     </div>
                 </div>
             ) : null}
+            <div>
+                <div
+                    style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: '#667085',
+                        marginBottom: 8,
+                    }}
+                >
+                    Operations
+                </div>
+                <div className='flex gap-2 flex-wrap'>
+                    <Link
+                        href={taskViewUrl}
+                        className='inline-flex items-center rounded-md border border-[#d0d5dd] bg-white px-3 py-1.5 text-xs font-semibold text-[#344054] hover:bg-[#f9fafb]'
+                    >
+                        View Task
+                    </Link>
+                    <Link
+                        href={taskEditUrl}
+                        className='inline-flex items-center rounded-md border border-[#b2ddff] bg-[#eff8ff] px-3 py-1.5 text-xs font-semibold text-[#175cd3] hover:bg-[#d1e9ff]'
+                    >
+                        Edit Task
+                    </Link>
+                </div>
+            </div>
             <div className="flex justify-between">
                 <div>
                     <div className='flex gap-2'>
@@ -212,43 +264,7 @@ export default function TaskDetailsModalContent({
                         <div
                             style={{ fontSize: 13, color: '#344054' }}
                         >
-                            {assignedBy
-                                ? assignedUsers.some((user) => {
-                                    // Handle assignedBy as User object
-                                    if (
-                                        typeof assignedBy === 'object' &&
-                                        assignedBy !== null &&
-                                        'id' in assignedBy
-                                    ) {
-                                        return (
-                                            (assignedBy as { id?: number }).id ===
-                                            user.id
-                                        );
-                                    }
-                                    // Handle assignedBy as number (user ID)
-                                    if (typeof assignedBy === 'number') {
-                                        return assignedBy === user.id;
-                                    }
-                                    // Handle assignedBy as string (username)
-                                    if (typeof assignedBy === 'string') {
-                                        return assignedBy === user.name;
-                                    }
-                                    return false;
-                                })
-                                    ? 'Self'
-                                    : typeof assignedBy === 'string'
-                                        ? assignedBy
-                                        : typeof assignedBy === 'number'
-                                            ? `User #${assignedBy}`
-                                            : assignedBy &&
-                                                typeof assignedBy === 'object' &&
-                                                'name' in assignedBy
-                                                ? String(
-                                                    (assignedBy as { name?: string })
-                                                        .name || 'Unknown',
-                                                )
-                                                : 'Unknown'
-                                : 'Unassigned'}
+                            {assignedByName}
                         </div>
                     </div>
                     <div className='flex gap-2'>

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
 import axios from 'axios';
+import { PlusIcon, RefreshCcw } from 'lucide-react';
 import React, {
     startTransition,
     useCallback,
@@ -658,18 +659,6 @@ function GanttBar({
         >
             <span
                 style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: style.color,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    whiteSpace: 'nowrap',
-                }}
-            >
-                {task.task.task_code || task.label}
-            </span>
-            <span
-                style={{
                     fontSize: 12,
                     fontWeight: 500,
                     color: 'var(--color-text-primary)',
@@ -947,6 +936,7 @@ function DailyView({
                                 style={{
                                     height: layout.rowHeight,
                                     position: 'relative',
+                                    cursor: 'cell',
                                     borderBottom:
                                         index < employees.length - 1
                                             ? '0.5px solid #e0e0d8'
@@ -1237,6 +1227,7 @@ function GridView({
                                     position: 'relative',
                                     width: days.length * colWidth,
                                     height: layout.rowHeight,
+                                    cursor: 'cell',
                                 }}
                             >
                                 <div
@@ -2344,6 +2335,7 @@ const TaskTimeline = () => {
                         borderRadius: 12,
                         overflowX: 'auto',
                     overflowY: 'hidden',
+                    cursor: 'cell',
                 }}
             >
                 <div
@@ -2427,7 +2419,7 @@ const TaskTimeline = () => {
                             }}
                         >
                             Refresh
-                            <span className="text-xs text-muted-foreground">R</span>
+                            <RefreshCcw className='h-4 w-4'/>
                         </button>
                         <button
                             type="button"
@@ -2438,7 +2430,7 @@ const TaskTimeline = () => {
                             }}
                         >
                             Create task
-                            <span className="text-xs text-muted-foreground">+</span>
+                            <PlusIcon className='h-4 w-4'/>
                         </button>
                         
                         <div className="my-1 h-px bg-border" />
@@ -2451,7 +2443,6 @@ const TaskTimeline = () => {
                             }}
                         >
                             Copy date time
-                            <span className="text-xs text-muted-foreground">C</span>
                         </button>
                     </div>
                 </>
