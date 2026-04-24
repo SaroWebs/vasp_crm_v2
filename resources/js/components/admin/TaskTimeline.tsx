@@ -1,4 +1,5 @@
 import TaskDetailsModalContent from '@/components/admin/TaskDetailsModalContent';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -6,6 +7,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
 import axios from 'axios';
 import React, {
@@ -34,6 +37,7 @@ interface SchedulerTask {
     type: SchedulerType;
     task: Task;
     timeEntry: TimeEntry;
+    isPlanned?: boolean;
 }
 
 interface SchedulerDailyTask extends SchedulerTask {
@@ -272,6 +276,48 @@ function formatEntryDuration(entry: TimeEntry): string {
     const start = getEntryStart(entry);
     const end = getEntryEnd(entry);
     return formatDurationFromRange(start, end);
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+}
+
+function parseDayKey(dayKey?: string): Date | null {
+    if (!dayKey) {
+        return null;
+    }
+
+    const parsed = new Date(`${dayKey}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+        return null;
+    }
+
+    return parsed;
+}
+
+function toDateTimeLocalValue(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function roundToQuarterHour(date: Date): Date {
+    const copy = new Date(date);
+    const minutes = copy.getMinutes();
+    const roundedMinutes = Math.round(minutes / 15) * 15;
+    copy.setMinutes(roundedMinutes, 0, 0);
+    return copy;
+}
+
+function withHour(day: Date, hour: number): Date {
+    const next = startOfDay(day);
+    const wholeHour = Math.floor(hour);
+    const minutes = Math.round((hour - wholeHour) * 60);
+    next.setHours(wholeHour, minutes, 0, 0);
+    return next;
 }
 
 function formatDurationFromRange(start: Date, end: Date): string {
@@ -583,11 +629,12 @@ function GanttBar({
     const style = CHIP_STYLES[task.type];
     const rangeLabel = formatEntryRange(task.timeEntry);
     const isWorking = task.type === 'working';
+    const titleSuffix = task.isPlanned ? ' - Planned' : isWorking ? ' - Working' : '';
 
     return (
         <button
             data-scheduler-task="true"
-            title={`${task.task.title} (${rangeLabel})${isWorking ? ' - Working' : ''}`}
+            title={`${task.task.title} (${rangeLabel})${titleSuffix}`}
             onClick={() => onSelect(task)}
             style={{
                 position: 'absolute',
@@ -606,6 +653,7 @@ function GanttBar({
                 alignItems: 'center',
                 gap: 8,
                 boxShadow: '0 1px 2px rgba(16, 24, 40, 0.06)',
+                opacity: task.isPlanned ? 0.55 : 1,
             }}
         >
             <span
@@ -894,6 +942,8 @@ function DailyView({
                         return (
                             <div
                                 key={employee.id}
+                                data-timeline-daily-row-key={dayKey}
+                                data-timeline-employee-id={String(employee.id)}
                                 style={{
                                     height: layout.rowHeight,
                                     position: 'relative',
@@ -910,6 +960,7 @@ function DailyView({
                                         task={task}
                                         lane={task.lane}
                                         onSelect={onSelectTask}
+                                        isPlanned={Boolean(task.isPlanned)}
                                     />
                                 ))}
                             </div>
@@ -1179,6 +1230,9 @@ function GridView({
                             </div>
 
                             <div
+                                data-timeline-grid-row="true"
+                                data-timeline-employee-id={String(employee.id)}
+                                data-timeline-days-count={String(days.length)}
                                 style={{
                                     position: 'relative',
                                     width: days.length * colWidth,
@@ -1270,14 +1324,33 @@ const TaskTimeline = () => {
     const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
+    const [refreshToken, setRefreshToken] = useState(0);
     const detailsAbortRef = useRef<AbortController | null>(null);
     const gridContainerRef = useRef<HTMLDivElement>(null);
     const contextMenuRef = useRef<HTMLDivElement>(null);
+    const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
+    const [createTaskError, setCreateTaskError] = useState<string | null>(null);
+    const [isCreatingTask, setIsCreatingTask] = useState(false);
+    const [createTaskForm, setCreateTaskForm] = useState({
+        title: '',
+        description: '',
+        start_at: '',
+        due_at: '',
+        employee_id: '',
+    });
     const [gridContextMenu, setGridContextMenu] = useState<{
         isOpen: boolean;
         x: number;
         y: number;
-    }>({ isOpen: false, x: 0, y: 0 });
+        datetime: Date;
+        employeeId: string | null;
+    }>({
+        isOpen: false,
+        x: 0,
+        y: 0,
+        datetime: roundToQuarterHour(new Date()),
+        employeeId: null,
+    });
 
     const closeGridContextMenu = useCallback(() => {
         setGridContextMenu((prev) =>
@@ -1285,13 +1358,138 @@ const TaskTimeline = () => {
         );
     }, []);
 
-    const openGridContextMenu = useCallback((x: number, y: number) => {
-        setGridContextMenu({ isOpen: true, x, y });
-    }, []);
+    const openGridContextMenu = useCallback(
+        (x: number, y: number, datetime: Date, employeeId: string | null) => {
+            setGridContextMenu({ isOpen: true, x, y, datetime, employeeId });
+        },
+        [],
+    );
 
-    const handleGridContextMenu = useCallback(
+    const weekStart = useMemo(() => mondayOf(anchorDate), [anchorDate]);
+
+    const days = useMemo<Date[]>(() => {
+        if (view === 'daily') {
+            return [anchorDate];
+        }
+
+        const count = view === 'monthly' ? 28 : 7;
+        return Array.from({ length: count }, (_, index) =>
+            addDays(weekStart, index),
+        );
+    }, [anchorDate, view, weekStart]);
+
+    const rangeStart = useMemo(
+        () => startOfDay(days[0] ?? today),
+        [days, today],
+    );
+    const rangeEnd = useMemo(
+        () => endOfDay(days[days.length - 1] ?? today),
+        [days, today],
+    );
+
+    const resolveContextMenuTarget = useCallback(
+        (
+            event: React.MouseEvent<HTMLDivElement>,
+        ): { datetime: Date; employeeId: string | null } => {
+            const target = event.target as HTMLElement | null;
+            const nowRounded = roundToQuarterHour(new Date());
+            const fallbackDateTime = withHour(anchorDate, nowRounded.getHours() + nowRounded.getMinutes() / 60);
+
+            if (!target) {
+                return {
+                    datetime: fallbackDateTime,
+                    employeeId: null,
+                };
+            }
+
+            const dayNode = target.closest('[data-timeline-day-key]') as
+                | HTMLElement
+                | null;
+
+            if (dayNode) {
+                const dayKey = dayNode.dataset.timelineDayKey;
+                const hourValue = dayNode.dataset.timelineHour;
+                const parsedDay = parseDayKey(dayKey);
+                const employeeId =
+                    dayNode.dataset.timelineEmployeeId ??
+                    (dayNode.closest('[data-timeline-employee-id]') as HTMLElement | null)
+                        ?.dataset.timelineEmployeeId ??
+                    null;
+
+                if (parsedDay) {
+                    if (hourValue) {
+                        const parsedHour = Number(hourValue);
+                        if (!Number.isNaN(parsedHour)) {
+                            return {
+                                datetime: roundToQuarterHour(withHour(parsedDay, parsedHour)),
+                                employeeId,
+                            };
+                        }
+                    }
+
+                    return {
+                        datetime: roundToQuarterHour(withHour(parsedDay, 9)),
+                        employeeId,
+                    };
+                }
+            }
+
+            const dailyRow = target.closest('[data-timeline-daily-row-key]') as
+                | HTMLElement
+                | null;
+
+            if (dailyRow) {
+                const dayKey = dailyRow.dataset.timelineDailyRowKey;
+                const employeeId = dailyRow.dataset.timelineEmployeeId ?? null;
+                const parsedDay = parseDayKey(dayKey);
+                const rect = dailyRow.getBoundingClientRect();
+                const x = clamp(event.clientX - rect.left, 0, rect.width);
+                const totalHours = DAY_END - DAY_START;
+                const hour = DAY_START + (x / Math.max(rect.width, 1)) * totalHours;
+
+                if (parsedDay) {
+                    return {
+                        datetime: roundToQuarterHour(withHour(parsedDay, hour)),
+                        employeeId,
+                    };
+                }
+            }
+
+            const gridRow = target.closest('[data-timeline-grid-row="true"]') as
+                | HTMLElement
+                | null;
+
+            if (gridRow) {
+                const employeeId = gridRow.dataset.timelineEmployeeId ?? null;
+                const daysCount = Number(gridRow.dataset.timelineDaysCount);
+                const rect = gridRow.getBoundingClientRect();
+                const x = clamp(event.clientX - rect.left, 0, rect.width);
+                if (!Number.isNaN(daysCount) && daysCount > 0) {
+                    const dayWidth = rect.width / daysCount;
+                    const dayIndex = clamp(Math.floor(x / dayWidth), 0, daysCount - 1);
+                    const selectedDay = days[dayIndex] ?? anchorDate;
+                    const dayProgress = (x - dayIndex * dayWidth) / dayWidth;
+                    const hour = clamp(dayProgress, 0, 1) * 24;
+
+                    return {
+                        datetime: roundToQuarterHour(withHour(selectedDay, hour)),
+                        employeeId,
+                    };
+                }
+            }
+
+            return {
+                datetime: fallbackDateTime,
+                employeeId:
+                    (target.closest('[data-timeline-employee-id]') as HTMLElement | null)
+                        ?.dataset.timelineEmployeeId ?? null,
+            };
+        },
+        [anchorDate, days],
+    );
+
+    const handleGridMenuTrigger = useCallback(
         (event: React.MouseEvent<HTMLDivElement>) => {
-            event.preventDefault();
             const target = event.target as HTMLElement | null;
             if (!target) {
                 return;
@@ -1302,9 +1500,10 @@ const TaskTimeline = () => {
                 return;
             }
 
-            openGridContextMenu(event.clientX, event.clientY);
+            const { datetime, employeeId } = resolveContextMenuTarget(event);
+            openGridContextMenu(event.clientX, event.clientY, datetime, employeeId);
         },
-        [closeGridContextMenu, openGridContextMenu],
+        [closeGridContextMenu, openGridContextMenu, resolveContextMenuTarget],
     );
 
     useEffect(() => {
@@ -1386,28 +1585,6 @@ const TaskTimeline = () => {
             window.cancelAnimationFrame(frame);
         };
     }, [gridContextMenu.isOpen, gridContextMenu.x, gridContextMenu.y]);
-
-    const weekStart = useMemo(() => mondayOf(anchorDate), [anchorDate]);
-
-    const days = useMemo<Date[]>(() => {
-        if (view === 'daily') {
-            return [anchorDate];
-        }
-
-        const count = view === 'monthly' ? 28 : 7;
-        return Array.from({ length: count }, (_, index) =>
-            addDays(weekStart, index),
-        );
-    }, [anchorDate, view, weekStart]);
-
-    const rangeStart = useMemo(
-        () => startOfDay(days[0] ?? today),
-        [days, today],
-    );
-    const rangeEnd = useMemo(
-        () => endOfDay(days[days.length - 1] ?? today),
-        [days, today],
-    );
 
     useEffect(() => {
         let active = true;
@@ -1492,7 +1669,7 @@ const TaskTimeline = () => {
         return () => {
             active = false;
         };
-    }, [rangeEnd, rangeStart]);
+    }, [rangeEnd, rangeStart, refreshToken]);
 
     const schedulerEmployees = useMemo<SchedulerEmployee[]>(() => {
         const employeeMap = new Map<number, AssignmentEmployee>();
@@ -1555,10 +1732,14 @@ const TaskTimeline = () => {
                 );
 
                 if (view === 'daily') {
+                    const taskIdsWithEntries = new Set<number>();
+
                     employeeEntries.forEach(({ task, entry }) => {
                         if (!overlapsRangeEntry(entry, rangeStart, rangeEnd)) {
                             return;
                         }
+
+                        taskIdsWithEntries.add(task.id);
 
                         const schedulerEntry: SchedulerTask = {
                             id: entry.id,
@@ -1577,6 +1758,55 @@ const TaskTimeline = () => {
 
                             const dayKey = formatDateKey(day);
                             const window = getDailyEntryWindow(entry, day);
+                            if (window) {
+                                scheduleEmployee.dailyTasks[dayKey].push({
+                                    ...schedulerEntry,
+                                    ...window,
+                                });
+                            }
+                        });
+                    });
+
+                    tasks.forEach((task) => {
+                        if (task.state !== 'Draft') {
+                            return;
+                        }
+
+                        const assignedToEmployee = task.assigned_users?.some(
+                            (user) => user.id === employee.id,
+                        );
+
+                        if (!assignedToEmployee || taskIdsWithEntries.has(task.id)) {
+                            return;
+                        }
+
+                        if (!overlapsTaskRange(task, rangeStart, rangeEnd)) {
+                            return;
+                        }
+
+                        const plannedEntry: TimeEntry = {
+                            id: task.id,
+                            task_id: task.id,
+                            user_id: employee.id,
+                            start_time: getTaskScheduleStart(task).toISOString(),
+                            end_time: getTaskScheduleEnd(task).toISOString(),
+                            is_active: false,
+                        };
+
+                        const schedulerEntry: SchedulerTask = {
+                            id: task.id,
+                            label: buildTaskLabel(task),
+                            type: 'assigned',
+                            task,
+                            timeEntry: plannedEntry,
+                            isPlanned: true,
+                        };
+
+                        entryMap.set(task.id, schedulerEntry);
+
+                        days.forEach((day) => {
+                            const dayKey = formatDateKey(day);
+                            const window = getDailyEntryWindow(plannedEntry, day);
                             if (window) {
                                 scheduleEmployee.dailyTasks[dayKey].push({
                                     ...schedulerEntry,
@@ -1677,6 +1907,7 @@ const TaskTimeline = () => {
                             type: 'assigned',
                             task,
                             timeEntry: plannedEntry,
+                            isPlanned: task.state === 'Draft',
                         };
 
                         entryMap.set(task.id, schedulerEntry);
@@ -1696,16 +1927,8 @@ const TaskTimeline = () => {
                 });
 
                 return scheduleEmployee;
-            })
-            .filter((employee) => {
-                if (view === 'daily') {
-                    const dayKey = formatDateKey(days[0] ?? today);
-                    return (employee.dailyTasks[dayKey] ?? []).length > 0;
-                }
-
-                return employee.allTasks.length > 0;
             });
-    }, [days, employees, rangeEnd, rangeStart, tasks, today, view]);
+    }, [days, employees, rangeEnd, rangeStart, tasks, view]);
 
     const schedulerEmployeeById = useMemo(() => {
         const map = new Map<number, SchedulerEmployee>();
@@ -1900,6 +2123,101 @@ const TaskTimeline = () => {
         cursor: 'pointer',
     };
 
+    const contextTargetLabel = formatEntryDateTime(gridContextMenu.datetime);
+
+    const resetCreateTaskForm = useCallback(
+        (datetime: Date, employeeId: string | null = null) => {
+            const roundedStart = roundToQuarterHour(datetime);
+            const roundedEnd = new Date(roundedStart);
+            roundedEnd.setHours(roundedEnd.getHours() + 1);
+
+            setCreateTaskForm({
+                title: '',
+                description: '',
+                start_at: toDateTimeLocalValue(roundedStart),
+                due_at: toDateTimeLocalValue(roundedEnd),
+                employee_id: employeeId ?? '',
+            });
+            setCreateTaskError(null);
+        },
+        [],
+    );
+
+    const handleCreateTaskSubmit = async (
+        event: React.FormEvent<HTMLFormElement>,
+    ): Promise<void> => {
+        event.preventDefault();
+        setCreateTaskError(null);
+
+        if (!createTaskForm.title.trim()) {
+            setCreateTaskError('Task title is required.');
+            return;
+        }
+
+        if (!createTaskForm.due_at) {
+            setCreateTaskError('Due date is required.');
+            return;
+        }
+
+        if (!createTaskForm.employee_id) {
+            setCreateTaskError('Please select an employee.');
+            return;
+        }
+
+        setIsCreatingTask(true);
+
+        try {
+            const taskResponse = await axios.post('/admin/tasks', {
+                title: createTaskForm.title.trim(),
+                description: createTaskForm.description.trim() || null,
+                start_at: createTaskForm.start_at || null,
+                due_at: createTaskForm.due_at,
+                state: 'Assigned',
+            });
+
+            const taskId = taskResponse.data.task?.id ?? taskResponse.data.id;
+            if (taskId) {
+                await axios.post(`/admin/tasks/${taskId}/assign`, {
+                    user_id: Number(createTaskForm.employee_id),
+                });
+            }
+
+            setIsCreateTaskModalOpen(false);
+            setRefreshToken((previous) => previous + 1);
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.data?.message) {
+                setCreateTaskError(String(error.response.data.message));
+            } else {
+                setCreateTaskError('Failed to create task. Please try again.');
+            }
+        } finally {
+            setIsCreatingTask(false);
+        }
+    };
+
+    const handleContextMenuAction = (action: string, datetime: Date) => {
+        switch (action) {
+            case 'refresh':
+                setRefreshToken((previous) => previous + 1);
+                break;
+            case 'create':
+                resetCreateTaskForm(datetime, gridContextMenu.employeeId);
+                setIsCreateTaskModalOpen(true);
+                break;
+            case 'copy':
+                void navigator.clipboard
+                    .writeText(datetime.toISOString())
+                    .catch(() => {
+                        window.alert('Unable to copy datetime to clipboard.');
+                    });
+                break;
+            default:
+                break;
+        }
+        closeGridContextMenu();
+    };
+
+
     return (
         <div
             style={{
@@ -2017,8 +2335,8 @@ const TaskTimeline = () => {
 
                 <div
                     ref={gridContainerRef}
-                    onContextMenuCapture={handleGridContextMenu}
-                    onContextMenu={handleGridContextMenu}
+                    onClick={handleGridMenuTrigger}
+                    onContextMenu={(event) => event.preventDefault()}
                     onScroll={closeGridContextMenu}
                     style={{
                         background: 'var(--color-background-primary, #fff)',
@@ -2096,11 +2414,17 @@ const TaskTimeline = () => {
                         onMouseDown={(event) => event.stopPropagation()}
                         onContextMenu={(event) => event.preventDefault()}
                     >
+                        <div className="px-2.5 py-2 text-[11px] font-medium text-muted-foreground">
+                            {contextTargetLabel}
+                        </div>
+                        <div className="my-1 h-px bg-border" />
                         <button
                             type="button"
                             role="menuitem"
                             className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-sm hover:bg-muted"
-                            onClick={closeGridContextMenu}
+                            onClick={() => {
+                                handleContextMenuAction('refresh', gridContextMenu.datetime);
+                            }}
                         >
                             Refresh
                             <span className="text-xs text-muted-foreground">R</span>
@@ -2109,7 +2433,9 @@ const TaskTimeline = () => {
                             type="button"
                             role="menuitem"
                             className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-sm hover:bg-muted"
-                            onClick={closeGridContextMenu}
+                            onClick={() => {
+                                handleContextMenuAction('create', gridContextMenu.datetime);
+                            }}
                         >
                             Create task
                             <span className="text-xs text-muted-foreground">+</span>
@@ -2120,9 +2446,11 @@ const TaskTimeline = () => {
                             type="button"
                             role="menuitem"
                             className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-sm hover:bg-muted"
-                            onClick={closeGridContextMenu}
+                            onClick={()=>{
+                                handleContextMenuAction('copy', gridContextMenu.datetime);
+                            }}
                         >
-                            Copy date range
+                            Copy date time
                             <span className="text-xs text-muted-foreground">C</span>
                         </button>
                     </div>
@@ -2196,6 +2524,134 @@ const TaskTimeline = () => {
                     </div>
                 </div>
             ) : null}
+
+            <Dialog
+                open={isCreateTaskModalOpen}
+                onOpenChange={(open) => {
+                    setIsCreateTaskModalOpen(open);
+                    if (!open) {
+                        setCreateTaskError(null);
+                    }
+                }}
+            >
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Create Task</DialogTitle>
+                        <DialogDescription>
+                            Timeline target: {contextTargetLabel}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form className="space-y-4" onSubmit={handleCreateTaskSubmit}>
+                        {createTaskError ? (
+                            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {createTaskError}
+                            </div>
+                        ) : null}
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Title *</label>
+                            <Input
+                                value={createTaskForm.title}
+                                onChange={(event) => {
+                                    setCreateTaskForm((previous) => ({
+                                        ...previous,
+                                        title: event.target.value,
+                                    }));
+                                }}
+                                placeholder="Enter task title"
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Description</label>
+                            <Textarea
+                                rows={3}
+                                value={createTaskForm.description}
+                                onChange={(event) => {
+                                    setCreateTaskForm((previous) => ({
+                                        ...previous,
+                                        description: event.target.value,
+                                    }));
+                                }}
+                                placeholder="Enter task description (optional)"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">
+                                    Start Date & Time
+                                </label>
+                                <Input
+                                    type="datetime-local"
+                                    value={createTaskForm.start_at}
+                                    onChange={(event) => {
+                                        setCreateTaskForm((previous) => ({
+                                            ...previous,
+                                            start_at: event.target.value,
+                                        }));
+                                    }}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">
+                                    Due Date & Time *
+                                </label>
+                                <Input
+                                    type="datetime-local"
+                                    value={createTaskForm.due_at}
+                                    min={createTaskForm.start_at || undefined}
+                                    onChange={(event) => {
+                                        setCreateTaskForm((previous) => ({
+                                            ...previous,
+                                            due_at: event.target.value,
+                                        }));
+                                    }}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Assign To *</label>
+                            <select
+                                value={createTaskForm.employee_id}
+                                onChange={(event) => {
+                                    setCreateTaskForm((previous) => ({
+                                        ...previous,
+                                        employee_id: event.target.value,
+                                    }));
+                                }}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                required
+                            >
+                                <option value="">Select an employee...</option>
+                                {employees.map((employee) => (
+                                    <option key={employee.id} value={String(employee.id)}>
+                                        {employee.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsCreateTaskModalOpen(false)}
+                                disabled={isCreatingTask}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={isCreatingTask}>
+                                {isCreatingTask ? 'Creating...' : 'Create Task'}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={isTaskModalOpen}
