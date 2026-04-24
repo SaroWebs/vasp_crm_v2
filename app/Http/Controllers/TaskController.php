@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\WorkloadMetric;
 use App\Services\DueDateCalculatorService;
 use App\Services\NotificationService;
+use App\Services\TaskActionAuthorizationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -29,8 +30,9 @@ use Inertia\Response;
  */
 class TaskController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        protected TaskActionAuthorizationService $taskActionAuthorizationService
+    ) {
         // $this->middleware('auth');
     }
 
@@ -187,12 +189,21 @@ class TaskController extends Controller
         // Get current user info for milestone access control
         $currentUser = User::with('roles')->find(Auth::user()->id);
         $isSuperAdmin = $currentUser && $currentUser->roles->contains('slug', 'super-admin');
+        $canManageTask = $currentUser
+            ? $this->taskActionAuthorizationService->canManageTask($currentUser, $task)
+            : false;
+        $canManageAnyTask = $currentUser
+            ? $this->taskActionAuthorizationService->canManageAnyTask($currentUser)
+            : false;
+        $task->setAttribute('can_manage_task', $canManageTask);
 
         return response()->json([
             'data' => $task,
             'authUser' => [
                 'id' => Auth::user()->id,
                 'is_super_admin' => $isSuperAdmin,
+                'can_manage_any_tasks' => $canManageAnyTask,
+                'can_manage_task' => $canManageTask,
             ],
         ]);
     }
@@ -266,12 +277,8 @@ class TaskController extends Controller
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
-        // Check if user is the task creator or super admin
-        $isSuperAdmin = $user->roles->contains('slug', 'super-admin');
-        $isTaskOwner = $task->created_by === Auth::id() || $task->createdBy?->id === Auth::id();
-
-        if (! $isTaskOwner && ! $isSuperAdmin) {
-            return response()->json(['message' => 'You can only edit your own tasks'], 403);
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
         }
 
         $validatedData = $request->validate([
@@ -354,12 +361,8 @@ class TaskController extends Controller
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
-        // Check if user is the task creator or super admin
-        $isSuperAdmin = $user->roles->contains('slug', 'super-admin');
-        $isTaskOwner = $task->created_by === Auth::id() || $task->createdBy?->id === Auth::id();
-
-        if (! $isTaskOwner && ! $isSuperAdmin) {
-            return response()->json(['message' => 'You can only delete your own tasks'], 403);
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
         }
 
         // Check if task has child tasks

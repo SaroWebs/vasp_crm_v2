@@ -14,6 +14,7 @@ use App\Models\TaskType;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\TaskActionAuthorizationService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
@@ -31,7 +32,8 @@ class AdminTaskController extends Controller
      * Create a new controller instance.
      */
     public function __construct(
-        protected NotificationService $notificationService
+        protected NotificationService $notificationService,
+        protected TaskActionAuthorizationService $taskActionAuthorizationService
     ) {}
 
     /**
@@ -60,6 +62,16 @@ class AdminTaskController extends Controller
 
     public function getData(Request $request)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $readAuthorization = $this->authorizeTaskRead($user);
+        if ($readAuthorization) {
+            return $readAuthorization;
+        }
+
         $validated = $request->validate([
             'state' => ['nullable', 'string'],
             'priority' => ['nullable', 'string', 'in:all,P1,P2,P3,P4'],
@@ -137,6 +149,16 @@ class AdminTaskController extends Controller
         $tasks = $query
             ->paginate($perPage, ['*'], 'page', $page)
             ->withQueryString();
+        $tasks->setCollection(
+            $tasks->getCollection()->map(function (Task $task) use ($user) {
+                $task->setAttribute(
+                    'can_manage_task',
+                    $this->taskActionAuthorizationService->canManageTask($user, $task)
+                );
+
+                return $task;
+            })
+        );
         $stateCounts = Task::withTrashed()
             ->selectRaw('state, COUNT(*) as total')
             ->groupBy('state')
@@ -192,11 +214,57 @@ class AdminTaskController extends Controller
             ->orderBy('tasks.id', 'desc');
     }
 
+    private function getAuthenticatedUserWithRoles(): ?User
+    {
+        $userId = Auth::id();
+        if (! $userId) {
+            return null;
+        }
+
+        return User::with('roles')->find($userId);
+    }
+
+    private function authorizeTaskRead(User $user): ?JsonResponse
+    {
+        if (! $user->hasPermission('task.read')) {
+            return response()->json(['message' => 'Insufficient permissions'], 403);
+        }
+
+        return null;
+    }
+
+    private function authorizeTaskUpdate(User $user): ?JsonResponse
+    {
+        if (! $user->hasPermission('task.update')) {
+            return response()->json(['message' => 'Insufficient permissions'], 403);
+        }
+
+        return null;
+    }
+
+    private function authorizeTaskDelete(User $user): ?JsonResponse
+    {
+        if (! $user->hasPermission('task.delete')) {
+            return response()->json(['message' => 'Insufficient permissions'], 403);
+        }
+
+        return null;
+    }
+
     /**
      * Display the specified task (Admin view).
      */
     public function show($task)
     {
+        $currentUser = $this->getAuthenticatedUserWithRoles();
+        if (! $currentUser) {
+            abort(401, 'Unauthenticated');
+        }
+
+        if (! $currentUser->hasPermission('task.read')) {
+            abort(403, 'Insufficient permissions');
+        }
+
         $tsk = Task::withTrashed()
             ->with([
                 'createdBy:id,name,email',
@@ -228,15 +296,18 @@ class AdminTaskController extends Controller
             abort(404, 'Task not found');
         }
 
-        // Get current user with roles to check permissions
-        $currentUser = User::with('roles')->find(Auth::user()->id);
-        $isSuperAdmin = $currentUser && $currentUser->roles->contains('slug', 'super-admin');
+        $isSuperAdmin = $currentUser->roles->contains('slug', 'super-admin');
+        $canManageAnyTask = $this->taskActionAuthorizationService->canManageAnyTask($currentUser);
+        $canManageTask = $this->taskActionAuthorizationService->canManageTask($currentUser, $tsk);
+        $tsk->setAttribute('can_manage_task', $canManageTask);
 
         return Inertia::render('admin/tasks/Show', [
             'task' => $tsk,
             'authUser' => [
-                'id' => Auth::user()->id,
+                'id' => $currentUser->id,
                 'is_super_admin' => $isSuperAdmin,
+                'can_manage_any_tasks' => $canManageAnyTask,
+                'can_manage_task' => $canManageTask,
             ],
         ]);
     }
@@ -579,6 +650,15 @@ class AdminTaskController extends Controller
      */
     public function edit(Request $request, $task_id)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            abort(401, 'Unauthenticated');
+        }
+
+        if (! $user->hasPermission('task.update')) {
+            abort(403, 'Insufficient permissions');
+        }
+
         $task = Task::with([
             'ticket:id,ticket_number,title,client_id',
             'ticket.client:id,name',
@@ -586,6 +666,10 @@ class AdminTaskController extends Controller
 
         if (! $task) {
             abort(404, 'Task not found');
+        }
+
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            abort(403, 'You are not authorized to manage this task');
         }
 
         $tickets = Ticket::with(['client:id,name', 'organizationUser:id,name'])
@@ -617,9 +701,23 @@ class AdminTaskController extends Controller
      */
     public function update(Request $request, $task_id)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $updateAuthorization = $this->authorizeTaskUpdate($user);
+        if ($updateAuthorization) {
+            return $updateAuthorization;
+        }
+
         $task = Task::find($task_id);
         if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
+        }
+
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
         }
 
         // Parse JSON strings from FormData before validation
@@ -754,9 +852,23 @@ class AdminTaskController extends Controller
      */
     public function updateDates(Request $request, $task_id)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $updateAuthorization = $this->authorizeTaskUpdate($user);
+        if ($updateAuthorization) {
+            return $updateAuthorization;
+        }
+
         $task = Task::find($task_id);
         if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
+        }
+
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
         }
 
         $validated = $request->validate([
@@ -785,9 +897,23 @@ class AdminTaskController extends Controller
      */
     public function destroy(Request $request, $task_id)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $deleteAuthorization = $this->authorizeTaskDelete($user);
+        if ($deleteAuthorization) {
+            return $deleteAuthorization;
+        }
+
         $task = Task::with('childTasks')->find($task_id);
         if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
+        }
+
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
         }
 
         // Check if task has child tasks that are not deleted
@@ -809,10 +935,25 @@ class AdminTaskController extends Controller
      */
     public function restore(Request $request, $task_id)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $updateAuthorization = $this->authorizeTaskUpdate($user);
+        if ($updateAuthorization) {
+            return $updateAuthorization;
+        }
+
         $task = Task::onlyTrashed()->find($task_id);
         if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
         }
+
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
+        }
+
         $task->restore();
 
         return $this->show($task->id);
@@ -823,9 +964,23 @@ class AdminTaskController extends Controller
      */
     public function forceDelete(Request $request, $task_id)
     {
+        $user = $this->getAuthenticatedUserWithRoles();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $deleteAuthorization = $this->authorizeTaskDelete($user);
+        if ($deleteAuthorization) {
+            return $deleteAuthorization;
+        }
+
         $task = Task::onlyTrashed()->find($task_id);
         if (! $task) {
             return response()->json(['message' => 'Task not found'], 404);
+        }
+
+        if (! $this->taskActionAuthorizationService->canManageTask($user, $task)) {
+            return response()->json(['message' => 'You are not authorized to manage this task'], 403);
         }
 
         // Check if task has child tasks

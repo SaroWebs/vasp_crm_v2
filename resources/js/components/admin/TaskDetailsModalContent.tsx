@@ -241,12 +241,14 @@ export default function TaskDetailsModalContent({
                     >
                         View Task
                     </Link>
-                    <Link
-                        href={taskEditUrl}
-                        className='inline-flex items-center rounded-md border border-[#b2ddff] bg-[#eff8ff] px-3 py-1.5 text-xs font-semibold text-[#175cd3] hover:bg-[#d1e9ff]'
-                    >
-                        Edit Task
-                    </Link>
+                    {task.can_manage_task ? (
+                        <Link
+                            href={taskEditUrl}
+                            className='inline-flex items-center rounded-md border border-[#b2ddff] bg-[#eff8ff] px-3 py-1.5 text-xs font-semibold text-[#175cd3] hover:bg-[#d1e9ff]'
+                        >
+                            Edit Task
+                        </Link>
+                    ) : null}
                 </div>
             </div>
             <div className="flex justify-between">

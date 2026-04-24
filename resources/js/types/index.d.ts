@@ -252,6 +252,7 @@ export interface Task {
     urgency_score?: number;
     overdue_time?: string | null;
     is_overdue?: boolean;
+    can_manage_task?: boolean;
     assigned_to?: User;
     assignedTo?: User;
     assigned_department?: Department;

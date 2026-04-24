@@ -646,6 +646,7 @@ export default function TasksIndex({
                                 <TableBody>
                                     {filteredTasks.map((task) => {
                                         const isDeleted = !!task.deleted_at;
+                                        const canManageTask = !!task.can_manage_task;
                                         return (
                                             <TableRow
                                                 key={task.id}
@@ -877,30 +878,34 @@ export default function TasksIndex({
                                                                         Assign
                                                                         Users
                                                                     </DropdownMenuItem>
-                                                                    <DropdownMenuItem
-                                                                        asChild
-                                                                    >
-                                                                        <Link
-                                                                            href={`/admin/tasks/${task.id}/edit`}
-                                                                        >
-                                                                            <BiSolidEdit className="mr-2 h-4 w-4" />
-                                                                            Edit
-                                                                            Task
-                                                                        </Link>
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem
-                                                                        className="text-red-600"
-                                                                        onClick={() =>
-                                                                            handleDeleteTask(
-                                                                                task,
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        <FiTrash className="mr-2 h-4 w-4" />
-                                                                        Delete
-                                                                        Task
-                                                                    </DropdownMenuItem>
+                                                                    {canManageTask ? (
+                                                                        <>
+                                                                            <DropdownMenuItem
+                                                                                asChild
+                                                                            >
+                                                                                <Link
+                                                                                    href={`/admin/tasks/${task.id}/edit`}
+                                                                                >
+                                                                                    <BiSolidEdit className="mr-2 h-4 w-4" />
+                                                                                    Edit
+                                                                                    Task
+                                                                                </Link>
+                                                                            </DropdownMenuItem>
+                                                                            <DropdownMenuSeparator />
+                                                                            <DropdownMenuItem
+                                                                                className="text-red-600"
+                                                                                onClick={() =>
+                                                                                    handleDeleteTask(
+                                                                                        task,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                <FiTrash className="mr-2 h-4 w-4" />
+                                                                                Delete
+                                                                                Task
+                                                                            </DropdownMenuItem>
+                                                                        </>
+                                                                    ) : null}
                                                                 </>
                                                             )}
                                                         </DropdownMenuContent>

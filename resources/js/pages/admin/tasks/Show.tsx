@@ -64,6 +64,8 @@ interface TasksShowProps {
     authUser?: {
         id: number;
         is_super_admin: boolean;
+        can_manage_any_tasks?: boolean;
+        can_manage_task?: boolean;
     };
 }
 
@@ -161,6 +163,9 @@ export default function Show({ task, authUser }: TasksShowProps) {
         task.created_by?.id === authUser?.id ||
         task.createdBy?.id === authUser?.id;
     const isSuperAdmin = authUser?.is_super_admin ?? false;
+    const canManageTask =
+        (task.can_manage_task ?? authUser?.can_manage_task ?? isOwnTask) ||
+        isSuperAdmin;
 
     // Define valid state transitions based on current task state
     const getValidStateTransitions = (
@@ -394,7 +399,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                             </DropdownMenu>
                         )}
 
-                        {isDeleted && (
+                        {isDeleted && canManageTask && (
                             <Button
                                 onClick={handleRestoreTask}
                                 disabled={isRestoring}
@@ -443,7 +448,7 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         Manage Assignments
                                     </DropdownMenuItem>
                                 )}
-                                {!isDeleted && (
+                                {!isDeleted && canManageTask && (
                                     <DropdownMenuItem asChild>
                                         <Link
                                             href={`/admin/tasks/${task.id}/edit`}
@@ -453,20 +458,22 @@ export default function Show({ task, authUser }: TasksShowProps) {
                                         </Link>
                                     </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem
-                                    className="text-red-600"
-                                    onClick={handleDeleteTask}
-                                    disabled={isDeleting || isForceDeleting}
-                                >
-                                    <Trash className="mr-2 h-4 w-4" />
-                                    {isDeleted
-                                        ? isForceDeleting
-                                            ? 'Force Deleting...'
-                                            : 'Force Delete'
-                                        : isDeleting
-                                            ? 'Deleting...'
-                                            : 'Delete Task'}
-                                </DropdownMenuItem>
+                                {canManageTask ? (
+                                    <DropdownMenuItem
+                                        className="text-red-600"
+                                        onClick={handleDeleteTask}
+                                        disabled={isDeleting || isForceDeleting}
+                                    >
+                                        <Trash className="mr-2 h-4 w-4" />
+                                        {isDeleted
+                                            ? isForceDeleting
+                                                ? 'Force Deleting...'
+                                                : 'Force Delete'
+                                            : isDeleting
+                                                ? 'Deleting...'
+                                                : 'Delete Task'}
+                                    </DropdownMenuItem>
+                                ) : null}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
