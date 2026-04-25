@@ -49,10 +49,7 @@ class EmployeeProgressController extends Controller
             $timeEntryQuery->where('user_id', $employeeId);
         }
 
-        // Apply filters in priority order:
-        // 1) exact date
-        // 2) custom date range
-        // 3) period-based fallback
+        // Apply date filters based on the period
         if ($date) {
             $timeEntryQuery->whereDate('start_time', $date);
         } elseif ($fromDate || $toDate) {

@@ -60,6 +60,16 @@ interface EmployeeTaskProgressProps {
     employeeId: number | 'all';
 }
 
+const toHourMinute = (decimalHours: number): string => {
+    const totalMinutes = Math.round(decimalHours * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if(hours === 0) {
+        return `${minutes}m`;
+    }
+    return `${hours}h ${minutes}m`;
+}
+
 const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
     employeeId,
 }) => {
@@ -244,7 +254,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
                                 )}
                             </span>
                             <span className="text-muted-foreground">
-                                {Number(report.total_time).toFixed(2)}h
+                                {toHourMinute(report.total_time)}
                             </span>
                         </div>
 
@@ -262,11 +272,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
                                             {event.duration_hours !==
                                                 undefined && (
                                                 <span className="text-xs text-muted-foreground">
-                                                    (
-                                                    {Number(
-                                                        event.duration_hours,
-                                                    ).toFixed(2)}
-                                                    h)
+                                                    ({toHourMinute(event.duration_hours)})
                                                 </span>
                                             )}
                                         </div>
@@ -313,7 +319,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
                     <p className="text-xs text-muted-foreground">Total Time</p>
                     <p className="flex items-center gap-1 text-xs font-semibold">
                         <Clock className="h-3 w-3" />
-                        {Number(currentEmployeeProgress.total_time).toFixed(2)}h
+                        {toHourMinute(currentEmployeeProgress.total_time)}
                     </p>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-2">
@@ -326,7 +332,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
                 <div className="flex items-center justify-between rounded-lg border p-2">
                     <p className="text-xs text-muted-foreground">Avg/Task</p>
                     <p className="text-xs font-semibold">
-                        {averageTimePerTask.toFixed(2)}h
+                        {toHourMinute(averageTimePerTask)}
                     </p>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-2">
@@ -386,10 +392,7 @@ const EmployeeTaskProgress: React.FC<EmployeeTaskProgressProps> = ({
                                         </div>
                                         <div className="text-right">
                                             <p className="font-semibold">
-                                                {Number(employee.total_time).toFixed(
-                                                    2,
-                                                )}
-                                                h
+                                                {toHourMinute(employee.total_time)}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                                 {employee.tasks_completed} tasks

@@ -12,6 +12,7 @@ use App\Models\WorkloadMetric;
 use App\Services\DueDateCalculatorService;
 use App\Services\NotificationService;
 use App\Services\TaskActionAuthorizationService;
+use App\Services\TimeCalculatorService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -110,19 +111,7 @@ class TaskController extends Controller
 
         $validatedData['created_by'] = Auth::id();
 
-        // Set start date if not provided
-        if (! isset($validatedData['start_at'])) {
-            $validatedData['start_at'] = now();
-        }
-
-        // Calculate due date if not provided but estimate hours are given
-        if (! isset($validatedData['due_at']) && isset($validatedData['estimate_hours'])) {
-            $dueDateCalculator = app(DueDateCalculatorService::class);
-            $validatedData['due_at'] = $dueDateCalculator->calculateDueDate(
-                new \DateTime($validatedData['start_at']),
-                $validatedData['estimate_hours']
-            );
-        }
+        $validatedData = $this->prepareScheduleForCreation($validatedData);
 
         $task = Task::create($validatedData);
 
@@ -244,6 +233,7 @@ class TaskController extends Controller
         $validatedData['current_owner_id'] = Auth::id();
         $validatedData['current_owner_kind'] = 'USER';
         $validatedData['state'] = $validatedData['state'] ?? 'Draft';
+        $validatedData = $this->prepareScheduleForCreation($validatedData);
 
         $task = Task::create($validatedData);
 
@@ -1392,6 +1382,98 @@ class TaskController extends Controller
         foreach ($activeEntries as $entry) {
             $entry->end();
         }
+    }
+
+    /**
+     * Normalize task schedule fields for create flows.
+     *
+     * @param  array<string, mixed>  $validatedData
+     * @return array<string, mixed>
+     */
+    private function prepareScheduleForCreation(array $validatedData): array
+    {
+        $workingHoursService = app(WorkingHoursService::class);
+        $dueDateCalculator = app(DueDateCalculatorService::class);
+        $timeCalculator = app(TimeCalculatorService::class);
+
+        $rawEstimate = isset($validatedData['estimate_hours'])
+            ? (float) $validatedData['estimate_hours']
+            : 0.0;
+        $durationMissingOrZero = $rawEstimate <= 0;
+
+        $startAt = ! empty($validatedData['start_at'])
+            ? Carbon::parse((string) $validatedData['start_at'])
+            : now();
+
+        if ($durationMissingOrZero && ! $workingHoursService->isWorkingTime($startAt->toDateTime())) {
+            $startAt = Carbon::instance($workingHoursService->getNextWorkingTime($startAt->toDateTime()));
+        }
+
+        $validatedData['start_at'] = $startAt->toDateTimeString();
+
+        if ($durationMissingOrZero) {
+            $derivedEstimateHours = 0.0;
+
+            if (! empty($validatedData['due_at'])) {
+                $dueAt = Carbon::parse((string) $validatedData['due_at']);
+                if ($dueAt->greaterThan($startAt)) {
+                    $workingSeconds = $timeCalculator->calculateWorkingDuration(
+                        $startAt->toDateTime(),
+                        $dueAt->toDateTime()
+                    );
+                    $derivedEstimateHours = round($workingSeconds / 3600, 2);
+                }
+            }
+
+            if ($derivedEstimateHours <= 0) {
+                $resolutionMinutes = $this->getSlaResolutionMinutes($validatedData);
+                if ($resolutionMinutes > 0) {
+                    $derivedEstimateHours = round($resolutionMinutes / 60, 2);
+                }
+            }
+
+            if ($derivedEstimateHours > 0) {
+                $validatedData['estimate_hours'] = $derivedEstimateHours;
+            }
+        }
+
+        $finalEstimateHours = isset($validatedData['estimate_hours'])
+            ? (float) $validatedData['estimate_hours']
+            : 0.0;
+
+        if ($finalEstimateHours > 0) {
+            $shouldCalculateDueAt = empty($validatedData['due_at'])
+                || Carbon::parse((string) $validatedData['due_at'])->lessThanOrEqualTo($startAt);
+
+            if ($shouldCalculateDueAt) {
+                $validatedData['due_at'] = Carbon::instance(
+                    $dueDateCalculator->calculateDueDate($startAt->toDateTime(), $finalEstimateHours)
+                )->toDateTimeString();
+            }
+        } elseif (empty($validatedData['due_at'])) {
+            $validatedData['due_at'] = $startAt->toDateTimeString();
+        }
+
+        return $validatedData;
+    }
+
+    /**
+     * Resolve SLA resolution minutes from request payload.
+     *
+     * @param  array<string, mixed>  $validatedData
+     */
+    private function getSlaResolutionMinutes(array $validatedData): int
+    {
+        $slaPolicyId = $validatedData['sla_policy_id'] ?? null;
+        if (! $slaPolicyId) {
+            return 0;
+        }
+
+        $slaPolicy = SlaPolicy::query()
+            ->select('id', 'resolution_time_minutes')
+            ->find($slaPolicyId);
+
+        return (int) ($slaPolicy?->resolution_time_minutes ?? 0);
     }
 
     public function projects(Request $request)
