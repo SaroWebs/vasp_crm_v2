@@ -59,6 +59,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   const task = tasks.get(taskId);
   const taskTimeEntries = timeEntries.get(taskId) || [];
+  const isMyTracking = Boolean(task?.my_is_tracking);
 
   // Fetch working hours and holidays configuration
   useEffect(() => {
@@ -127,10 +128,9 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
         });
       }
 
-      const hasActiveEntry = taskTimeEntries.some((entry: TimeEntry) => entry?.is_active);
-      setTimeData(prev => ({ ...prev, isActive: !!hasActiveEntry }));
+      setTimeData(prev => ({ ...prev, isActive: isMyTracking }));
     }
-  }, [task, taskTimeEntries, taskId, refreshTaskData]);
+  }, [task, taskTimeEntries, taskId, refreshTaskData, isMyTracking]);
 
   // Sync isActive state with activeTaskId from context
   // This ensures the timer stops when the task is no longer active in the context
@@ -140,18 +140,17 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
       // No task is active, so this task is not active
       setTimeData(prev => ({ ...prev, isActive: false }));
     } else if (activeTaskId === taskId) {
-      // This task is the active task - check if there's an active time entry
-      const hasActiveEntry = taskTimeEntries.some((entry: TimeEntry) => entry?.is_active);
-      setTimeData(prev => ({ ...prev, isActive: !!hasActiveEntry }));
+      // This task is the active task - use current-user scoped tracking flag
+      setTimeData(prev => ({ ...prev, isActive: isMyTracking }));
     } else {
       // Another task is active, so this task is not active
       setTimeData(prev => ({ ...prev, isActive: false }));
     }
-  }, [activeTaskId, taskId, taskTimeEntries]);
+  }, [activeTaskId, taskId, taskTimeEntries, isMyTracking]);
 
   // Local timer counting each second
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (timeData.isActive) {
       interval = setInterval(() => {
@@ -168,7 +167,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   // Auto-pause when the running entry leaves working hours
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (timeData.isActive && configLoaded && workingHoursConfig) {
       const checkWorkingHours = async () => {
@@ -194,7 +193,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   // Sync with backend every 5 minutes
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (timeData.isActive) {
       interval = setInterval(async () => {

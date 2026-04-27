@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\SlaPolicy;
 use App\Models\Task;
+use App\Models\TaskAssignment;
 use App\Models\TaskTimeEntry;
 use App\Models\TaskType;
 use App\Models\User;
@@ -20,6 +21,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -167,6 +169,21 @@ class TaskController extends Controller
             'timelineEvents',
         ]);
 
+        $authUserId = (int) Auth::user()->id;
+        $activeTaskEntries = $task->timeEntries->where('is_active', true);
+        $myActiveEntry = $activeTaskEntries->firstWhere('user_id', $authUserId);
+
+        $task->setAttribute('my_active_entry', $myActiveEntry);
+        $task->setAttribute('my_is_tracking', $myActiveEntry !== null);
+        $task->setAttribute(
+            'other_active_users_count',
+            $activeTaskEntries
+                ->where('user_id', '!=', $authUserId)
+                ->pluck('user_id')
+                ->unique()
+                ->count()
+        );
+
         // Add working time spent data
         $task->setAttribute('total_working_time_spent', $task->total_working_time_spent);
         $task->setAttribute('total_working_time_spent_seconds', $task->total_working_time_spent_seconds);
@@ -189,7 +206,7 @@ class TaskController extends Controller
         return response()->json([
             'data' => $task,
             'authUser' => [
-                'id' => Auth::user()->id,
+                'id' => $authUserId,
                 'is_super_admin' => $isSuperAdmin,
                 'can_manage_any_tasks' => $canManageAnyTask,
                 'can_manage_task' => $canManageTask,
@@ -676,24 +693,44 @@ class TaskController extends Controller
             ], 403);
         }
 
-        // Check if user already has an active time entry for this task
-        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
-        if ($activeEntry) {
-            return response()->json(['message' => 'Task is already being tracked by this user'], 422);
-        }
+        $result = DB::transaction(function () use ($task, $user) {
+            $activeEntries = TaskTimeEntry::query()
+                ->where('user_id', $user->id)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->get();
 
-        // Pause other active tasks for this user before starting the new task
-        $this->pauseUserActiveTasks($user->id, $task->id);
+            $activeOnCurrentTask = $activeEntries->firstWhere('task_id', $task->id);
 
-        // Create new time entry
-        $timeEntry = TaskTimeEntry::start($task, $user->id);
+            if ($activeOnCurrentTask) {
+                $this->markAssignmentInProgress($task, $user->id);
+                $this->syncTaskStateFromAssignments($task);
 
-        // Update task status to InProgress
-        $task->update(['state' => 'InProgress']);
+                return [
+                    'created' => false,
+                ];
+            }
+
+            foreach ($activeEntries as $entry) {
+                if ((int) $entry->task_id !== (int) $task->id) {
+                    $entry->end();
+                }
+            }
+
+            TaskTimeEntry::start($task, $user->id);
+            $this->markAssignmentInProgress($task, $user->id);
+            $this->syncTaskStateFromAssignments($task);
+
+            return [
+                'created' => true,
+            ];
+        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Task time tracking started successfully',
+            'message' => $result['created']
+                ? 'Task time tracking started successfully'
+                : 'Task is already being tracked by this user',
             'data' => $task->load([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
@@ -727,14 +764,28 @@ class TaskController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Find the active time entry for this user and task
-        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
-        if (! $activeEntry) {
+        $paused = DB::transaction(function () use ($task, $user) {
+            $activeEntry = TaskTimeEntry::query()
+                ->where('task_id', $task->id)
+                ->where('user_id', $user->id)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $activeEntry) {
+                return false;
+            }
+
+            $activeEntry->end();
+            $this->markAssignmentAccepted($task, $user->id);
+            $this->syncTaskStateFromAssignments($task);
+
+            return true;
+        });
+
+        if (! $paused) {
             return response()->json(['message' => 'No active time tracking for this task'], 422);
         }
-
-        // End the time entry
-        $activeEntry->end();
 
         return response()->json([
             'success' => true,
@@ -782,21 +833,44 @@ class TaskController extends Controller
             ], 403);
         }
 
-        // Check if user already has an active time entry for this task
-        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
-        if ($activeEntry) {
-            return response()->json(['message' => 'Task is already being tracked by this user'], 422);
-        }
+        $result = DB::transaction(function () use ($task, $user) {
+            $activeEntries = TaskTimeEntry::query()
+                ->where('user_id', $user->id)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->get();
 
-        // Pause other active tasks for this user before resuming this task
-        $this->pauseUserActiveTasks($user->id, $task->id);
+            $activeOnCurrentTask = $activeEntries->firstWhere('task_id', $task->id);
 
-        // Create new time entry
-        $timeEntry = TaskTimeEntry::start($task, $user->id);
+            if ($activeOnCurrentTask) {
+                $this->markAssignmentInProgress($task, $user->id);
+                $this->syncTaskStateFromAssignments($task);
+
+                return [
+                    'created' => false,
+                ];
+            }
+
+            foreach ($activeEntries as $entry) {
+                if ((int) $entry->task_id !== (int) $task->id) {
+                    $entry->end();
+                }
+            }
+
+            TaskTimeEntry::start($task, $user->id);
+            $this->markAssignmentInProgress($task, $user->id);
+            $this->syncTaskStateFromAssignments($task);
+
+            return [
+                'created' => true,
+            ];
+        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Task time tracking resumed successfully',
+            'message' => $result['created']
+                ? 'Task time tracking resumed successfully'
+                : 'Task is already being tracked by this user',
             'data' => $task->load([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
@@ -830,26 +904,33 @@ class TaskController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Find the active time entry for this user and task
-        $activeEntry = TaskTimeEntry::getActiveEntry($task, $user->id);
-        if (! $activeEntry) {
+        $markedDone = DB::transaction(function () use ($task, $user) {
+            $activeEntry = TaskTimeEntry::query()
+                ->where('task_id', $task->id)
+                ->where('user_id', $user->id)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $activeEntry) {
+                return null;
+            }
+
+            $activeEntry->end();
+            $this->markAssignmentCompleted($task, $user->id);
+
+            $previousState = $task->state;
+            $this->syncTaskStateFromAssignments($task);
+            $task->refresh();
+
+            return $previousState !== 'Done' && $task->state === 'Done';
+        });
+
+        if ($markedDone === null) {
             return response()->json(['message' => 'No active time tracking for this task'], 422);
         }
 
-        // End the time entry
-        $activeEntry->end();
-
-        // Update task status to completed if this was the last active entry
-        $hasOtherActiveEntries = TaskTimeEntry::where('task_id', $task->id)
-            ->where('is_active', true)
-            ->exists();
-
-        if (! $hasOtherActiveEntries) {
-            $task->update([
-                'state' => 'Done',
-                'completed_at' => now(),
-            ]);
-
+        if ($markedDone) {
             app(NotificationService::class)->sendTaskCompletionExternalNotification(
                 $task->id,
                 $task->title,
@@ -1382,6 +1463,140 @@ class TaskController extends Controller
         foreach ($activeEntries as $entry) {
             $entry->end();
         }
+    }
+
+    /**
+     * Mark the current user's assignment on this task as in progress.
+     */
+    private function markAssignmentInProgress(Task $task, int $userId): void
+    {
+        $assignment = $this->getActiveAssignment($task, $userId);
+
+        if (! $assignment) {
+            return;
+        }
+
+        $updates = [
+            'state' => 'in_progress',
+        ];
+
+        if (! $assignment->accepted_at) {
+            $updates['accepted_at'] = now();
+        }
+
+        $assignment->update($updates);
+    }
+
+    /**
+     * Mark the current user's assignment as accepted while paused.
+     */
+    private function markAssignmentAccepted(Task $task, int $userId): void
+    {
+        $assignment = $this->getActiveAssignment($task, $userId);
+
+        if (! $assignment) {
+            return;
+        }
+
+        if ($assignment->state === 'completed' || $assignment->state === 'rejected') {
+            return;
+        }
+
+        $updates = [
+            'state' => 'accepted',
+        ];
+
+        if (! $assignment->accepted_at) {
+            $updates['accepted_at'] = now();
+        }
+
+        $assignment->update($updates);
+    }
+
+    /**
+     * Mark the current user's assignment as completed.
+     */
+    private function markAssignmentCompleted(Task $task, int $userId): void
+    {
+        $assignment = $this->getActiveAssignment($task, $userId);
+
+        if (! $assignment) {
+            return;
+        }
+
+        $assignment->update([
+            'state' => 'completed',
+            'completed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Synchronize global task state from active assignment states.
+     */
+    private function syncTaskStateFromAssignments(Task $task): void
+    {
+        $assignments = $task->taskAssignments()
+            ->where('is_active', true)
+            ->get(['id', 'state']);
+
+        if ($assignments->isEmpty()) {
+            return;
+        }
+
+        $hasInProgress = $assignments->contains(function (TaskAssignment $assignment) {
+            return $assignment->state === 'in_progress';
+        });
+
+        if ($hasInProgress) {
+            $this->updateTaskStateIfValid($task, 'InProgress');
+
+            return;
+        }
+
+        $allTerminal = $assignments->every(function (TaskAssignment $assignment) {
+            return in_array($assignment->state, ['completed', 'rejected'], true);
+        });
+
+        if ($allTerminal) {
+            $this->updateTaskStateIfValid($task, 'Done');
+        }
+    }
+
+    /**
+     * Update task state only if the transition is allowed.
+     */
+    private function updateTaskStateIfValid(Task $task, string $state): void
+    {
+        $task->refresh();
+
+        if ($task->state === $state) {
+            return;
+        }
+
+        if (! $task->isValidStateTransition($state)) {
+            return;
+        }
+
+        $payload = [
+            'state' => $state,
+        ];
+
+        if ($state !== 'Done') {
+            $payload['completed_at'] = null;
+        }
+
+        $task->update($payload);
+    }
+
+    /**
+     * Resolve an active task assignment for a user.
+     */
+    private function getActiveAssignment(Task $task, int $userId): ?TaskAssignment
+    {
+        return $task->taskAssignments()
+            ->where('user_id', $userId)
+            ->where('is_active', true)
+            ->first();
     }
 
     /**

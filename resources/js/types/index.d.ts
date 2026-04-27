@@ -298,6 +298,9 @@ export interface Task {
     userSkills?: UserSkill[];
     user_skills?: UserSkill[];
     time_entries: TimeEntry[];
+    my_active_entry?: TimeEntry | null;
+    my_is_tracking?: boolean;
+    other_active_users_count?: number;
     timeline_events?: TimelineEvent[];
     total_working_time_spent?: number;
     total_working_time_spent_seconds?: number;

@@ -32,22 +32,49 @@ const TimeTrackingContext = createContext<TimeTrackingContextType | undefined>(u
 
 export const TimeTrackingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [tasks, setTasks] = useState<Map<number, Task>>(new Map());
   const [timeEntries, setTimeEntries] = useState<Map<number, TimeEntry[]>>(new Map());
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [overdueWarning, setOverdueWarning] = useState<OverdueWarning | null>(null);
 
+  const getTaskEntries = (taskData: Task | Record<string, any>): TimeEntry[] => {
+    return (taskData as { time_entries?: TimeEntry[]; timeEntries?: TimeEntry[] }).time_entries
+      ?? (taskData as { time_entries?: TimeEntry[]; timeEntries?: TimeEntry[] }).timeEntries
+      ?? [];
+  };
+
+  const isTaskTrackedByCurrentUser = (taskData: Task | Record<string, any>): boolean => {
+    const explicitFlag = (taskData as { my_is_tracking?: boolean }).my_is_tracking;
+    if (typeof explicitFlag === 'boolean') {
+      return explicitFlag;
+    }
+
+    if (!currentUserId) {
+      return false;
+    }
+
+    return getTaskEntries(taskData).some((entry: TimeEntry) => {
+      return entry?.is_active && Number(entry?.user_id) === currentUserId;
+    });
+  };
+
   const refreshTaskData = async (taskId: number) => {
     try {
       const response = await axios.get(`/data/tasks/${taskId}`);
       const taskData = response.data.data;
+      const authUserId = response.data?.authUser?.id;
+
+      if (authUserId) {
+        setCurrentUserId(Number(authUserId));
+      }
       
       setTasks(prev => new Map(prev.set(taskId, taskData)));
-      setTimeEntries(prev => new Map(prev.set(taskId, taskData.time_entries || [])));
+      setTimeEntries(prev => new Map(prev.set(taskId, getTaskEntries(taskData))));
 
-      const hasActiveEntry = taskData.time_entries?.some((entry: TimeEntry) => entry?.is_active) ?? false;
-      if (hasActiveEntry) {
+      const hasMyActiveEntry = isTaskTrackedByCurrentUser(taskData);
+      if (hasMyActiveEntry) {
         setActiveTaskId(taskId);
       } else if (activeTaskId === taskId) {
         setActiveTaskId(null);
@@ -74,8 +101,17 @@ export const TimeTrackingProvider: React.FC<{ children: ReactNode }> = ({ childr
     
     try {
       if (activeTaskId && activeTaskId !== taskId) {
-        await axios.post(`/my/tasks/${activeTaskId}/pause`);
-        await refreshTaskData(activeTaskId);
+        const currentActiveTask = tasks.get(activeTaskId);
+        const shouldPause = currentActiveTask
+          ? isTaskTrackedByCurrentUser(currentActiveTask)
+          : true;
+
+        if (shouldPause) {
+          await axios.post(`/my/tasks/${activeTaskId}/pause`);
+          await refreshTaskData(activeTaskId);
+        } else {
+          setActiveTaskId(null);
+        }
       }
 
       const response = await axios.post(`/my/tasks/${taskId}/start`, {}, {
@@ -118,8 +154,17 @@ export const TimeTrackingProvider: React.FC<{ children: ReactNode }> = ({ childr
     
     try {
       if (activeTaskId && activeTaskId !== taskId) {
-        await axios.post(`/my/tasks/${activeTaskId}/pause`);
-        await refreshTaskData(activeTaskId);
+        const currentActiveTask = tasks.get(activeTaskId);
+        const shouldPause = currentActiveTask
+          ? isTaskTrackedByCurrentUser(currentActiveTask)
+          : true;
+
+        if (shouldPause) {
+          await axios.post(`/my/tasks/${activeTaskId}/pause`);
+          await refreshTaskData(activeTaskId);
+        } else {
+          setActiveTaskId(null);
+        }
       }
 
       await axios.post(`/my/tasks/${taskId}/extend-and-start`, {
@@ -171,8 +216,17 @@ export const TimeTrackingProvider: React.FC<{ children: ReactNode }> = ({ childr
     
     try {
       if (activeTaskId && activeTaskId !== taskId) {
-        await axios.post(`/my/tasks/${activeTaskId}/pause`);
-        await refreshTaskData(activeTaskId);
+        const currentActiveTask = tasks.get(activeTaskId);
+        const shouldPause = currentActiveTask
+          ? isTaskTrackedByCurrentUser(currentActiveTask)
+          : true;
+
+        if (shouldPause) {
+          await axios.post(`/my/tasks/${activeTaskId}/pause`);
+          await refreshTaskData(activeTaskId);
+        } else {
+          setActiveTaskId(null);
+        }
       }
 
       await axios.post(`/my/tasks/${taskId}/resume`);

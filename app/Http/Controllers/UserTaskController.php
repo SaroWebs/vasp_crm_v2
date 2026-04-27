@@ -131,7 +131,14 @@ class UserTaskController extends TimeTrackingController
         $tasks = Task::whereHas('assignedUsers', function ($query) use ($user) {
             $query->where('user_id', $user->id);
         })
-            ->with(['taskType', 'slaPolicy', 'project', 'createdBy', 'assignedUsers'])
+            ->with([
+                'taskType',
+                'slaPolicy',
+                'project',
+                'createdBy',
+                'assignedUsers',
+                'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
+            ])
             ->orderByRaw("CASE 
                 WHEN due_at < NOW() AND state != 'Done' THEN 1 
                 WHEN due_at >= NOW() OR due_at IS NULL THEN 2 
@@ -139,6 +146,22 @@ class UserTaskController extends TimeTrackingController
             ->orderBy('due_at', 'asc')
             ->orderBy('created_at', 'desc')
             ->get();
+
+        $tasks->each(function (Task $task) use ($user) {
+            $activeEntries = $task->timeEntries->where('is_active', true);
+            $myActiveEntry = $activeEntries->firstWhere('user_id', $user->id);
+
+            $task->setAttribute('my_active_entry', $myActiveEntry);
+            $task->setAttribute('my_is_tracking', $myActiveEntry !== null);
+            $task->setAttribute(
+                'other_active_users_count',
+                $activeEntries
+                    ->where('user_id', '!=', $user->id)
+                    ->pluck('user_id')
+                    ->unique()
+                    ->count()
+            );
+        });
 
         return response()->json($tasks);
     }
@@ -186,6 +209,22 @@ class UserTaskController extends TimeTrackingController
                 ELSE 6 END")
             ->orderBy('due_at', 'asc')
             ->get();
+
+        $tasks->each(function (Task $task) use ($user) {
+            $activeEntries = $task->timeEntries->where('is_active', true);
+            $myActiveEntry = $activeEntries->firstWhere('user_id', $user->id);
+
+            $task->setAttribute('my_active_entry', $myActiveEntry);
+            $task->setAttribute('my_is_tracking', $myActiveEntry !== null);
+            $task->setAttribute(
+                'other_active_users_count',
+                $activeEntries
+                    ->where('user_id', '!=', $user->id)
+                    ->pluck('user_id')
+                    ->unique()
+                    ->count()
+            );
+        });
 
         return response()->json([
             'data' => $tasks,

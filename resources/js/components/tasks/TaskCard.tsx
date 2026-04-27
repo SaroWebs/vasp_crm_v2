@@ -272,6 +272,7 @@ const TaskCard: React.FC<{
         'bg-gray-100 text-gray-700';
     const priorityValue = task.sla_policy?.priority ?? "P4";
     const priorityConfigValue = getPriorityConfig(priorityValue);
+    const othersTrackingCount = Number(task.other_active_users_count ?? 0);
 
     const handleCardClick = (e: React.MouseEvent) => {
         if ((e.target as HTMLElement).closest('.mantine-Button-root')) {
@@ -322,6 +323,11 @@ const TaskCard: React.FC<{
                                     <div className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium border bg-orange-100 text-orange-700 border-orange-200">
                                         <AlertTriangle className="h-3 w-3" />
                                         {task.overdue_time}
+                                    </div>
+                                )}
+                                {othersTrackingCount > 0 && (
+                                    <div className="inline-flex items-center gap-1 mt-2 ml-2 px-2 py-0.5 rounded-full text-xs font-medium border bg-sky-100 text-sky-700 border-sky-200">
+                                        {othersTrackingCount} other{othersTrackingCount > 1 ? 's' : ''} tracking
                                     </div>
                                 )}
                             </div>

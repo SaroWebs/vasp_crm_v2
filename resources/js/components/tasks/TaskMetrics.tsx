@@ -3,7 +3,6 @@ import { Clock, Clock3, Target } from 'lucide-react';
 import { useTimeTracking } from '@/context/TimeTrackingContext';
 import { useEffect, useState } from 'react';
 import { Loader, Progress } from '@mantine/core';
-import { TimeEntry } from '@/types';
 
 interface TaskMetricsProps {
   taskId: number;
@@ -41,8 +40,8 @@ export const TaskMetrics: React.FC<TaskMetricsProps> = ({ taskId }) => {
         });
       }
 
-      const hasActiveEntry = taskTimeEntries.some((entry: TimeEntry) => entry?.is_active);
-      setTimeData(prev => ({ ...prev, isActive: !!hasActiveEntry }));
+      const hasMyActiveEntry = Boolean(task.my_is_tracking);
+      setTimeData(prev => ({ ...prev, isActive: hasMyActiveEntry }));
     }
   }, [task, taskTimeEntries, taskId, refreshTaskData]);
 
