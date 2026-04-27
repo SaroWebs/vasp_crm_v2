@@ -13,6 +13,7 @@ import {
     ChevronUp,
     XCircle,
     Plus,
+    GitBranch,
 } from 'lucide-react';
 import Board from '@/components/tasks/Board';
 import Overview from '@/components/tasks/Overview';
@@ -43,6 +44,7 @@ import {
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import ReportForm from '@/components/reports/ReportForm';
+import { isTaskForwarded } from '@/lib/taskForwarding';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -332,6 +334,7 @@ export default function MyTasks() {
                                 <TableBody>
                                     {tasks?.data?.map((task: Task) => {
                                         const isDeleted = !!task.deleted_at;
+                                        const forwarded = isTaskForwarded(task);
                                         return (
                                             <TableRow
                                                 key={task.id}
@@ -366,6 +369,12 @@ export default function MyTasks() {
                                                                 {task.title ||
                                                                     `Task #${task.id}`}
                                                             </p>
+                                                            {forwarded && (
+                                                                <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                                                                    <GitBranch className="h-3 w-3" />
+                                                                    Forwarded
+                                                                </div>
+                                                            )}
                                                         </Link>
                                                         <div className="space-y-1 text-xs text-muted-foreground">
                                                             {task.task_code && (

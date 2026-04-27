@@ -304,6 +304,41 @@ export interface Task {
     timeline_events?: TimelineEvent[];
     total_working_time_spent?: number;
     total_working_time_spent_seconds?: number;
+    has_forwardings?: boolean;
+    forwardings_count?: number;
+    forwarding_waterfall?: TaskForwardingWaterfallStep[];
+    forwardings?: TaskForwardingRecord[];
+}
+
+export interface TaskForwardingWaterfallStep {
+    id: number;
+    from_label: string;
+    to_label: string;
+    from_user?: string | null;
+    to_user?: string | null;
+    from_department?: string | null;
+    to_department?: string | null;
+    status?: string;
+    forwarded_at?: string | null;
+}
+
+export interface TaskForwardingRecord {
+    id: number;
+    task_id?: number;
+    from_user_id?: number | null;
+    to_user_id?: number | null;
+    from_department_id?: number | null;
+    to_department_id?: number | null;
+    status?: string;
+    reason?: string | null;
+    notes?: string | null;
+    forwarded_at?: string | null;
+    created_at?: string;
+    from_user?: User | null;
+    to_user?: User | null;
+    from_department?: Department | null;
+    to_department?: Department | null;
+    forwarded_by?: User | null;
 }
 
 export interface TaskHistory {

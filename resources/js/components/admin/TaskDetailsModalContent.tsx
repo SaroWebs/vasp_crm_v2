@@ -1,5 +1,6 @@
 import { Task, TaskAttachment, TaskComment } from '@/types';
 import { Link } from '@inertiajs/react';
+import { buildForwardingWaterfall, isTaskForwarded } from '@/lib/taskForwarding';
 
 interface TaskDetailsModalContentProps {
     task: Task | null;
@@ -135,6 +136,8 @@ export default function TaskDetailsModalContent({
     const status = task.state?.replace('_', ' ') ?? 'Unknown';
     const taskViewUrl = `/admin/tasks/${task.id}`;
     const taskEditUrl = `/admin/tasks/${task.id}/edit`;
+    const forwardingWaterfall = buildForwardingWaterfall(task);
+    const forwarded = isTaskForwarded(task);
 
     return (
         <div className='flex flex-col gap-3 max-h-[300px] overflow-y-auto px-4 py-3'>
@@ -196,6 +199,20 @@ export default function TaskDetailsModalContent({
                     >
                         {priority}
                     </span>
+                    {forwarded ? (
+                        <span
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                padding: '4px 10px',
+                                borderRadius: 999,
+                                background: '#e0f2fe',
+                                color: '#0369a1',
+                            }}
+                        >
+                            Forwarded
+                        </span>
+                    ) : null}
                 </div>
             </div>
 
@@ -362,6 +379,56 @@ export default function TaskDetailsModalContent({
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div>
+                <div
+                    style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: '#667085',
+                        marginBottom: 8,
+                    }}
+                >
+                    Forwarding Path
+                </div>
+                {forwardingWaterfall.length === 0 ? (
+                    <div style={{ fontSize: 13, color: '#98A2B3' }}>
+                        This task has not been forwarded.
+                    </div>
+                ) : (
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                        }}
+                    >
+                        {forwardingWaterfall.map((step, index) => (
+                            <div
+                                key={step.id}
+                                style={{
+                                    padding: '8px 10px',
+                                    borderRadius: 8,
+                                    border: '1px solid #e4e7ec',
+                                    background: '#f8fafc',
+                                    fontSize: 12,
+                                    color: '#344054',
+                                }}
+                            >
+                                <div style={{ fontWeight: 600 }}>
+                                    {step.from_label} {'->'} {step.to_label}
+                                </div>
+                                <div style={{ marginTop: 2, color: '#667085' }}>
+                                    Step {index + 1}
+                                    {step.forwarded_at
+                                        ? ` • ${formatDateTime(step.forwarded_at)}`
+                                        : ''}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
 

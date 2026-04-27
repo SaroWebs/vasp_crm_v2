@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectTeam;
 use App\Models\User;
-use App\Models\Department;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ProjectController extends Controller
@@ -32,7 +32,7 @@ class ProjectController extends Controller
      */
     public function index(Request $request)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view projects.');
         }
 
@@ -95,7 +95,7 @@ class ProjectController extends Controller
      */
     public function create()
     {
-        if (!$this->checkPermission('project.create')) {
+        if (! $this->checkPermission('project.create')) {
             abort(403, 'Insufficient permissions to create projects.');
         }
 
@@ -115,7 +115,7 @@ class ProjectController extends Controller
      */
     public function store(Request $request)
     {
-        if (!$this->checkPermission('project.create')) {
+        if (! $this->checkPermission('project.create')) {
             abort(403, 'Insufficient permissions to create projects.');
         }
 
@@ -137,7 +137,7 @@ class ProjectController extends Controller
             'team_members.*.role' => ['required', 'in:owner,manager,member,viewer'],
         ]);
 
-        DB::transaction(function () use ($validated, $request) {
+        DB::transaction(function () use ($validated) {
             $project = Project::create([
                 'name' => $validated['name'],
                 'code' => $validated['code'] ?? null,
@@ -155,7 +155,7 @@ class ProjectController extends Controller
             ]);
 
             // Add team members
-            if (!empty($validated['team_members'])) {
+            if (! empty($validated['team_members'])) {
                 foreach ($validated['team_members'] as $member) {
                     ProjectTeam::create([
                         'project_id' => $project->id,
@@ -175,7 +175,7 @@ class ProjectController extends Controller
      */
     public function show(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view projects.');
         }
 
@@ -187,6 +187,12 @@ class ProjectController extends Controller
             'tasks.taskType',
             'tasks.assignedUsers:id,name',
             'tasks.projectPhase',
+            'tasks.forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+            'tasks.forwardings.fromUser:id,name',
+            'tasks.forwardings.toUser:id,name',
+            'tasks.forwardings.fromDepartment:id,name',
+            'tasks.forwardings.toDepartment:id,name',
+            'tasks.forwardings.forwardedBy:id,name',
             'phases.tasks',
             'milestones',
             'timelineEvents.user',
@@ -212,7 +218,7 @@ class ProjectController extends Controller
      */
     public function edit(Project $project)
     {
-        if (!$this->checkPermission('project.update')) {
+        if (! $this->checkPermission('project.update')) {
             abort(403, 'Insufficient permissions to edit projects.');
         }
 
@@ -235,13 +241,13 @@ class ProjectController extends Controller
      */
     public function update(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.update')) {
+        if (! $this->checkPermission('project.update')) {
             abort(403, 'Insufficient permissions to update projects.');
         }
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'code' => ['nullable', 'string', 'max:50', 'unique:projects,code,' . $project->id],
+            'code' => ['nullable', 'string', 'max:50', 'unique:projects,code,'.$project->id],
             'description' => ['nullable', 'string'],
             'department_id' => ['nullable', 'exists:departments,id'],
             'manager_id' => ['nullable', 'exists:users,id'],
@@ -260,12 +266,12 @@ class ProjectController extends Controller
 
         DB::transaction(function () use ($project, $validated) {
             $projectData = collect($validated)->except('team_members')->toArray();
-            
+
             // Use default color if not provided
-            if (!isset($projectData['color']) || empty($projectData['color'])) {
+            if (! isset($projectData['color']) || empty($projectData['color'])) {
                 $projectData['color'] = Project::DEFAULT_COLOR;
             }
-            
+
             $project->update($projectData);
 
             if (array_key_exists('team_members', $validated)) {
@@ -289,7 +295,7 @@ class ProjectController extends Controller
      */
     public function destroy(Project $project)
     {
-        if (!$this->checkPermission('project.delete')) {
+        if (! $this->checkPermission('project.delete')) {
             abort(403, 'Insufficient permissions to delete projects.');
         }
 
@@ -304,7 +310,7 @@ class ProjectController extends Controller
      */
     public function restore($id)
     {
-        if (!$this->checkPermission('project.restore')) {
+        if (! $this->checkPermission('project.restore')) {
             abort(403, 'Insufficient permissions to restore projects.');
         }
 
@@ -320,7 +326,7 @@ class ProjectController extends Controller
      */
     public function getStatistics(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project statistics.');
         }
 
@@ -350,7 +356,7 @@ class ProjectController extends Controller
      */
     public function updateProgress(Project $project)
     {
-        if (!$this->checkPermission('project.update')) {
+        if (! $this->checkPermission('project.update')) {
             abort(403, 'Insufficient permissions to update project progress.');
         }
 
@@ -368,12 +374,20 @@ class ProjectController extends Controller
      */
     public function getGanttData(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project gantt data.');
         }
 
         $phases = $project->phases()->with('tasks')->get();
-        $tasks = $project->tasks()->with(['projectPhase'])->get();
+        $tasks = $project->tasks()->with([
+            'projectPhase',
+            'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+            'forwardings.fromUser:id,name',
+            'forwardings.toUser:id,name',
+            'forwardings.fromDepartment:id,name',
+            'forwardings.toDepartment:id,name',
+            'forwardings.forwardedBy:id,name',
+        ])->get();
 
         return response()->json([
             'project' => $project,
@@ -387,7 +401,7 @@ class ProjectController extends Controller
      */
     public function getTeam(Project $project)
     {
-        if (!$this->checkPermission('project.manage_team')) {
+        if (! $this->checkPermission('project.manage_team')) {
             abort(403, 'Insufficient permissions to manage project team.');
         }
 
@@ -401,7 +415,7 @@ class ProjectController extends Controller
      */
     public function addTeamMember(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_team')) {
+        if (! $this->checkPermission('project.manage_team')) {
             abort(403, 'Insufficient permissions to manage project team.');
         }
 
@@ -438,7 +452,7 @@ class ProjectController extends Controller
      */
     public function removeTeamMember(Project $project, $userId)
     {
-        if (!$this->checkPermission('project.manage_team')) {
+        if (! $this->checkPermission('project.manage_team')) {
             abort(403, 'Insufficient permissions to manage project team.');
         }
 
@@ -456,7 +470,7 @@ class ProjectController extends Controller
      */
     public function updateTeamMemberRole(Request $request, Project $project, $userId)
     {
-        if (!$this->checkPermission('project.manage_team')) {
+        if (! $this->checkPermission('project.manage_team')) {
             abort(403, 'Insufficient permissions to manage project team.');
         }
 

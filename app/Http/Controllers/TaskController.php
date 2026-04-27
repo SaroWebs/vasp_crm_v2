@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\SlaPolicy;
 use App\Models\Task;
 use App\Models\TaskAssignment;
+use App\Models\TaskForwarding;
 use App\Models\TaskTimeEntry;
 use App\Models\TaskType;
 use App\Models\User;
@@ -63,11 +64,19 @@ class TaskController extends Controller
             'childTasks:id,title,task_code',
             'comments:id,task_id,comment_text,created_at,commented_by,commented_by_type',
             'attachments:id,task_id,file_path,file_type,uploaded_by,created_at',
-            'forwardings:id,task_id,from_department_id,to_department_id,forwarded_by,status,created_at',
+            'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+            'forwardings.fromUser:id,name',
+            'forwardings.toUser:id,name',
+            'forwardings.fromDepartment:id,name',
+            'forwardings.toDepartment:id,name',
             'history:id,task_id,old_status,new_status,changed_by,created_at',
             'auditEvents',
             'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
         ])->withCount('comments')->get();
+
+        $tasks->each(function (Task $task): void {
+            $this->appendForwardingMeta($task);
+        });
 
         return response()->json([
             'data' => $tasks,
@@ -157,10 +166,12 @@ class TaskController extends Controller
             'comments',
             'comments.user:id,name',
             'attachments',
-            'forwardings:id,from_user_id,to_user_id,to_department_id,remarks,status,forwarded_at,is_end_user,created_at',
+            'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,remarks,status,forwarded_at,is_end_user,created_at',
             'forwardings.fromUser:id,name',
             'forwardings.toUser:id,name',
+            'forwardings.fromDepartment:id,name',
             'forwardings.toDepartment:id,name',
+            'forwardings.forwardedBy:id,name',
             'history:id,old_status,new_status,changed_by,created_at',
             'auditEvents:id,task_id,action,actor_user_id,occurred_at,reason',
             'auditEvents.actorUser:id,name',
@@ -202,6 +213,7 @@ class TaskController extends Controller
             ? $this->taskActionAuthorizationService->canManageAnyTask($currentUser)
             : false;
         $task->setAttribute('can_manage_task', $canManageTask);
+        $this->appendForwardingMeta($task);
 
         return response()->json([
             'data' => $task,
@@ -451,6 +463,12 @@ class TaskController extends Controller
             'ticket:id,ticket_number,title',
             'taskType:id,name,code',
             'slaPolicy:id,name,priority',
+            'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+            'forwardings.fromUser:id,name',
+            'forwardings.toUser:id,name',
+            'forwardings.fromDepartment:id,name',
+            'forwardings.toDepartment:id,name',
+            'forwardings.forwardedBy:id,name',
             'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             'timeEntries',
             'timelineEvents' => function ($query) {
@@ -472,6 +490,10 @@ class TaskController extends Controller
             ->latest()
             ->limit(100)
             ->get();
+
+        $tasks->each(function (Task $task): void {
+            $this->appendForwardingMeta($task);
+        });
 
         return response()->json([
             'data' => $tasks,
@@ -520,6 +542,12 @@ class TaskController extends Controller
                 'ticket:id,ticket_number,title',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
+                'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+                'forwardings.fromUser:id,name',
+                'forwardings.toUser:id,name',
+                'forwardings.fromDepartment:id,name',
+                'forwardings.toDepartment:id,name',
+                'forwardings.forwardedBy:id,name',
                 'auditEvents:id,task_id,action,actor_user_id,occurred_at',
                 'timeEntries',
                 'timelineEvents' => function ($query) {
@@ -551,6 +579,10 @@ class TaskController extends Controller
         $tasks = $query
             ->paginate($perPage, ['*'], 'page', $page)
             ->withQueryString();
+
+        $tasks->getCollection()->transform(function (Task $task): Task {
+            return $this->appendForwardingMeta($task);
+        });
 
         return response()->json($tasks);
     }
@@ -1299,6 +1331,12 @@ class TaskController extends Controller
                 'ticket:id,ticket_number,title',
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
+                'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+                'forwardings.fromUser:id,name',
+                'forwardings.toUser:id,name',
+                'forwardings.fromDepartment:id,name',
+                'forwardings.toDepartment:id,name',
+                'forwardings.forwardedBy:id,name',
                 'auditEvents:id,task_id,action,actor_user_id,occurred_at',
                 'timeEntries',
             ])
@@ -1315,6 +1353,10 @@ class TaskController extends Controller
         $tasks = $query
             ->paginate($perPage, ['*'], 'page', $page)
             ->withQueryString();
+
+        $tasks->getCollection()->transform(function (Task $task): Task {
+            return $this->appendForwardingMeta($task);
+        });
 
         return Inertia::render('tasks/MyTasks', [
             'tasks' => $tasks,
@@ -1689,6 +1731,56 @@ class TaskController extends Controller
             ->find($slaPolicyId);
 
         return (int) ($slaPolicy?->resolution_time_minutes ?? 0);
+    }
+
+    /**
+     * Append forwarding metadata used by list cards, gantt bars, and task details.
+     */
+    private function appendForwardingMeta(Task $task): Task
+    {
+        $forwardings = $task->relationLoaded('forwardings')
+            ? $task->forwardings
+            : $task->forwardings()
+                ->with(['fromUser:id,name', 'toUser:id,name', 'fromDepartment:id,name', 'toDepartment:id,name', 'forwardedBy:id,name'])
+                ->get();
+
+        $sortedForwardings = $forwardings
+            ->sortBy(function (TaskForwarding $forwarding): string {
+                return (string) ($forwarding->forwarded_at ?? $forwarding->created_at);
+            })
+            ->values();
+
+        $waterfall = $sortedForwardings->map(function (TaskForwarding $forwarding): array {
+            $fromUserName = $forwarding->fromUser?->name ?? $forwarding->forwardedBy?->name;
+            $toUserName = $forwarding->toUser?->name;
+            $fromDepartmentName = $forwarding->fromDepartment?->name;
+            $toDepartmentName = $forwarding->toDepartment?->name;
+
+            $fromLabel = $fromUserName
+                ?? $fromDepartmentName
+                ?? 'Unknown source';
+            $toLabel = $toUserName
+                ?? $toDepartmentName
+                ?? 'Unknown target';
+
+            return [
+                'id' => $forwarding->id,
+                'from_label' => $fromLabel,
+                'to_label' => $toLabel,
+                'from_user' => $fromUserName,
+                'to_user' => $toUserName,
+                'from_department' => $fromDepartmentName,
+                'to_department' => $toDepartmentName,
+                'status' => $forwarding->status,
+                'forwarded_at' => optional($forwarding->forwarded_at)->toDateTimeString() ?? optional($forwarding->created_at)->toDateTimeString(),
+            ];
+        })->all();
+
+        $task->setAttribute('has_forwardings', count($waterfall) > 0);
+        $task->setAttribute('forwardings_count', count($waterfall));
+        $task->setAttribute('forwarding_waterfall', $waterfall);
+
+        return $task;
     }
 
     public function projects(Request $request)

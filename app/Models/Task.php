@@ -347,13 +347,14 @@ class Task extends Model
      * Unassign a user from this task.
      *
      * @param  int  $userId
-     * @return bool
+     * @return int
      */
     public function unassignUser($userId)
     {
         return $this->taskAssignments()
             ->where('user_id', $userId)
-            ->delete() > 0;
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
     }
 
     /**

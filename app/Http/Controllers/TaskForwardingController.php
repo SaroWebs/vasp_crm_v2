@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Task;
-use App\Models\User;
 use App\Models\Department;
+use App\Models\DepartmentUser;
 use App\Models\Notification;
+use App\Models\Task;
+use App\Models\TaskForwarding;
+use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
-use App\Models\TaskForwarding;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class TaskForwardingController extends Controller
 {
@@ -28,47 +29,66 @@ class TaskForwardingController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.read')) {
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $forwardings = TaskForwarding::where('task_id', $task->id)
-            ->with(['fromDepartment', 'toDepartment', 'forwardedBy', 'acceptedBy', 'rejectedBy'])
-            ->orderBy('created_at', 'desc')
+            ->with(['fromUser', 'toUser', 'fromDepartment', 'toDepartment', 'forwardedBy', 'acceptedBy', 'rejectedBy'])
+            ->orderBy('created_at', 'asc')
             ->get();
+
+        $forwardings->each(function (TaskForwarding $forwarding): void {
+            $fromLabel = $forwarding->fromUser?->name
+                ?? $forwarding->forwardedBy?->name
+                ?? $forwarding->fromDepartment?->name
+                ?? 'Unknown source';
+            $toLabel = $forwarding->toUser?->name
+                ?? $forwarding->toDepartment?->name
+                ?? 'Unknown target';
+
+            $forwarding->setAttribute('from_label', $fromLabel);
+            $forwarding->setAttribute('to_label', $toLabel);
+        });
 
         return response()->json(['data' => $forwardings]);
     }
 
     /**
-     * Forward a task to another department.
+     * Forward a task to another employee.
      */
     public function store(Request $request, Task $task)
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.update')) {
+        if (! $user->hasPermission('task.update')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $validated = $request->validate([
-            'to_department_id' => 'required|exists:departments,id',
+            'to_user_id' => 'required|exists:users,id',
             'reason' => 'required|string|max:1000',
             'priority' => 'nullable|in:low,medium,high,critical',
             'due_date' => 'nullable|date',
-            'notes' => 'nullable|string|max:1000'
+            'notes' => 'nullable|string|max:1000',
         ]);
 
-        // Check if user belongs to a department that can forward this task
-        $userDepartments = $user->departments()->pluck('departments.id');
-        if (!$userDepartments->contains($task->assigned_department_id) && !$user->hasRole('superadmin')) {
-            return response()->json(['message' => 'You can only forward tasks from your department'], 403);
+        $targetUser = User::query()->find($validated['to_user_id']);
+        if (! $targetUser) {
+            return response()->json(['message' => 'Selected employee not found'], 422);
         }
 
-        // Check if forwarding to the same department
-        if ($validated['to_department_id'] == $task->assigned_department_id) {
-            return response()->json(['message' => 'Cannot forward task to the same department'], 422);
+        if ((int) $targetUser->id === (int) $user->id) {
+            return response()->json(['message' => 'Cannot forward task to yourself'], 422);
         }
+
+        if ($task->isAssignedToUser($targetUser->id)) {
+            return response()->json(['message' => 'Task is already assigned to the selected employee'], 422);
+        }
+
+        $targetDepartmentId = DepartmentUser::query()
+            ->where('user_id', $targetUser->id)
+            ->value('department_id');
 
         try {
             DB::beginTransaction();
@@ -76,17 +96,27 @@ class TaskForwardingController extends Controller
             // Create forwarding record
             $forwarding = TaskForwarding::create([
                 'task_id' => $task->id,
+                'from_user_id' => $user->id,
                 'from_department_id' => $task->assigned_department_id,
-                'to_department_id' => $validated['to_department_id'],
+                'to_user_id' => $targetUser->id,
+                'to_department_id' => $targetDepartmentId,
                 'forwarded_by' => $user->id,
                 'reason' => $validated['reason'],
                 'notes' => $validated['notes'] ?? null,
-                'status' => 'pending'
+                'forwarded_at' => now(),
+                'status' => 'pending',
             ]);
+
+            // Unassign the forwarder from the task
+            $task->unassignUser($user->id);
+
+            // Assign the target user to the task
+            $task->assignUser($targetUser->id, $user->id, $validated['notes'] ?? null);
 
             // Update task assignment
             $updateData = [
-                'assigned_department_id' => $validated['to_department_id'],
+                'current_owner_kind' => 'USER',
+                'current_owner_id' => $targetUser->id,
             ];
 
             if (isset($validated['priority'])) {
@@ -106,14 +136,15 @@ class TaskForwardingController extends Controller
 
             return response()->json([
                 'message' => 'Task forwarded successfully',
-                'data' => $forwarding->load(['fromDepartment', 'toDepartment', 'forwardedBy', 'acceptedBy', 'rejectedBy'])
+                'data' => $forwarding->load(['fromUser', 'toUser', 'fromDepartment', 'toDepartment', 'forwardedBy', 'acceptedBy', 'rejectedBy']),
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json([
                 'message' => 'Failed to forward task',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -125,14 +156,15 @@ class TaskForwardingController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('task.update')) {
+        if (! $user->hasPermission('task.update')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
-        // Check if user belongs to the target department
-        $userDepartments = $user->departments()->pluck('departments.id');
-        if (!$userDepartments->contains($taskForwarding->to_department_id) && !$user->hasRole('superadmin')) {
-            return response()->json(['message' => 'You can only accept tasks for your department'], 403);
+        // Check if user is the target user
+        $canAccept = (int) $taskForwarding->to_user_id === (int) $user->id || $user->hasRole('super-admin');
+
+        if (! $canAccept) {
+            return response()->json(['message' => 'You can only accept tasks forwarded to you'], 403);
         }
 
         try {
@@ -141,11 +173,11 @@ class TaskForwardingController extends Controller
             $taskForwarding->update([
                 'status' => 'accepted',
                 'accepted_by' => $user->id,
-                'accepted_at' => now()
+                'accepted_at' => now(),
             ]);
 
-            // Update task status to in-progress
-            $taskForwarding->task->update(['status' => 'in-progress']);
+            // Update task state to InProgress after acceptance
+            $taskForwarding->task->update(['state' => 'InProgress']);
 
             DB::commit();
 
@@ -158,20 +190,21 @@ class TaskForwardingController extends Controller
                 [
                     'task_id' => $taskForwarding->task_id,
                     'forwarding_id' => $taskForwarding->id,
-                    'accepted_by' => $user->id
+                    'accepted_by' => $user->id,
                 ]
             );
 
             return response()->json([
                 'message' => 'Task forwarding accepted successfully',
-                'data' => $taskForwarding->fresh(['task', 'acceptedBy', 'fromDepartment', 'toDepartment', 'forwardedBy', 'rejectedBy'])
+                'data' => $taskForwarding->fresh(['task', 'acceptedBy', 'fromDepartment', 'toDepartment', 'forwardedBy', 'rejectedBy']),
             ]);
 
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json([
                 'message' => 'Failed to accept task forwarding',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -184,17 +217,18 @@ class TaskForwardingController extends Controller
         $user = User::find(Auth::user()->id);
 
         $validated = $request->validate([
-            'rejection_reason' => 'required|string|max:1000'
+            'rejection_reason' => 'required|string|max:1000',
         ]);
 
-        if (!$user->hasPermission('task.update')) {
+        if (! $user->hasPermission('task.update')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
-        // Check if user belongs to the target department
-        $userDepartments = $user->departments()->pluck('departments.id');
-        if (!$userDepartments->contains($taskForwarding->to_department_id) && !$user->hasRole('superadmin')) {
-            return response()->json(['message' => 'You can only reject tasks for your department'], 403);
+        // Check if user is the target user
+        $canReject = (int) $taskForwarding->to_user_id === (int) $user->id || $user->hasRole('super-admin');
+
+        if (! $canReject) {
+            return response()->json(['message' => 'You can only reject tasks forwarded to you'], 403);
         }
 
         try {
@@ -204,13 +238,21 @@ class TaskForwardingController extends Controller
                 'status' => 'rejected',
                 'rejection_reason' => $validated['rejection_reason'],
                 'rejected_by' => $user->id,
-                'rejected_at' => now()
+                'rejected_at' => now(),
             ]);
 
-            // Revert task back to original department
+            // Unassign the current user from the task
+            $taskForwarding->task->unassignUser($user->id);
+
+            // Reassign the original forwarder back to the task
+            $originalUser = $taskForwarding->from_user_id ?? $taskForwarding->forwarded_by;
+            $taskForwarding->task->assignUser($originalUser, $user->id, "Task forwarding rejected: {$validated['rejection_reason']}");
+
+            // Revert task back to original state
             $taskForwarding->task->update([
-                'assigned_department_id' => $taskForwarding->from_department_id,
-                'status' => 'pending'
+                'current_owner_kind' => 'USER',
+                'current_owner_id' => $originalUser,
+                'state' => 'Assigned',
             ]);
 
             DB::commit();
@@ -225,20 +267,21 @@ class TaskForwardingController extends Controller
                     'task_id' => $taskForwarding->task_id,
                     'forwarding_id' => $taskForwarding->id,
                     'rejected_by' => $user->id,
-                    'rejection_reason' => $validated['rejection_reason']
+                    'rejection_reason' => $validated['rejection_reason'],
                 ]
             );
 
             return response()->json([
                 'message' => 'Task forwarding rejected successfully',
-                'data' => $taskForwarding->fresh(['task', 'rejectedBy', 'fromDepartment', 'toDepartment', 'forwardedBy', 'acceptedBy'])
+                'data' => $taskForwarding->fresh(['task', 'rejectedBy', 'fromDepartment', 'toDepartment', 'forwardedBy', 'acceptedBy']),
             ]);
 
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json([
                 'message' => 'Failed to reject task forwarding',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -246,63 +289,41 @@ class TaskForwardingController extends Controller
     /**
      * Send notifications for task forwarding.
      */
-    private function sendForwardingNotifications($task, $forwarding, $user)
+    private function sendForwardingNotifications(Task $task, TaskForwarding $forwarding, User $user): void
     {
+        $toUser = User::query()->find($forwarding->to_user_id);
+        if (! $toUser) {
+            return;
+        }
+
         $toDepartment = Department::find($forwarding->to_department_id);
         $fromDepartment = Department::find($forwarding->from_department_id);
+        $toLabel = $toUser->name;
+        $toDepartmentLabel = $toDepartment?->name ?? 'No department';
+        $fromDepartmentLabel = $fromDepartment?->name ?? 'Unknown';
 
-        // Notify target department users
-        $targetUsers = $toDepartment->users()->get();
-        foreach ($targetUsers as $targetUser) {
-            Notification::createWorkflowNotification(
-                $targetUser->id,
-                'task_forwarded',
-                'Task Forwarded to Your Department',
-                "A new task has been forwarded to your department: {$task->title}",
-                [
-                    'task_id' => $task->id,
-                    'forwarding_id' => $forwarding->id,
-                    'from_department' => $forwarding->from_department_id,
-                    'forwarded_by' => $user->id
-                ]
-            );
+        Notification::createWorkflowNotification(
+            $toUser->id,
+            'task_forwarded',
+            'Task Forwarded to You',
+            "A task has been forwarded to you: {$task->title}",
+            [
+                'task_id' => $task->id,
+                'forwarding_id' => $forwarding->id,
+                'from_department' => $forwarding->from_department_id,
+                'forwarded_by' => $user->id,
+                'to_user_id' => $toUser->id,
+            ]
+        );
 
-            // Send external notification (SMS/Email) to the user
-            $this->notificationService->sendTaskForwardExternalNotification(
-                $task->id,
-                $task->title,
-                $fromDepartment->name ?? 'Unknown',
-                $toDepartment->name,
-                $user->id,
-                $targetUser->id
-            );
-        }
-
-        // Notify department managers
-        $managers = $toDepartment->getManagers();
-        foreach ($managers as $manager) {
-            Notification::createWorkflowNotification(
-                $manager->id,
-                'task_forwarded_manager',
-                'Task Forwarded - Manager Notification',
-                "Task '{$task->title}' has been forwarded to your department by {$user->name}.",
-                [
-                    'task_id' => $task->id,
-                    'forwarding_id' => $forwarding->id,
-                    'requires_approval' => true
-                ]
-            );
-
-            // Send external notification (SMS/Email) to the manager
-            $this->notificationService->sendTaskForwardExternalNotification(
-                $task->id,
-                $task->title,
-                $fromDepartment->name ?? 'Unknown',
-                $toDepartment->name,
-                $user->id,
-                $manager->id
-            );
-        }
+        $this->notificationService->sendTaskForwardExternalNotification(
+            $task->id,
+            $task->title,
+            $fromDepartmentLabel,
+            "{$toLabel} ({$toDepartmentLabel})",
+            $user->id,
+            $toUser->id
+        );
     }
 
     /**
@@ -311,16 +332,16 @@ class TaskForwardingController extends Controller
     public function getByDepartment(Request $request, $departmentId)
     {
         $user = User::find(Auth::user()->id);
-        
-        if (!$user->hasPermission('task.read')) {
+
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $status = $request->query('status', 'all');
 
-        $query = TaskForwarding::where(function($query) use ($departmentId) {
+        $query = TaskForwarding::where(function ($query) use ($departmentId) {
             $query->where('from_department_id', $departmentId)
-                  ->orWhere('to_department_id', $departmentId);
+                ->orWhere('to_department_id', $departmentId);
         });
 
         if ($status !== 'all') {
@@ -343,17 +364,17 @@ class TaskForwardingController extends Controller
     public function getByUser(Request $request, $userId)
     {
         $user = User::find(Auth::user()->id);
-        
-        if (!$user->hasPermission('task.read')) {
+
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $status = $request->query('status', 'all');
 
-        $query = TaskForwarding::where(function($query) use ($userId) {
+        $query = TaskForwarding::where(function ($query) use ($userId) {
             $query->where('forwarded_by', $userId)
-                  ->orWhere('accepted_by', $userId)
-                  ->orWhere('rejected_by', $userId);
+                ->orWhere('accepted_by', $userId)
+                ->orWhere('rejected_by', $userId);
         });
 
         if ($status !== 'all') {
@@ -376,8 +397,8 @@ class TaskForwardingController extends Controller
     public function getPendingForDepartment(Request $request, $departmentId)
     {
         $user = User::find(Auth::user()->id);
-        
-        if (!$user->hasPermission('task.read')) {
+
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -399,8 +420,8 @@ class TaskForwardingController extends Controller
     public function getStatistics(Request $request, $departmentId)
     {
         $user = User::find(Auth::user()->id);
-        
-        if (!$user->hasPermission('task.read')) {
+
+        if (! $user->hasPermission('task.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 

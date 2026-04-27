@@ -9,9 +9,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { isTaskForwarded } from '@/lib/taskForwarding';
 import { Task, type TaskAttachment, type TaskComment, type TimeEntry } from '@/types';
 import axios from 'axios';
-import { PlusIcon, RefreshCcw } from 'lucide-react';
+import { GitBranch, PlusIcon, RefreshCcw } from 'lucide-react';
 import React, {
     startTransition,
     useCallback,
@@ -560,6 +561,7 @@ function DailyTaskBlock({
     const showTime = task.endHour - task.startHour >= 0.75;
     const barHeight = isPlanned ? 18 : GANTT_BAR_H;
     const isActiveEntry = task.timeEntry.is_active;
+    const forwarded = isTaskForwarded(task.task);
     const titleSuffix = isPlanned
         ? ' (Planned)'
         : isActiveEntry
@@ -597,6 +599,20 @@ function DailyTaskBlock({
             >
                 {task.task.title}
             </span>
+            {forwarded ? (
+                <span
+                    style={{
+                        position: 'absolute',
+                        right: 6,
+                        top: 4,
+                        display: 'inline-flex',
+                        color: '#0369a1',
+                    }}
+                    title='Forwarded task'
+                >
+                    <GitBranch size={12} />
+                </span>
+            ) : null}
             {showTime ? (
                 <span
                     style={{
@@ -631,6 +647,7 @@ function GanttBar({
     const rangeLabel = formatEntryRange(task.timeEntry);
     const isWorking = task.type === 'working';
     const titleSuffix = task.isPlanned ? ' - Planned' : isWorking ? ' - Working' : '';
+    const forwarded = isTaskForwarded(task.task);
 
     return (
         <button
@@ -669,6 +686,11 @@ function GanttBar({
             >
                 {task.task.title}
             </span>
+            {forwarded ? (
+                <span style={{ color: '#0369a1', display: 'inline-flex', marginLeft: 4 }}>
+                    <GitBranch size={12} />
+                </span>
+            ) : null}
         </button>
     );
 }

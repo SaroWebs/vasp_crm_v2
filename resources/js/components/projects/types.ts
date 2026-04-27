@@ -18,6 +18,24 @@ export interface ProjectTask {
     phase_id?: number | null;
     project_phase?: { id: number; name: string } | null;
     task_type?: { id: number; name: string; code: string } | null;
+    has_forwardings?: boolean;
+    forwardings_count?: number;
+    forwarding_waterfall?: Array<{
+        id: number;
+        from_label: string;
+        to_label: string;
+    }>;
+    forwardings?: Array<{
+        id: number;
+        from_user?: { id: number; name: string } | null;
+        to_user?: { id: number; name: string } | null;
+        from_department?: { id: number; name: string } | null;
+        to_department?: { id: number; name: string } | null;
+        forwarded_by?: { id: number; name: string } | null;
+        created_at?: string;
+        forwarded_at?: string | null;
+        status?: string;
+    }>;
 }
 
 export interface ProjectPhase {

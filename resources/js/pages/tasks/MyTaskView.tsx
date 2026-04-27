@@ -28,6 +28,7 @@ import { Task, TimeEntry, TimelineEvent, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
+import { buildForwardingWaterfall, isTaskForwarded } from '@/lib/taskForwarding';
 import {
     AlertCircle,
     ArrowLeft,
@@ -44,6 +45,7 @@ import {
     UserPlus,
     XCircle,
     Clock3,
+    GitBranch,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -280,6 +282,8 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
     // Permission check: can edit/delete only own tasks or super admin
     const canEdit = isOwnTask || isSuperAdmin;
     const canDelete = isOwnTask || isSuperAdmin;
+    const forwardingWaterfall = buildForwardingWaterfall(taskData);
+    const forwarded = isTaskForwarded(taskData);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -416,6 +420,12 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                                 {taskData.sla_policy?.priority || 'P4'}
                                             </span>
                                         </Badge>
+                                        {forwarded && (
+                                            <Badge className="border border-sky-200 bg-sky-50 text-sky-700">
+                                                <GitBranch className="mr-1 h-3 w-3" />
+                                                Forwarded
+                                            </Badge>
+                                        )}
                                     </div>
                                 </CardTitle>
                             </CardHeader>
@@ -537,6 +547,40 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
                                             </div>
                                         )}
                                     </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Forwarding Waterfall */}
+                                <div>
+                                    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                                        <GitBranch className="h-4 w-4 text-muted-foreground" />
+                                        Forwarding Path
+                                    </h4>
+                                    {forwardingWaterfall.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">
+                                            This task has not been forwarded.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {forwardingWaterfall.map((step, index) => (
+                                                <div
+                                                    key={step.id}
+                                                    className="rounded-md border bg-slate-50 px-3 py-2 text-sm"
+                                                >
+                                                    <div className="font-medium">
+                                                        {step.from_label} {'->'} {step.to_label}
+                                                    </div>
+                                                    <div className="mt-1 text-xs text-muted-foreground">
+                                                        Step {index + 1}
+                                                        {step.forwarded_at
+                                                            ? ` | ${format(new Date(step.forwarded_at), 'MMM dd, yyyy HH:mm')}`
+                                                            : ''}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <Separator />

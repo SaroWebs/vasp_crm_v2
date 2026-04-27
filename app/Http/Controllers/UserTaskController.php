@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Task;
+use App\Models\TaskForwarding;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,7 +46,7 @@ class UserTaskController extends TimeTrackingController
                             });
                         }
                     });
-            }, 'slaPolicy', 'timelineEvents' => function ($query) use ($startOfDay, $endOfDay) {
+            }, 'slaPolicy', 'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at', 'forwardings.fromUser:id,name', 'forwardings.toUser:id,name', 'forwardings.fromDepartment:id,name', 'forwardings.toDepartment:id,name', 'forwardings.forwardedBy:id,name', 'timelineEvents' => function ($query) use ($startOfDay, $endOfDay) {
                 $query
                     ->select([
                         'id',
@@ -138,6 +139,12 @@ class UserTaskController extends TimeTrackingController
                 'createdBy',
                 'assignedUsers',
                 'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
+                'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+                'forwardings.fromUser:id,name',
+                'forwardings.toUser:id,name',
+                'forwardings.fromDepartment:id,name',
+                'forwardings.toDepartment:id,name',
+                'forwardings.forwardedBy:id,name',
             ])
             ->orderByRaw("CASE 
                 WHEN due_at < NOW() AND state != 'Done' THEN 1 
@@ -161,6 +168,8 @@ class UserTaskController extends TimeTrackingController
                     ->unique()
                     ->count()
             );
+
+            $this->appendForwardingMeta($task);
         });
 
         return response()->json($tasks);
@@ -191,6 +200,12 @@ class UserTaskController extends TimeTrackingController
                 'taskType:id,name,code',
                 'slaPolicy:id,name,priority',
                 'timeEntries:id,task_id,user_id,start_time,end_time,is_active',
+                'forwardings:id,task_id,from_user_id,to_user_id,from_department_id,to_department_id,forwarded_by,status,created_at,forwarded_at',
+                'forwardings.fromUser:id,name',
+                'forwardings.toUser:id,name',
+                'forwardings.fromDepartment:id,name',
+                'forwardings.toDepartment:id,name',
+                'forwardings.forwardedBy:id,name',
             ])
             ->where(function ($query) use ($terminalStates) {
                 $query->whereNotIn('state', $terminalStates)
@@ -224,10 +239,60 @@ class UserTaskController extends TimeTrackingController
                     ->unique()
                     ->count()
             );
+
+            $this->appendForwardingMeta($task);
         });
 
         return response()->json([
             'data' => $tasks,
         ]);
+    }
+
+    /**
+     * Append forwarding metadata used by board cards and task details.
+     */
+    private function appendForwardingMeta(Task $task): void
+    {
+        $forwardings = $task->relationLoaded('forwardings')
+            ? $task->forwardings
+            : $task->forwardings()
+                ->with(['fromUser:id,name', 'toUser:id,name', 'fromDepartment:id,name', 'toDepartment:id,name', 'forwardedBy:id,name'])
+                ->get();
+
+        $sortedForwardings = $forwardings
+            ->sortBy(function (TaskForwarding $forwarding): string {
+                return (string) ($forwarding->forwarded_at ?? $forwarding->created_at);
+            })
+            ->values();
+
+        $waterfall = $sortedForwardings->map(function (TaskForwarding $forwarding): array {
+            $fromUserName = $forwarding->fromUser?->name ?? $forwarding->forwardedBy?->name;
+            $toUserName = $forwarding->toUser?->name;
+            $fromDepartmentName = $forwarding->fromDepartment?->name;
+            $toDepartmentName = $forwarding->toDepartment?->name;
+
+            $fromLabel = $fromUserName
+                ?? $fromDepartmentName
+                ?? 'Unknown source';
+            $toLabel = $toUserName
+                ?? $toDepartmentName
+                ?? 'Unknown target';
+
+            return [
+                'id' => $forwarding->id,
+                'from_label' => $fromLabel,
+                'to_label' => $toLabel,
+                'from_user' => $fromUserName,
+                'to_user' => $toUserName,
+                'from_department' => $fromDepartmentName,
+                'to_department' => $toDepartmentName,
+                'status' => $forwarding->status,
+                'forwarded_at' => optional($forwarding->forwarded_at)->toDateTimeString() ?? optional($forwarding->created_at)->toDateTimeString(),
+            ];
+        })->all();
+
+        $task->setAttribute('has_forwardings', count($waterfall) > 0);
+        $task->setAttribute('forwardings_count', count($waterfall));
+        $task->setAttribute('forwarding_waterfall', $waterfall);
     }
 }

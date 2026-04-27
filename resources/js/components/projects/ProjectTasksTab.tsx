@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useMemo, useState } from 'react';
-import { Plus, UserPlus } from 'lucide-react';
+import { GitBranch, Plus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,6 +70,25 @@ export default function ProjectTasksTab({
     const completedTasks = tasks.filter((task) => taskGroupConfig.completed.includes(task.state));
 
     const ganttTasks = useMemo(() => tasks.filter((task) => task.start_at && task.due_at), [tasks]);
+    const hasForwarding = (task: ProjectTask): boolean => {
+        if (typeof task.has_forwardings === 'boolean') {
+            return task.has_forwardings;
+        }
+
+        if (typeof task.forwardings_count === 'number') {
+            return task.forwardings_count > 0;
+        }
+
+        if (Array.isArray(task.forwarding_waterfall) && task.forwarding_waterfall.length > 0) {
+            return true;
+        }
+
+        if (Array.isArray(task.forwardings) && task.forwardings.length > 0) {
+            return true;
+        }
+
+        return false;
+    };
 
     const ganttBounds = useMemo(() => {
         if (!ganttTasks.length) {
@@ -341,7 +360,18 @@ export default function ProjectTasksTab({
                                     {tasks.map((task) => (
                                         <tr key={task.id} className="border-b">
                                             <td className="px-2 py-2">
-                                                <p className="font-medium">{task.title || `Task #${task.id}`}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium">{task.title || `Task #${task.id}`}</p>
+                                                    {hasForwarding(task) && (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700"
+                                                            title="Forwarded task"
+                                                        >
+                                                            <GitBranch className="h-3 w-3" />
+                                                            Forwarded
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-muted-foreground">{task.task_code}</p>
                                             </td>
                                             <td className="px-2 py-2">
@@ -403,7 +433,10 @@ export default function ProjectTasksTab({
                                 <div className="space-y-2">
                                     {pendingTasks.map((task) => (
                                         <div key={task.id} className="rounded border bg-muted/40 p-2">
-                                            <p className="text-sm font-medium">{task.title || `Task #${task.id}`}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm font-medium">{task.title || `Task #${task.id}`}</p>
+                                                {hasForwarding(task) && <GitBranch className="h-3 w-3 text-sky-700" />}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">{task.state}</p>
                                         </div>
                                     ))}
@@ -415,7 +448,10 @@ export default function ProjectTasksTab({
                                 <div className="space-y-2">
                                     {activeTasks.map((task) => (
                                         <div key={task.id} className="rounded border bg-muted/40 p-2">
-                                            <p className="text-sm font-medium">{task.title || `Task #${task.id}`}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm font-medium">{task.title || `Task #${task.id}`}</p>
+                                                {hasForwarding(task) && <GitBranch className="h-3 w-3 text-sky-700" />}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">{task.state}</p>
                                         </div>
                                     ))}
@@ -427,7 +463,10 @@ export default function ProjectTasksTab({
                                 <div className="space-y-2">
                                     {completedTasks.map((task) => (
                                         <div key={task.id} className="rounded border bg-muted/40 p-2">
-                                            <p className="text-sm font-medium">{task.title || `Task #${task.id}`}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm font-medium">{task.title || `Task #${task.id}`}</p>
+                                                {hasForwarding(task) && <GitBranch className="h-3 w-3 text-sky-700" />}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">{task.state}</p>
                                         </div>
                                     ))}
@@ -460,7 +499,15 @@ export default function ProjectTasksTab({
                                         return (
                                             <div key={task.id} className="rounded border p-3">
                                                 <div className="mb-2 flex items-center justify-between text-sm">
-                                                    <p className="font-medium">{task.title || task.task_code}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-medium">{task.title || task.task_code}</p>
+                                                        {hasForwarding(task) && (
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                                                                <GitBranch className="h-3 w-3" />
+                                                                Forwarded
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-muted-foreground">
                                                         {formatDate(startAt)} - {formatDate(dueAt)}
                                                     </p>
