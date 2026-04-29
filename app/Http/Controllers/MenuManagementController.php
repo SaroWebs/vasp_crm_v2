@@ -27,6 +27,7 @@ class MenuManagementController extends Controller
                 ['key' => 'organization.projects', 'title' => 'Projects', 'default_roles' => ['super-admin', 'admin', 'manager', 'team-lead']],
                 ['key' => 'organization.employees', 'title' => 'Employees', 'default_roles' => ['super-admin', 'admin', 'manager']],
                 ['key' => 'organization.clients', 'title' => 'Clients', 'default_roles' => ['super-admin', 'admin', 'manager']],
+                ['key' => 'organization.attendance', 'title' => 'Attendance', 'default_roles' => ['super-admin', 'admin', 'manager', 'team-lead']],
             ],
         ],
         [
@@ -37,6 +38,7 @@ class MenuManagementController extends Controller
                 ['key' => 'tasks.task-reports', 'title' => 'Task Reports', 'default_roles' => ['super-admin', 'admin', 'manager', 'team-lead']],
                 ['key' => 'tasks.workload-matrix', 'title' => 'Workload Matrix', 'default_roles' => ['super-admin', 'admin', 'manager', 'team-lead']],
                 ['key' => 'tasks.my-tasks', 'title' => 'My Tasks', 'default_roles' => null],
+                ['key' => 'tasks.my-attendance', 'title' => 'My Attendance', 'default_roles' => null],
             ],
         ],
         [
@@ -122,7 +124,7 @@ class MenuManagementController extends Controller
     {
         $this->authorizeAdminAccess();
 
-        if (!Schema::hasTable('role_menu_items')) {
+        if (! Schema::hasTable('role_menu_items')) {
             return back()->withErrors([
                 'menu' => 'Menu access table is missing. Please run migrations first.',
             ]);
@@ -179,7 +181,7 @@ class MenuManagementController extends Controller
     {
         $user = Auth::guard('web')->user();
 
-        if (!$user || (!$user->hasRole('admin') && !$user->hasRole('super-admin'))) {
+        if (! $user || (! $user->hasRole('admin') && ! $user->hasRole('super-admin'))) {
             abort(403, 'Only administrators can manage menu access.');
         }
     }
@@ -217,11 +219,11 @@ class MenuManagementController extends Controller
         $menuItem = collect($this->flatMenuItems())
             ->first(fn (array $item): bool => $item['key'] === $menuKey);
 
-        if (!$menuItem) {
+        if (! $menuItem) {
             return false;
         }
 
-        if (!array_key_exists('default_roles', $menuItem) || $menuItem['default_roles'] === null) {
+        if (! array_key_exists('default_roles', $menuItem) || $menuItem['default_roles'] === null) {
             return true;
         }
 

@@ -26,6 +26,7 @@ interface Employee {
     id: number;
     name: string;
     email: string;
+    code: string | null;
     phone: string | null;
     department: {
         id: number;
@@ -102,6 +103,10 @@ export default function EmployeesShow(props: EmployeesShowProps) {
                                     <Mail className="h-4 w-4" />
                                     {employee.email}
                                 </p>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-muted-foreground">Employee Code</label>
+                                <p className="text-lg font-mono">{employee.code || '---'}</p>
                             </div>
                             {employee.phone && (
                                 <div>

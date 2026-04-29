@@ -7,6 +7,7 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
+use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\Client\ClientCommentAttachmentController;
 use App\Http\Controllers\Client\ClientPortalAuthController;
 use App\Http\Controllers\Client\ClientTicketCommentController;
@@ -366,6 +367,14 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::get('/api/employee-progress', [EmployeeProgressController::class, 'getEmployeeProgressData'])->name('api.employee.progress');
         Route::get('/api/employee-progress/stats', [EmployeeProgressController::class, 'getEmployeeProgressStats'])->name('api.employee.progress.stats');
 
+        // Attendance management routes (admin)
+        Route::get('/attendance', [AttendanceController::class, 'adminIndex'])->name('attendance.index');
+        Route::get('/attendance/summary', [AttendanceController::class, 'adminSummaryPage'])->name('attendance.summary');
+        Route::get('/api/attendance/summary', [AttendanceController::class, 'adminGetAllAttendanceSummary'])->name('api.attendance.summary');
+        Route::get('/api/attendance/{employee}', [AttendanceController::class, 'adminGetEmployeeAttendance'])->name('api.attendance.employee');
+        Route::post('/api/attendance/{employee}/override', [AttendanceController::class, 'adminOverrideAttendance'])->name('api.attendance.override');
+        Route::delete('/api/attendance/{attendance}', [AttendanceController::class, 'adminDeleteAttendance'])->name('api.attendance.delete');
+
         // Workload matrix routes
         Route::get('/workload-matrix', [WorkloadMatrixController::class, 'index'])->name('workload-matrix.index');
         Route::get('/api/workload-matrix', [WorkloadMatrixController::class, 'data'])->name('api.workload-matrix');
@@ -466,6 +475,11 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
 
     // My Tasks route (outside admin pages)
     Route::get('/my/tasks', [TaskController::class, 'myTasks'])->name('tasks.my');
+
+    // My Attendance routes
+    Route::get('/my/attendance', [AttendanceController::class, 'myAttendancePage'])->name('my.attendance');
+    Route::get('/api/my/attendance', [AttendanceController::class, 'getEmployeeAttendance'])->name('api.my.attendance');
+    Route::post('/api/my/attendance/punch', [AttendanceController::class, 'punchEntry'])->name('api.my.attendance.punch');
 
     // My Task View route
     Route::get('/my/tasks/{task}', function ($taskId) {

@@ -83,6 +83,7 @@ export interface Employee {
     id: number;
     name: string;
     email: string;
+    code?: string | null;
     phone?: string | null;
     department_id?: number;
     user_id?: number;

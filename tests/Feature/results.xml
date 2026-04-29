@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Tests\Feature\EmployeeManagementTest" file="D:\office\VASP_CRM_V2\tests\Feature\EmployeeManagementTest.php" tests="4" assertions="20" errors="0" failures="0" skipped="0" time="7.911318">
+    <testcase name="test_can_list_employees" file="D:\office\VASP_CRM_V2\tests\Feature\EmployeeManagementTest.php" line="34" class="Tests\Feature\EmployeeManagementTest" classname="Tests.Feature.EmployeeManagementTest" assertions="12" time="5.540830"/>
+    <testcase name="test_can_create_employee_with_code" file="D:\office\VASP_CRM_V2\tests\Feature\EmployeeManagementTest.php" line="47" class="Tests\Feature\EmployeeManagementTest" classname="Tests.Feature.EmployeeManagementTest" assertions="4" time="1.942708"/>
+    <testcase name="test_can_update_employee_code" file="D:\office\VASP_CRM_V2\tests\Feature\EmployeeManagementTest.php" line="76" class="Tests\Feature\EmployeeManagementTest" classname="Tests.Feature.EmployeeManagementTest" assertions="2" time="0.152185"/>
+    <testcase name="test_cannot_use_duplicate_employee_code" file="D:\office\VASP_CRM_V2\tests\Feature\EmployeeManagementTest.php" line="99" class="Tests\Feature\EmployeeManagementTest" classname="Tests.Feature.EmployeeManagementTest" assertions="2" time="0.275595"/>
+  </testsuite>
+</testsuites>

@@ -40,6 +40,7 @@ export default function EmployeesCreate(props: EmployeesCreateProps) {
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         email: '',
+        code: '',
         password: '',
         password_confirmation: '',
         phone: '',
@@ -112,8 +113,20 @@ export default function EmployeesCreate(props: EmployeesCreateProps) {
                                             placeholder="Enter email"
                                             required
                                         />
-                                        {errors.email && (
-                                            <p className="text-sm text-red-600">{errors.email}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="code">Employee Code</Label>
+                                        <Input
+                                            id="code"
+                                            value={data.code}
+                                            onChange={(e) => setData('code', e.target.value)}
+                                            placeholder="e.g. EMP-1001"
+                                        />
+                                        {errors.code && (
+                                            <p className="text-sm text-red-600">{errors.code}</p>
                                         )}
                                     </div>
                                 </div>

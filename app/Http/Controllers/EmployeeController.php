@@ -2,18 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
+use App\Models\Employee;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
-use Inertia\Inertia;
-use App\Models\Employee;
-use App\Models\Department;
-use App\Models\Permission;
 use Illuminate\Http\Request;
-use App\Models\DepartmentUser;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 class EmployeeController extends Controller
 {
@@ -43,7 +42,7 @@ class EmployeeController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$this->checkPermission('employee.read')) {
+        if (! $this->checkPermission('employee.read')) {
             abort(403, 'Insufficient permissions to view employees.');
         }
 
@@ -52,7 +51,7 @@ class EmployeeController extends Controller
             'user',
             'user.roles.permissions',
             'user.permissions',
-            'user.deniedPermissions'
+            'user.deniedPermissions',
         ]);
 
         // Apply filters
@@ -62,8 +61,8 @@ class EmployeeController extends Controller
 
         if ($request->has('search')) {
             $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                    ->orWhere('email', 'like', '%' . $request->search . '%');
+                $q->where('name', 'like', '%'.$request->search.'%')
+                    ->orWhere('email', 'like', '%'.$request->search.'%');
             });
         }
 
@@ -81,17 +80,17 @@ class EmployeeController extends Controller
                 $additionalPermissions = $user->permissions;
 
                 $uniqueAdditionalPermissions = $additionalPermissions->filter(function ($additionalPerm) use ($rolePermissions) {
-                    return !$rolePermissions->contains('id', $additionalPerm->id);
+                    return ! $rolePermissions->contains('id', $additionalPerm->id);
                 });
 
                 $restrictedPermissions = $user->deniedPermissions;
 
                 $effectiveRolePermissions = $rolePermissions->filter(function ($rolePerm) use ($restrictedPermissions) {
-                    return !$restrictedPermissions->contains('id', $rolePerm->id);
+                    return ! $restrictedPermissions->contains('id', $rolePerm->id);
                 });
 
                 $effectiveAdditionalPermissions = $uniqueAdditionalPermissions->filter(function ($additionalPerm) use ($restrictedPermissions) {
-                    return !$restrictedPermissions->contains('id', $additionalPerm->id);
+                    return ! $restrictedPermissions->contains('id', $additionalPerm->id);
                 });
 
                 $effectiveRolePermissionsCount = $effectiveRolePermissions->count();
@@ -102,14 +101,14 @@ class EmployeeController extends Controller
                     'role' => $effectiveRolePermissionsCount,
                     'additional' => $effectiveAdditionalPermissionsCount,
                     'restricted' => $restrictedPermissions->count(),
-                    'total' => $totalEffectivePermissions
+                    'total' => $totalEffectivePermissions,
                 ];
             } else {
                 $employee->permission_counts = [
                     'role' => 0,
                     'additional' => 0,
                     'restricted' => 0,
-                    'total' => 0
+                    'total' => 0,
                 ];
             }
 
@@ -132,7 +131,7 @@ class EmployeeController extends Controller
      */
     public function create()
     {
-        if (!$this->checkPermission('employee.create')) {
+        if (! $this->checkPermission('employee.create')) {
             abort(403, 'Insufficient permissions to create employees.');
         }
 
@@ -144,11 +143,12 @@ class EmployeeController extends Controller
             $rolePermissions = $role->permissions()
                 ->select('permissions.id', 'permissions.name', 'permissions.slug', 'permissions.module')
                 ->get();
+
             return [
                 'id' => $role->id,
                 'name' => $role->name,
                 'slug' => $role->slug,
-                'permissions' => $rolePermissions->toArray()
+                'permissions' => $rolePermissions->toArray(),
             ];
         })->toArray();
 
@@ -156,7 +156,7 @@ class EmployeeController extends Controller
             'departments' => $departments,
             'roles' => $roles,
             'roles_with_permissions' => $rolesWithPermissions,
-            'permissions' => $permissions
+            'permissions' => $permissions,
         ]);
     }
 
@@ -165,7 +165,7 @@ class EmployeeController extends Controller
      */
     public function store(Request $request)
     {
-        if (!$this->checkPermission('employee.create')) {
+        if (! $this->checkPermission('employee.create')) {
             abort(403, 'Insufficient permissions to create employees.');
         }
 
@@ -179,6 +179,7 @@ class EmployeeController extends Controller
             'denied_permissions' => 'nullable|array',
             'denied_permissions.*' => 'string|exists:permissions,slug',
             'phone' => 'nullable|string|max:20',
+            'code' => 'nullable|string|max:50|unique:employees,code',
             'department_id' => 'required|exists:departments,id',
         ]);
 
@@ -204,18 +205,18 @@ class EmployeeController extends Controller
             if ($role) {
                 $user->assignRole($role);
             } else {
-                throw new \Exception('Role not found with ID: ' . $validated['role_id']);
+                throw new \Exception('Role not found with ID: '.$validated['role_id']);
             }
 
             // Grant additional permissions
-            if (!empty($validated['permissions'])) {
+            if (! empty($validated['permissions'])) {
                 foreach ($validated['permissions'] as $permissionSlug) {
                     $user->giveUserPermission($permissionSlug);
                 }
             }
 
             // Deny permissions
-            if (!empty($validated['denied_permissions'])) {
+            if (! empty($validated['denied_permissions'])) {
                 foreach ($validated['denied_permissions'] as $permissionSlug) {
                     $user->denyUserPermission($permissionSlug);
                 }
@@ -231,6 +232,7 @@ class EmployeeController extends Controller
             $employee = Employee::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
+                'code' => $validated['code'],
                 'phone' => $validated['phone'],
                 'department_id' => $validated['department_id'],
                 'user_id' => $user->id,
@@ -242,7 +244,7 @@ class EmployeeController extends Controller
                 ->with('success', 'Employee created successfully with user account.');
         } catch (\Exception $e) {
             DB::rollBack();
-            
+
             // Log the detailed error for debugging
             Log::error('Employee creation failed', [
                 'message' => $e->getMessage(),
@@ -252,9 +254,9 @@ class EmployeeController extends Controller
                 'validated_data' => $validated,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()
-                ->withErrors(['general' => 'Failed to create employee. Please try again. Error: ' . $e->getMessage()])
+                ->withErrors(['general' => 'Failed to create employee. Please try again. Error: '.$e->getMessage()])
                 ->withInput();
         }
     }
@@ -264,14 +266,14 @@ class EmployeeController extends Controller
      */
     public function show(Employee $employee)
     {
-        if (!$this->checkPermission('employee.read')) {
+        if (! $this->checkPermission('employee.read')) {
             abort(403, 'Insufficient permissions to view employee.');
         }
 
         $employee->load(['department', 'user']);
 
         return Inertia::render('admin/employees/Show', [
-            'employee' => $employee
+            'employee' => $employee,
         ]);
     }
 
@@ -280,7 +282,7 @@ class EmployeeController extends Controller
      */
     public function edit(Employee $employee)
     {
-        if (!$this->checkPermission('employee.update')) {
+        if (! $this->checkPermission('employee.update')) {
             abort(403, 'Insufficient permissions to edit employee.');
         }
 
@@ -294,11 +296,12 @@ class EmployeeController extends Controller
             $rolePermissions = $role->permissions()
                 ->select('permissions.id', 'permissions.name', 'permissions.slug', 'permissions.module')
                 ->get();
+
             return [
                 'id' => $role->id,
                 'name' => $role->name,
                 'slug' => $role->slug,
-                'permissions' => $rolePermissions->toArray()
+                'permissions' => $rolePermissions->toArray(),
             ];
         })->toArray();
 
@@ -323,9 +326,9 @@ class EmployeeController extends Controller
             'employee_permissions' => [
                 'granted' => $userGrantedPermissions,
                 'denied' => $userDeniedPermissions,
-                'effective' => $userEffectivePermissions
+                'effective' => $userEffectivePermissions,
             ],
-            'employee_roles' => $userCurrentRoles
+            'employee_roles' => $userCurrentRoles,
         ]);
     }
 
@@ -334,13 +337,14 @@ class EmployeeController extends Controller
      */
     public function update(Request $request, Employee $employee)
     {
-        if (!$this->checkPermission('employee.update')) {
+        if (! $this->checkPermission('employee.update')) {
             abort(403, 'Insufficient permissions to update employee.');
         }
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:employees,email,' . $employee->id,
+            'email' => 'required|string|email|max:255|unique:employees,email,'.$employee->id,
+            'code' => 'nullable|string|max:50|unique:employees,code,'.$employee->id,
             'phone' => 'nullable|string|max:20',
             'department_id' => 'required|exists:departments,id',
         ]);
@@ -348,6 +352,7 @@ class EmployeeController extends Controller
         $employee->update([
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'code' => $validated['code'],
             'phone' => $validated['phone'],
             'department_id' => $validated['department_id'],
         ]);
@@ -360,7 +365,7 @@ class EmployeeController extends Controller
      */
     public function updateRoles(Request $request, Employee $employee)
     {
-        if (!$this->checkPermission('employee.update')) {
+        if (! $this->checkPermission('employee.update')) {
             abort(403, 'Insufficient permissions to update employee.');
         }
 
@@ -387,14 +392,14 @@ class EmployeeController extends Controller
         $user->deniedPermissions()->detach();
 
         // Grant additional permissions
-        if (!empty($validated['permissions'])) {
+        if (! empty($validated['permissions'])) {
             foreach ($validated['permissions'] as $permissionSlug) {
                 $user->giveUserPermission($permissionSlug);
             }
         }
 
         // Deny role permissions (blacklist)
-        if (!empty($validated['denied_permissions'])) {
+        if (! empty($validated['denied_permissions'])) {
             foreach ($validated['denied_permissions'] as $permissionSlug) {
                 $user->denyUserPermission($permissionSlug);
             }
@@ -408,7 +413,7 @@ class EmployeeController extends Controller
      */
     public function destroy(Employee $employee)
     {
-        if (!$this->checkPermission('employee.delete')) {
+        if (! $this->checkPermission('employee.delete')) {
             abort(403, 'Insufficient permissions to delete employee.');
         }
 

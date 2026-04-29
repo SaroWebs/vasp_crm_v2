@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AttendanceController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,4 +14,4 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// API routes intentionally left empty for now.
+Route::post('/upload_punch_data', [AttendanceController::class, 'uploadPunchData']);

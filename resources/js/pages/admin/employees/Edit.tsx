@@ -61,6 +61,7 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
     const employeeForm = useForm({
         name: employee.name,
         email: employee.email,
+        code: employee.code ?? '',
         phone: employee.phone ?? '',
         department_id: employee.department_id ? employee.department_id.toString() : (employee.department?.id?.toString() || ''),
     });
@@ -203,6 +204,18 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
                             </div>
 
                             <div className="grid gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="code">Employee Code</Label>
+                                    <Input
+                                        id="code"
+                                        value={employeeForm.data.code}
+                                        onChange={(e) => employeeForm.setData('code', e.target.value)}
+                                        placeholder="e.g. EMP-1001"
+                                    />
+                                    {employeeForm.errors.code && (
+                                        <p className="text-sm text-red-600">{employeeForm.errors.code}</p>
+                                    )}
+                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="phone">Phone</Label>
                                     <Input

@@ -26,6 +26,8 @@ import {
     BarChart3,
     Gauge,
     ListChecks,
+    CalendarDays,
+    CalendarCheck,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -121,6 +123,13 @@ const adminNavGroups: NavGroup[] = [
                 roles: ['super-admin', 'admin', 'manager'],
                 menuKey: 'organization.clients',
             },
+            {
+                title: 'Attendance',
+                href: '/admin/attendance',
+                icon: CalendarCheck,
+                roles: ['super-admin', 'admin', 'manager', 'team-lead'],
+                menuKey: 'organization.attendance',
+            },
         ],
     },
     {
@@ -159,6 +168,12 @@ const adminNavGroups: NavGroup[] = [
                 href: '/my/tasks',
                 icon: UserCog,
                 menuKey: 'tasks.my-tasks',
+            },
+            {
+                title: 'My Attendance',
+                href: '/my/attendance',
+                icon: CalendarDays,
+                menuKey: 'tasks.my-attendance',
             },
         ],
     },

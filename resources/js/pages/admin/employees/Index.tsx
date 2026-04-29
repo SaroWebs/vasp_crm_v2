@@ -166,37 +166,37 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                             <div className="flex flex-col gap-4 md:flex-row md:items-end">
                                 <div className="flex-1">
                                     <label className="text-sm font-medium">Search</label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        placeholder="Search employees..."
-                                        className="pl-10"
-                                        value={localFilters.search}
-                                        onChange={(e) => handleSearchChange(e.target.value)}
-                                    />
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search employees..."
+                                            className="pl-10"
+                                            value={localFilters.search}
+                                            onChange={(e) => handleSearchChange(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="w-full md:w-48">
-                                <label className="text-sm font-medium">Department</label>
-                                <Select value={localFilters.department_id} onValueChange={handleDepartmentChange}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="All Departments" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Departments</SelectItem>
-                                        {departments.map((department) => (
-                                            <SelectItem key={department.id} value={department.id.toString()}>
-                                                {department.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            {hasActiveFilters && (
-                                <Button type="button" variant="ghost" onClick={handleClearFilters}>
-                                    Clear
-                                </Button>
-                            )}
+                                <div className="w-full md:w-48">
+                                    <label className="text-sm font-medium">Department</label>
+                                    <Select value={localFilters.department_id} onValueChange={handleDepartmentChange}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="All Departments" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Departments</SelectItem>
+                                            {departments.map((department) => (
+                                                <SelectItem key={department.id} value={department.id.toString()}>
+                                                    {department.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                {hasActiveFilters && (
+                                    <Button type="button" variant="ghost" onClick={handleClearFilters}>
+                                        Clear
+                                    </Button>
+                                )}
                             </div>
                         </div>
                         <CardDescription>
@@ -209,6 +209,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                 <thead>
                                     <tr className="border-b">
                                         <th className="text-left p-4 font-semibold">Name</th>
+                                        <th className="text-left p-4 font-semibold">Code</th>
                                         <th className="text-left p-4 font-semibold">Email</th>
                                         <th className="text-left p-4 font-semibold">Department</th>
                                         <th className="text-left p-4 font-semibold">Actions</th>
@@ -233,6 +234,11 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                                             <div className="text-sm text-muted-foreground">{employee.phone}</div>
                                                         )}
                                                     </div>
+                                                </td>
+
+                                                {/* Code */}
+                                                <td className="p-4">
+                                                    <div className="text-sm font-mono">{employee.code}</div>
                                                 </td>
 
                                                 {/* Email */}
@@ -281,8 +287,8 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {employees.current_page > 1 && (
-                                        <Button 
-                                            variant="outline" 
+                                        <Button
+                                            variant="outline"
                                             size="sm"
                                             asChild
                                         >
@@ -291,14 +297,14 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                             </Link>
                                         </Button>
                                     )}
-                                    
+
                                     <div className="text-sm text-muted-foreground">
                                         Page {employees.current_page} of {employees.last_page}
                                     </div>
-                                    
+
                                     {employees.current_page < employees.last_page && (
-                                        <Button 
-                                            variant="outline" 
+                                        <Button
+                                            variant="outline"
                                             size="sm"
                                             asChild
                                         >
