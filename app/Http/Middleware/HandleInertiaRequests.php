@@ -88,7 +88,7 @@ class HandleInertiaRequests extends Middleware
                     ->toArray();
             }
         }
-
+        $user = $user?->load('employee');
         return [
             ...parent::share($request),
             'name' => config('app.name'),

@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ActionIcon, Text, Group } from '@mantine/core';
 
 interface MonthYearPickerProps {
     month: number;
@@ -14,42 +14,28 @@ const MONTHS = [
 
 export function MonthYearPicker({ month, year, onChange }: MonthYearPickerProps) {
     const handlePrevMonth = () => {
-        if (month === 1) {
-            onChange(12, year - 1);
-        } else {
-            onChange(month - 1, year);
-        }
+        if (month === 1) onChange(12, year - 1);
+        else onChange(month - 1, year);
     };
 
     const handleNextMonth = () => {
-        if (month === 12) {
-            onChange(1, year + 1);
-        } else {
-            onChange(month + 1, year);
-        }
+        if (month === 12) onChange(1, year + 1);
+        else onChange(month + 1, year);
     };
 
     return (
-        <div className="flex items-center gap-2">
-            <Button
-                variant="outline"
-                size="icon"
-                onClick={handlePrevMonth}
-                className="h-8 w-8"
-            >
-                <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-medium min-w-[140px] text-center">
+        <Group gap="xs" className='border rounded'>
+            <ActionIcon variant="subtle" color="gray" onClick={handlePrevMonth}>
+                <ChevronLeft size={16} />
+            </ActionIcon>
+
+            <Text fw={500} size="sm" w={120} ta="center">
                 {MONTHS[month - 1]} {year}
-            </span>
-            <Button
-                variant="outline"
-                size="icon"
-                onClick={handleNextMonth}
-                className="h-8 w-8"
-            >
-                <ChevronRight className="h-4 w-4" />
-            </Button>
-        </div>
+            </Text>
+
+            <ActionIcon variant="subtle" color="gray" onClick={handleNextMonth}>
+                <ChevronRight size={16} />
+            </ActionIcon>
+        </Group>
     );
 }

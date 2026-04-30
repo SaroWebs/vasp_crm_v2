@@ -1,5 +1,6 @@
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
 import TaskTimeline from '@/components/admin/TaskTimeline';
+import { AttendanceCalendar } from '@/components/attendance';
 import NotificationMenu from '@/components/notifications/NotificationMenu';
 import RecentReportSection from '@/components/reports/RecentReportSection';
 import MajorTasks from '@/components/tasks/MajorTasks';
@@ -66,6 +67,7 @@ interface DashboardStats {
 
 interface DashboardProps {
     dashboard_type: 'admin' | 'manager' | 'employee';
+    auth: any;
     stats?: DashboardStats;
     recentTickets?: any[];
     recentTasks?: any[];
@@ -109,6 +111,7 @@ export default function Dashboard(props: DashboardProps) {
         userPermissions,
         myDepartmentTasks,
         teamWorkload,
+        auth,
         myTasks,
         myTaskStats,
         forwardedTasks,
@@ -118,7 +121,11 @@ export default function Dashboard(props: DashboardProps) {
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
 
     useEffect(() => {
-        setSelectedEmployeeId('all');
+        if(auth?.user?.employee?.id){
+            setSelectedEmployeeId(String(auth.user.employee.id));
+        }else{
+            setSelectedEmployeeId('all');
+        }
     }, []);
 
 
@@ -481,277 +488,62 @@ export default function Dashboard(props: DashboardProps) {
 
     const renderEmployeeDashboard = () => (
         <>
-            {/* Employee Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            My Tasks
-                        </CardTitle>
-                        <FolderKanban className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.total_my_tasks || 0}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            In Progress
-                        </CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.in_progress_tasks || 0}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Due This Week
-                        </CardTitle>
-                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.tasks_due_this_week || 0}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Forwarded Tasks
-                        </CardTitle>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.forwarded_tasks_count || 0}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+            {/* Charts and Recent Activity */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+                <div className="col-span-3">
+                    <AttendanceCalendar
+                        auth={props.auth}
+                    />
+                </div>
 
-            {/* My Tasks */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>My Tasks</CardTitle>
-                    <CardDescription>Your assigned tasks</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        {myTasks?.map((task) => (
+                {/* Recent Tickets */}
+                <Card className="col-span-4">
+                    <CardHeader>
+                        <CardTitle>History</CardTitle>
+                        <CardDescription>
+                            Latest ticket submissions
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {recentTickets?.map((ticket) => (
                             <Link
-                                key={task.id}
-                                href={`/my/tasks/${task.id}`}
-                                className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted"
+                                key={ticket.id}
+                                href={`/admin/tickets/${ticket.id}`}
+                                className="flex cursor-pointer items-center justify-between space-x-4"
                             >
-                                <div className="flex-1">
-                                    <p className="font-medium">{task.title}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {task.department} • Due:{' '}
-                                        {task.due_date
-                                            ? new Date(
-                                                  task.due_date,
-                                              ).toLocaleDateString()
-                                            : 'N/A'}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex w-full items-center justify-between pb-4">
+                                    <div className="flex-1 space-y-1">
+                                        <p className="text-sm leading-none font-medium">
+                                            {ticket.title}
+                                        </p>
+
+                                        <p className="text-sm text-muted-foreground">
+                                            {ticket.client?.name} •{' '}
+                                            {ticket.ticket_number}
+                                        </p>
+                                    </div>
+
                                     <Badge
                                         variant={
-                                            task.status === 'in-progress'
-                                                ? 'default'
-                                                : task.status === 'completed'
-                                                  ? 'secondary'
-                                                  : 'outline'
-                                        }
-                                    >
-                                        {task.status}
-                                    </Badge>
-                                    <Badge
-                                        variant={
-                                            task.priority === 'high'
+                                            ticket.status === 'open'
                                                 ? 'destructive'
-                                                : 'secondary'
+                                                : ticket.status === 'approved'
+                                                  ? 'default'
+                                                  : 'secondary'
                                         }
+                                        className="h-6"
                                     >
-                                        {task.priority}
+                                        {ticket.status}
                                     </Badge>
                                 </div>
                             </Link>
                         ))}
-                        {(!myTasks || myTasks.length === 0) && (
-                            <p className="py-4 text-center text-muted-foreground">
-                                No tasks assigned to you
-                            </p>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Two column layout for forwarded tasks and upcoming deadlines */}
-            <div className="grid gap-4 md:grid-cols-2">
-                {/* Forwarded Tasks */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Forwarded Tasks</CardTitle>
-                        <CardDescription>
-                            Tasks forwarded to you by others
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {forwardedTasks?.map((task) => (
-                                <div
-                                    key={task.id}
-                                    className="rounded-lg border p-3"
-                                >
-                                    <p className="font-medium">
-                                        {task.task_title}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        From: {task.from_user} (
-                                        {task.from_department})
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Forwarded:{' '}
-                                        {new Date(
-                                            task.forwarded_at,
-                                        ).toLocaleDateString()}
-                                    </p>
-                                </div>
-                            ))}
-                            {(!forwardedTasks ||
-                                forwardedTasks.length === 0) && (
-                                <p className="py-4 text-center text-muted-foreground">
-                                    No forwarded tasks
-                                </p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Upcoming Deadlines */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Upcoming Deadlines</CardTitle>
-                        <CardDescription>
-                            Tasks due in the next 7 days
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {upcomingDeadlines?.map((task) => (
-                                <div
-                                    key={task.id}
-                                    className="flex items-center justify-between rounded-lg border p-3"
-                                >
-                                    <div>
-                                        <p className="font-medium">
-                                            {task.title}
-                                        </p>
-                                        <p className="text-sm text-muted-foreground">
-                                            Due:{' '}
-                                            {new Date(
-                                                task.due_date,
-                                            ).toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                    <Badge
-                                        variant={
-                                            task.is_overdue
-                                                ? 'destructive'
-                                                : 'outline'
-                                        }
-                                    >
-                                        {task.is_overdue
-                                            ? 'Overdue'
-                                            : task.status}
-                                    </Badge>
-                                </div>
-                            ))}
-                            {(!upcomingDeadlines ||
-                                upcomingDeadlines.length === 0) && (
-                                <p className="py-4 text-center text-muted-foreground">
-                                    No upcoming deadlines
-                                </p>
-                            )}
-                        </div>
                     </CardContent>
                 </Card>
             </div>
+            
+            <TaskTimeline/>
 
-            {/* Task Status Summary */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>My Task Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        <div className="rounded-lg bg-muted p-4 text-center">
-                            <div className="text-2xl font-bold">
-                                {myTaskStats?.pending || 0}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                Pending
-                            </div>
-                        </div>
-                        <div className="rounded-lg bg-muted p-4 text-center">
-                            <div className="text-2xl font-bold">
-                                {myTaskStats?.in_progress || 0}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                In Progress
-                            </div>
-                        </div>
-                        <div className="rounded-lg bg-muted p-4 text-center">
-                            <div className="text-2xl font-bold">
-                                {myTaskStats?.waiting || 0}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                Waiting
-                            </div>
-                        </div>
-                        <div className="rounded-lg bg-muted p-4 text-center">
-                            <div className="text-2xl font-bold">
-                                {myTaskStats?.completed || 0}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                Completed
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                        <Link href="/my/tasks">
-                            <Button variant="outline">
-                                <FolderKanban className="mr-2 h-4 w-4" />
-                                My Tasks
-                            </Button>
-                        </Link>
-                        <Link href="/my/tasks?create=true">
-                            <Button variant="outline">
-                                <Briefcase className="mr-2 h-4 w-4" />
-                                Create Task
-                            </Button>
-                        </Link>
-                    </div>
-                </CardContent>
-            </Card>
         </>
     );
 
@@ -773,7 +565,7 @@ export default function Dashboard(props: DashboardProps) {
             case 'manager':
                 return 'Manager Dashboard';
             case 'employee':
-                return 'My Dashboard';
+                return 'Employee Dashboard';
             default:
                 return 'Admin Dashboard';
         }

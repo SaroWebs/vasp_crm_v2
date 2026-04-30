@@ -25,7 +25,7 @@ class AttendanceUploadRequest extends FormRequest
     {
         return [
             'EmployeeId' => ['required', 'integer'],
-            'MachineId' => ['required', 'string'],
+            'MachineId' => ['required', 'integer'],
             'PunchTime' => ['required', 'date'],
             'Ip' => ['nullable', 'string'],
             'GroupName' => ['nullable', 'string'],

@@ -354,6 +354,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
 
         // Employee management routes (used in frontend)
         Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
+        Route::get('/api/employees', [EmployeeController::class, 'getList'])->name('api.employees.list');
         Route::get('/employees/create', [EmployeeController::class, 'create'])->name('employees.create');
         Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
         Route::get('/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
@@ -370,8 +371,8 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         // Attendance management routes (admin)
         Route::get('/attendance', [AttendanceController::class, 'adminIndex'])->name('attendance.index');
         Route::get('/attendance/summary', [AttendanceController::class, 'adminSummaryPage'])->name('attendance.summary');
+        Route::get('/employee-attendance/{employee}', [AttendanceController::class, 'adminGetEmployeeAttendance'])->name('api.attendance.employee');
         Route::get('/api/attendance/summary', [AttendanceController::class, 'adminGetAllAttendanceSummary'])->name('api.attendance.summary');
-        Route::get('/api/attendance/{employee}', [AttendanceController::class, 'adminGetEmployeeAttendance'])->name('api.attendance.employee');
         Route::post('/api/attendance/{employee}/override', [AttendanceController::class, 'adminOverrideAttendance'])->name('api.attendance.override');
         Route::delete('/api/attendance/{attendance}', [AttendanceController::class, 'adminDeleteAttendance'])->name('api.attendance.delete');
 
@@ -551,6 +552,12 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     Route::get('/api/activity-logs/recent', [ActivityLogController::class, 'getRecentActivity'])->name('api.activity-logs.recent');
     Route::delete('/api/activity-logs/clear-old', [ActivityLogController::class, 'clearOldLogs'])->name('api.activity-logs.clear-old');
     Route::get('/api/activity-logs/export', [ActivityLogController::class, 'export'])->name('api.activity-logs.export');
+});
+
+// Authenticated user routes (accessible to all authenticated users, not just admins)
+Route::middleware(['web', 'auth'])->group(function () {
+    // Attendance calendar component endpoint (accessible to authorized users)
+    Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
 });
 
 require __DIR__.'/settings.php';

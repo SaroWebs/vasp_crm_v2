@@ -131,8 +131,7 @@ export function DayCell({
         workingHours?.start && workingHours?.end ? `${workingHours.start}-${workingHours.end}` : null;
     const metaLabel =
         holiday?.name ??
-        workingHoursLabel ??
-        (status === 'weekend' ? 'Off' : '-');
+        (status === 'weekend' ? 'Off' : null);
 
     const cell = (
         <button

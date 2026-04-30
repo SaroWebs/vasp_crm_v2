@@ -24,6 +24,12 @@ class AttendanceController extends Controller
         $date = $punchTime->toDateString();
         $time = $punchTime->toTimeString();
 
+        $employee = Employee::where('code', $request->EmployeeId)->first();
+
+        if ($employee && ! $request->EmployeeName) {
+            $request->EmployeeName = $employee->name;
+        }
+
         $attendance = Attendance::updateOrCreate(
             [
                 'employee_id' => $request->EmployeeId,
@@ -204,6 +210,77 @@ class AttendanceController extends Controller
     public function adminSummaryPage(): Response
     {
         return Inertia::render('admin/attendance/Summary');
+    }
+
+    /**
+     * Unified API: fetch attendance for a specific employee (by ID or code).
+     * Handles permission checks: employees can only view their own, managers/admins can view anyone.
+     */
+    public function getAttendance(Request $request, string $employeeId): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year' => ['nullable', 'integer'],
+        ]);
+
+        // Find employee by ID or code
+        $employee = Employee::where('id', $employeeId)
+            ->orWhere('code', $employeeId)
+            ->first();
+
+        if (! $employee || ! $employee->code) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee not found.',
+            ], 404);
+        }
+
+        // Permission check: allow if user is admin/manager/hr or viewing their own attendance
+        $canView = $user->hasRole(['admin', 'manager', 'hr']) ||
+            ($user->employee && $user->employee->code === $employee->code);
+
+        if (! $canView) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You do not have permission to view this attendance record.',
+            ], 403);
+        }
+
+        $month = $validated['month'] ?? (int) date('m');
+        $year = $validated['year'] ?? (int) date('Y');
+
+        $records = Attendance::where('employee_id', $employee->code)
+            ->whereMonth('attendance_date', $month)
+            ->whereYear('attendance_date', $year)
+            ->orderBy('attendance_date')
+            ->get();
+
+        $summary = $this->computeSummary($records, $month, $year);
+
+        /** @var WorkingHoursService $workingHoursService */
+        $workingHoursService = app(WorkingHoursService::class);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Attendance fetched successfully.',
+            'data' => $records,
+            'summary' => $summary,
+            'calendar' => [
+                'working_hours' => $workingHoursService->getWorkingHoursConfig(),
+                'holidays' => $workingHoursService->getHolidaysForYear($year),
+            ],
+            'month' => $month,
+            'year' => $year,
+        ]);
     }
 
     /**

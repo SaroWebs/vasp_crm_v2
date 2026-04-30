@@ -125,6 +125,17 @@ class EmployeeController extends Controller
             'isSuperAdmin' => $user->isSuperAdmin(),
         ]);
     }
+    public function getList(Request $request)
+    {
+        $query = Employee::with([
+            'department',
+            'user'
+        ]);
+
+        $employees = $query->orderBy('name')->get();
+
+        return response()->json($employees,200);
+    }
 
     /**
      * Show the form for creating a new employee

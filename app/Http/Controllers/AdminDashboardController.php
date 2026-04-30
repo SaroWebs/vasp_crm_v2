@@ -51,7 +51,20 @@ class AdminDashboardController extends Controller
         $employeeProgressResponse = $employeeProgressController->getEmployeeProgressData($request);
         $employeeProgressData = $employeeProgressResponse->getData();
 
+        // if user role includes 'admin' or 'super-admin', show admin dashboard,
+        // else if user role includes 'manager', show manager dashboard,
+        // else show employee dashboard
+
+        $dashboardType = 'employee';
+
+        if ($user->hasRole('admin') || $user->hasRole('super-admin') || $user->hasRole('manager')) {
+            $dashboardType = 'admin';
+        } elseif ($user->hasRole('hr')) {
+            $dashboardType = 'manager';
+        }
+
         return Inertia::render('dashboard', [
+            'dashboard_type' => $dashboardType,
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'recentTasks' => $recentTasks,

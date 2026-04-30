@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { LogIn, LogOut, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Button, Switch, Tooltip, Alert } from '@mantine/core';
+import { Fingerprint, Info, CheckCircle2, XCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface PunchWidgetProps {
@@ -10,22 +9,23 @@ interface PunchWidgetProps {
 
 export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
     const [loading, setLoading] = useState(false);
+    const [isRemote, setIsRemote] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-    const handlePunch = async (mode: 'office' | 'remote' = 'office') => {
+    useEffect(() => {
+        if (!message) return;
+        const timer = setTimeout(() => setMessage(null), 4000);
+        return () => clearTimeout(timer);
+    }, [message]);
+
+    const handlePunch = async () => {
         setLoading(true);
         setMessage(null);
-
         try {
             const response = await axios.post('/api/my/attendance/punch', {
-                mode,
+                mode: isRemote ? 'remote' : 'office',
             });
-
-            setMessage({
-                type: 'success',
-                text: response.data.message,
-            });
-
+            setMessage({ type: 'success', text: response.data.message });
             onPunchSuccess?.();
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };
@@ -39,52 +39,51 @@ export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
     };
 
     return (
-        <Card className="border-none shadow-sm">
-            <CardContent className="flex flex-col items-center gap-4 p-6">
-                <div className="flex gap-3">
-                    <Button
-                        onClick={() => handlePunch('office')}
-                        disabled={loading}
-                        className="gap-2"
-                        size="lg"
-                    >
-                        {loading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <LogIn className="h-4 w-4" />
-                        )}
-                        Punch (Office)
-                    </Button>
-                    <Button
-                        onClick={() => handlePunch('remote')}
-                        disabled={loading}
-                        variant="outline"
-                        className="gap-2"
-                        size="lg"
-                    >
-                        {loading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <LogOut className="h-4 w-4" />
-                        )}
-                        Punch (Remote)
-                    </Button>
-                </div>
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+                <Button
+                    onClick={handlePunch}
+                    loading={loading}
+                    leftSection={<Fingerprint size={16} />}
+                    size="md"
+                >
+                    Punch
+                </Button>
 
-                {message && (
-                    <p
-                        className={`text-sm ${
-                            message.type === 'success' ? 'text-green-600' : 'text-red-600'
-                        }`}
+                <Switch
+                    checked={isRemote}
+                    onChange={(e) => setIsRemote(e.currentTarget.checked)}
+                    label="Remote"
+                />
+
+                <Tooltip
+                    label={
+                        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                            First punch = <strong>Punch In</strong>.<br />
+                            Second punch = <strong>Punch Out</strong>.<br />
+                            Toggle <em>Remote</em> if working from home.
+                        </div>
+                    }
+                    withArrow
+                    multiline
+                    w={200}
+                >
+                    <Info size={16} style={{ color: 'var(--mantine-color-dimmed)', cursor: 'pointer' }} />
+                </Tooltip>
+            </div>
+
+            {message && (
+                <div className="absolute top-4 right-4">
+                    <Alert
+                        color={message.type === 'success' ? 'green' : 'red'}
+                        icon={message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                        withCloseButton
+                        onClose={() => setMessage(null)}
                     >
                         {message.text}
-                    </p>
-                )}
-
-                <p className="text-xs text-muted-foreground text-center">
-                    Click to record your attendance. First click = Punch In, second click = Punch Out.
-                </p>
-            </CardContent>
-        </Card>
+                    </Alert>
+                </div>
+            )}
+        </div>
     );
 }

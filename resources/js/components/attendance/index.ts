@@ -4,3 +4,5 @@ export { DayCell, type DayStatus } from './DayCell';
 export { AttendanceCalendarGrid } from './AttendanceCalendarGrid';
 export { PunchWidget } from './PunchWidget';
 export { AttendanceOverrideModal } from './AttendanceOverrideModal';
+export { EmployeeSelector } from './EmployeeSelector';
+export { AttendanceCalendar } from './AttendanceCalendar';
