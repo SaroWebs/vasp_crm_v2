@@ -373,6 +373,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::get('/attendance/summary', [AttendanceController::class, 'adminSummaryPage'])->name('attendance.summary');
         Route::get('/employee-attendance/{employee}', [AttendanceController::class, 'adminGetEmployeeAttendance'])->name('api.attendance.employee');
         Route::get('/api/attendance/summary', [AttendanceController::class, 'adminGetAllAttendanceSummary'])->name('api.attendance.summary');
+        Route::get('/api/attendance/date', [AttendanceController::class, 'getAttendanceByDate'])->name('api.attendance.byDate');
         Route::post('/api/attendance/{employee}/override', [AttendanceController::class, 'adminOverrideAttendance'])->name('api.attendance.override');
         Route::delete('/api/attendance/{attendance}', [AttendanceController::class, 'adminDeleteAttendance'])->name('api.attendance.delete');
 

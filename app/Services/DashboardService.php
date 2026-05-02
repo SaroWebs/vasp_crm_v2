@@ -8,8 +8,10 @@ use App\Models\Notification;
 use App\Models\Product;
 use App\Models\Task;
 use App\Models\TaskForwarding;
+use App\Models\TaskTimeEntry;
 use App\Models\Ticket;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 
 class DashboardService
 {
@@ -18,23 +20,22 @@ class DashboardService
      */
     public function getDashboardData(User $user): array
     {
-        // Check for super-admin or admin roles
+        // Admin roles: full system access
         if ($user->hasRole(['super-admin', 'admin'])) {
             return $this->getAdminDashboard($user);
         }
 
-        // Check for manager, team-lead roles
-        if ($user->hasRole(['manager', 'team-lead'])) {
+        // Managerial roles: department/team oversight
+        if ($user->hasRole(['manager', 'team-lead', 'hr'])) {
             return $this->getManagerDashboard($user);
         }
 
-        // Check for developer, support-agent roles - treat as employee for now
-        // These roles can see their own tasks
-        if ($user->hasRole(['developer', 'support-agent'])) {
+        // Employee roles: individual contributors
+        if ($user->hasRole(['developer', 'support-agent', 'employee', 'sales'])) {
             return $this->getEmployeeDashboard($user);
         }
 
-        // Default to employee dashboard
+        // Default fallback to employee dashboard
         return $this->getEmployeeDashboard($user);
     }
 
@@ -89,8 +90,10 @@ class DashboardService
             'forwardedTasks' => $this->getForwardedTasks($user),
             'upcomingDeadlines' => $this->getUpcomingDeadlines($user),
             'recentTimeEntries' => $this->getRecentTimeEntries($user),
+            'timeSpentChartData' => $this->getTimeSpentChartData($user),
             'unreadNotifications' => $this->getUnreadNotifications($user),
             'unreadNotificationsList' => $this->getUnreadNotificationsList($user),
+            'recentTickets' => $this->getRecentTickets(),
         ];
     }
 
@@ -107,13 +110,13 @@ class DashboardService
             'total_tickets' => Ticket::count(),
             'total_tasks' => Task::count(),
             'open_tickets' => Ticket::where('status', 'open')->count(),
-            'pending_tasks' => Task::where('status', 'pending')->count(),
-            'completed_tasks_this_month' => Task::where('status', 'completed')
+            'pending_tasks' => Task::where('state', 'Draft')->count(),
+            'completed_tasks_this_month' => Task::where('state', 'Done')
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
             'active_users_today' => User::where('last_login_at', '>=', today())->count(),
             'tickets_created_today' => Ticket::whereDate('created_at', today())->count(),
-            'tasks_completed_today' => Task::where('status', 'completed')
+            'tasks_completed_today' => Task::where('state', 'Done')
                 ->whereDate('updated_at', today())
                 ->count(),
         ];
@@ -132,7 +135,7 @@ class DashboardService
         foreach ($users as $user) {
             if ($user->employee) {
                 $taskIds = $user->assignedTasks()->pluck('tasks.id');
-                $timeEntries = \App\Models\TaskTimeEntry::whereIn('task_id', $taskIds)
+                $timeEntries = TaskTimeEntry::whereIn('task_id', $taskIds)
                     ->whereMonth('created_at', now()->month)
                     ->get();
 
@@ -191,15 +194,15 @@ class DashboardService
         return [
             'total_team_members' => count($userIds),
             'total_department_tasks' => $departmentTasks->count(),
-            'pending_tasks' => $departmentTasks->where('status', 'pending')->count(),
-            'in_progress_tasks' => $departmentTasks->where('status', 'in-progress')->count(),
-            'completed_tasks_this_month' => $departmentTasks->where('status', 'completed')
+            'pending_tasks' => $departmentTasks->where('state', 'Draft')->count(),
+            'in_progress_tasks' => $departmentTasks->where('state', 'InProgress')->count(),
+            'completed_tasks_this_month' => $departmentTasks->where('state', 'Done')
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
-            'tasks_due_today' => $departmentTasks->whereDate('due_date', today())->count(),
-            'tasks_due_this_week' => $departmentTasks->whereBetween('due_date', [now(), now()->addDays(7)])->count(),
-            'overdue_tasks' => $departmentTasks->where('status', '!=', 'completed')
-                ->whereDate('due_date', '<', today())
+            'tasks_due_today' => $departmentTasks->whereDate('due_at', today())->count(),
+            'tasks_due_this_week' => $departmentTasks->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
+            'overdue_tasks' => $departmentTasks->where('state', '!=', 'Done')
+                ->whereDate('due_at', '<', today())
                 ->count(),
         ];
     }
@@ -215,17 +218,17 @@ class DashboardService
 
         return [
             'total_my_tasks' => $myTasks->count(),
-            'pending_tasks' => $myTasks->where('status', 'pending')->count(),
-            'in_progress_tasks' => $myTasks->where('status', 'in-progress')->count(),
-            'waiting_tasks' => $myTasks->where('status', 'waiting')->count(),
-            'completed_tasks' => $myTasks->where('status', 'completed')->count(),
-            'completed_this_month' => $myTasks->where('status', 'completed')
+            'pending_tasks' => $myTasks->where('state', 'Draft')->count(),
+            'in_progress_tasks' => $myTasks->where('state', 'InProgress')->count(),
+            'waiting_tasks' => $myTasks->where('state', 'InReview')->count(),
+            'completed_tasks' => $myTasks->where('state', 'Done')->count(),
+            'completed_this_month' => $myTasks->where('state', 'Done')
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
-            'tasks_due_today' => $myTasks->whereDate('due_date', today())->count(),
-            'tasks_due_this_week' => $myTasks->whereBetween('due_date', [now(), now()->addDays(7)])->count(),
-            'overdue_tasks' => $myTasks->where('status', '!=', 'completed')
-                ->whereDate('due_date', '<', today())
+            'tasks_due_today' => $myTasks->whereDate('due_at', today())->count(),
+            'tasks_due_this_week' => $myTasks->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
+            'overdue_tasks' => $myTasks->where('state', '!=', 'Done')
+                ->whereDate('due_at', '<', today())
                 ->count(),
             'forwarded_tasks_count' => TaskForwarding::where('to_user_id', $user->id)
                 ->where('status', 'pending')
@@ -268,11 +271,11 @@ class DashboardService
                 return [
                     'id' => $task->id,
                     'title' => $task->title,
-                    'status' => $task->status,
+                    'status' => $task->state,
                     'priority' => $task->priority,
                     'department' => $task->assignedDepartment?->name,
                     'assigned_users' => $task->assignedUsers->pluck('name'),
-                    'due_date' => $task->due_date?->toISOString(),
+                    'due_date' => $task->due_at?->toISOString(),
                     'created_at' => $task->created_at->toISOString(),
                 ];
             });
@@ -287,8 +290,8 @@ class DashboardService
             ->withCount([
                 'users',
                 'assignedTasks as pending_tasks_count' => function ($query) {
-                    $query->where('status', '!=', 'completed');
-                }
+                    $query->where('state', '!=', 'Done');
+                },
             ])
             ->get()
             ->map(function ($department) {
@@ -299,7 +302,7 @@ class DashboardService
                     'pending_tasks' => $department->pending_tasks_count,
                     'completed_this_month' => $department->assignedTasks()
                         ->whereMonth('updated_at', now()->month)
-                        ->where('status', 'completed')
+                        ->where('state', 'Done')
                         ->count(),
                 ];
             });
@@ -325,30 +328,33 @@ class DashboardService
     private function getTaskStats(): array
     {
         return [
-            'pending' => Task::where('status', 'pending')->count(),
-            'in_progress' => Task::where('status', 'in-progress')->count(),
-            'waiting' => Task::where('status', 'waiting')->count(),
-            'completed' => Task::where('status', 'completed')->count(),
+            'pending' => Task::where('state', 'Draft')->count(),
+            'in_progress' => Task::where('state', 'InProgress')->count(),
+            'waiting' => Task::where('state', 'InReview')->count(),
+            'completed' => Task::where('state', 'Done')->count(),
         ];
     }
 
     /**
-     * Get unread notifications count.
+     * Get unread notifications count for a user.
      */
     private function getUnreadNotifications(User $user): int
     {
-        return Notification::where('user_id', $user->id)
-            ->where('status', 'unread')
-            ->count();
+        return Notification::getUnreadCountForUser($user->id);
     }
 
     /**
-     * Get unread notifications list.
+     * Get unread notifications list for a user.
      */
     private function getUnreadNotificationsList(User $user)
     {
-        return Notification::where('user_id', $user->id)
-            ->where('status', 'unread')
+        return Notification::whereHas('users', function ($query) use ($user) {
+            $query->where('user_id', $user->id)
+                ->where('users_notifications.read', false);
+        })
+            ->with(['users' => function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            }])
             ->latest()
             ->limit(10)
             ->get()
@@ -379,7 +385,7 @@ class DashboardService
     private function getDepartmentTasks(array $departmentIds)
     {
         return Task::whereIn('assigned_department_id', $departmentIds)
-            ->where('status', '!=', 'completed')
+            ->where('state', '!=', 'Done')
             ->with(['assignedDepartment', 'assignedUsers'])
             ->latest('created_at')
             ->limit(10)
@@ -388,11 +394,11 @@ class DashboardService
                 return [
                     'id' => $task->id,
                     'title' => $task->title,
-                    'status' => $task->status,
+                    'status' => $task->state,
                     'priority' => $task->priority,
                     'department' => $task->assignedDepartment?->name,
                     'assigned_users' => $task->assignedUsers->pluck('name'),
-                    'due_date' => $task->due_date?->toISOString(),
+                    'due_date' => $task->due_at?->toISOString(),
                 ];
             });
     }
@@ -411,7 +417,7 @@ class DashboardService
             ->toArray();
 
         $tasksByUser = Task::whereIn('assigned_department_id', $departmentIds)
-            ->where('status', '!=', 'completed')
+            ->where('state', '!=', 'Done')
             ->get()
             ->groupBy(function ($task) {
                 return $task->assignedUsers->pluck('id')->first();
@@ -448,11 +454,11 @@ class DashboardService
                 return [
                     'id' => $task->id,
                     'title' => $task->title,
-                    'status' => $task->status,
+                    'status' => $task->state,
                     'priority' => $task->priority,
                     'department' => $task->assignedDepartment?->name,
                     'assigned_users' => $task->assignedUsers->pluck('name'),
-                    'due_date' => $task->due_date?->toISOString(),
+                    'due_date' => $task->due_at?->toISOString(),
                 ];
             });
     }
@@ -467,8 +473,8 @@ class DashboardService
             ->withCount([
                 'users',
                 'assignedTasks as pending_tasks_count' => function ($query) {
-                    $query->where('status', '!=', 'completed');
-                }
+                    $query->where('state', '!=', 'Done');
+                },
             ])
             ->get()
             ->map(function ($department) {
@@ -479,7 +485,7 @@ class DashboardService
                     'pending_tasks' => $department->pending_tasks_count,
                     'completed_this_month' => $department->assignedTasks()
                         ->whereMonth('updated_at', now()->month)
-                        ->where('status', 'completed')
+                        ->where('state', 'Done')
                         ->count(),
                 ];
             });
@@ -491,8 +497,8 @@ class DashboardService
     private function getMyTasks(User $user)
     {
         return Task::whereHas('assignedUsers', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
+            $query->where('user_id', $user->id);
+        })
             ->with(['assignedDepartment'])
             ->latest('created_at')
             ->limit(10)
@@ -501,10 +507,10 @@ class DashboardService
                 return [
                     'id' => $task->id,
                     'title' => $task->title,
-                    'status' => $task->status,
+                    'status' => $task->state,
                     'priority' => $task->priority,
                     'department' => $task->assignedDepartment?->name,
-                    'due_date' => $task->due_date?->toISOString(),
+                    'due_date' => $task->due_at?->toISOString(),
                     'created_at' => $task->created_at->toISOString(),
                 ];
             });
@@ -520,10 +526,10 @@ class DashboardService
         });
 
         return [
-            'pending' => $myTasks->where('status', 'pending')->count(),
-            'in_progress' => $myTasks->where('status', 'in-progress')->count(),
-            'waiting' => $myTasks->where('status', 'waiting')->count(),
-            'completed' => $myTasks->where('status', 'completed')->count(),
+            'pending' => $myTasks->where('state', 'Draft')->count(),
+            'in_progress' => $myTasks->where('state', 'InProgress')->count(),
+            'waiting' => $myTasks->where('state', 'InReview')->count(),
+            'completed' => $myTasks->where('state', 'Done')->count(),
         ];
     }
 
@@ -557,22 +563,22 @@ class DashboardService
     private function getUpcomingDeadlines(User $user)
     {
         return Task::whereHas('assignedUsers', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
-            ->where('status', '!=', 'completed')
-            ->whereDate('due_date', '>=', today())
-            ->whereDate('due_date', '<=', now()->addDays(7))
-            ->orderBy('due_date')
+            $query->where('user_id', $user->id);
+        })
+            ->where('state', '!=', 'Done')
+            ->whereDate('due_at', '>=', today())
+            ->whereDate('due_at', '<=', now()->addDays(7))
+            ->orderBy('due_at')
             ->limit(10)
             ->get()
             ->map(function ($task) {
                 return [
                     'id' => $task->id,
                     'title' => $task->title,
-                    'status' => $task->status,
+                    'status' => $task->state,
                     'priority' => $task->priority,
-                    'due_date' => $task->due_date?->toISOString(),
-                    'is_overdue' => $task->due_date?->isPast() ?? false,
+                    'due_date' => $task->due_at?->toISOString(),
+                    'is_overdue' => $task->due_at?->isPast() ?? false,
                 ];
             });
     }
@@ -584,7 +590,7 @@ class DashboardService
     {
         $taskIds = $user->assignedTasks()->pluck('tasks.id');
 
-        return \App\Models\TaskTimeEntry::whereIn('task_id', $taskIds)
+        return TaskTimeEntry::whereIn('task_id', $taskIds)
             ->whereDate('created_at', today())
             ->with(['task'])
             ->latest()
@@ -599,5 +605,57 @@ class DashboardService
                     'created_at' => $entry->created_at->toISOString(),
                 ];
             });
+    }
+
+    /**
+     * Get daily time spent chart data for the current user.
+     */
+    private function getTimeSpentChartData(User $user): array
+    {
+        $rangeStart = Carbon::now()->subDays(29)->startOfDay();
+        $rangeEnd = Carbon::now()->endOfDay();
+
+        $timeEntries = TaskTimeEntry::where('user_id', $user->id)
+            ->where(function ($query) use ($rangeStart, $rangeEnd) {
+                $query->whereBetween('start_time', [$rangeStart, $rangeEnd])
+                    ->orWhereBetween('end_time', [$rangeStart, $rangeEnd])
+                    ->orWhere(function ($query) use ($rangeStart, $rangeEnd) {
+                        $query->where('start_time', '<', $rangeStart)
+                            ->where('end_time', '>', $rangeEnd);
+                    });
+            })
+            ->get();
+
+        return [
+            'weekly' => $this->buildTimeSpentChartSeries($timeEntries, 7),
+            'monthly' => $this->buildTimeSpentChartSeries($timeEntries, 30),
+        ];
+    }
+
+    private function buildTimeSpentChartSeries($timeEntries, int $days): array
+    {
+        $series = [];
+
+        for ($day = $days - 1; $day >= 0; $day--) {
+            $date = Carbon::now()->subDays($day)->startOfDay();
+            $series[] = [
+                'label' => $days === 7 ? $date->format('D') : $date->format('M j'),
+                'date' => $date->toDateString(),
+                'hours' => round($this->calculateTotalHoursForDate($timeEntries, $date->toDateString()), 2),
+            ];
+        }
+
+        return $series;
+    }
+
+    private function calculateTotalHoursForDate($timeEntries, string $date): float
+    {
+        $totalSeconds = 0;
+
+        foreach ($timeEntries as $entry) {
+            $totalSeconds += $entry->calculateDurationForDate($date, Carbon::parse($date)->endOfDay());
+        }
+
+        return $totalSeconds / 3600;
     }
 }

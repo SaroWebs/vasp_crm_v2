@@ -214,7 +214,10 @@ const footerNavItems: NavItem[] = [];
 
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
+    console.log(auth);
+    
     const userRoles = auth?.user?.roles?.map((role: { slug: string }) => role.slug) || [];
+    
     const isAdminUser = userRoles.includes('admin') || userRoles.includes('super-admin');
     const menuAccess = auth?.menu_access || {};
     const menuAccessConfigured = Boolean(auth?.menu_access_configured) && !isAdminUser;

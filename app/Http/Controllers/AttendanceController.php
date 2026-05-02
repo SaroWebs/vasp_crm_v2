@@ -416,6 +416,40 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Admin API: get all attendance records for a specific date.
+     * Returns simple list of attendance records (including those with missing punch_out).
+     */
+    public function getAttendanceByDate(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => ['required', 'date'],
+        ]);
+
+        $date = Carbon::parse($validated['date'])->toDateString();
+
+        $records = Attendance::where('attendance_date', $date)
+            ->orderBy('attendance_date')
+            ->get();
+            
+        $records->transform(function ($attendance) {
+                if (empty($attendance->employee_name)) {
+                    $employee = Employee::where('code', $attendance->employee_id)->first();
+
+                    if ($employee) {
+                        $attendance->employee_name = $employee->name;
+                    }
+                }
+
+                return $attendance;
+            });
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Attendance records fetched successfully.',
+            'data' => $records,
+        ]);
+    }
+
+    /**
      * Compute summary stats for a collection of attendance records for a given month.
      *
      * @param  Collection<int, Attendance>  $records

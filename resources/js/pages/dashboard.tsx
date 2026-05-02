@@ -1,6 +1,8 @@
+import axios from 'axios';
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
 import TaskTimeline from '@/components/admin/TaskTimeline';
 import { AttendanceCalendar } from '@/components/attendance';
+import Board from '@/components/tasks/Board';
 import NotificationMenu from '@/components/notifications/NotificationMenu';
 import RecentReportSection from '@/components/reports/RecentReportSection';
 import MajorTasks from '@/components/tasks/MajorTasks';
@@ -13,14 +15,17 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import StatCard from '@/components/dashboard/StatCard';
+import ActivityEntryCard from '@/components/dashboard/ActivityEntryCard';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type Task } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowRight,
     Briefcase,
     Building2,
+    Calendar,
     CheckCircle,
     Clock,
     FolderKanban,
@@ -29,6 +34,8 @@ import {
     Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import TimeSpentBarChart from '@/components/dashboard/TimeSpentBarChart';
+import { AttendanceList } from '@/components/attendance/AttendanceList';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -97,6 +104,10 @@ interface DashboardProps {
     forwardedTasks?: any[];
     upcomingDeadlines?: any[];
     recentTimeEntries?: any[];
+    timeSpentChartData?: {
+        weekly: Array<{ label: string; date: string; hours: number }>;
+        monthly: Array<{ label: string; date: string; hours: number }>;
+    };
     unreadNotificationsList?: any[];
 }
 
@@ -104,6 +115,7 @@ export default function Dashboard(props: DashboardProps) {
     const {
         dashboard_type,
         stats,
+        recentTimeEntries,
         recentTickets,
         employees,
         ticketStats,
@@ -111,79 +123,148 @@ export default function Dashboard(props: DashboardProps) {
         userPermissions,
         myDepartmentTasks,
         teamWorkload,
+        departmentStats,
         auth,
         myTasks,
         myTaskStats,
         forwardedTasks,
         upcomingDeadlines,
+        timeSpentChartData,
     } = props;
 
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+    const [boardTasks, setBoardTasks] = useState<Task[]>([]);
+    const [boardLoading, setBoardLoading] = useState(false);
+    const [boardError, setBoardError] = useState<string | null>(null);
+
+    const loadBoardTasks = async (): Promise<void> => {
+        if (!auth?.user?.id) {
+            setBoardTasks([]);
+            return;
+        }
+
+        setBoardLoading(true);
+        setBoardError(null);
+
+        try {
+            const response = await axios.get('/admin/data/tasks', {
+                params: {
+                    assigned_to: auth.user.id,
+                    per_page: 100,
+                    sort_by: 'due_at',
+                    sort_order: 'asc',
+                },
+            });
+
+            const taskData = response.data.tasks?.data ?? response.data.tasks ?? [];
+            setBoardTasks(Array.isArray(taskData) ? taskData : []);
+        } catch (error) {
+            setBoardError('Unable to load your task board.');
+        } finally {
+            setBoardLoading(false);
+        }
+    };
 
     useEffect(() => {
-        if(auth?.user?.employee?.id){
-            setSelectedEmployeeId(String(auth.user.employee.id));
-        }else{
-            setSelectedEmployeeId('all');
+        if (auth?.user?.id) {
+            loadBoardTasks();
         }
-    }, []);
+    }, [auth?.user?.id]);
 
+    const isOverdueTask = (task: any): boolean => {
+        const dueDateString = task.due_date ?? task.due_at;
+        const completed = ['Done', 'Cancelled', 'Rejected'].includes(task.status ?? task.state);
+        if (!dueDateString || completed) {
+            return false;
+        }
+
+        const dueDate = new Date(dueDateString);
+        return dueDate < new Date() && !['Done', 'Cancelled', 'Rejected'].includes(task.status ?? task.state);
+    };
+
+    const pendingTasks = (myTasks ?? [])
+        .filter((task) => {
+            const isPendingState = ['Draft', 'Assigned'].includes(task.status ?? task.state);
+            return isPendingState;
+        })
+        .sort((a, b) => {
+            const aOverdue = isOverdueTask(a) ? 0 : 1;
+            const bOverdue = isOverdueTask(b) ? 0 : 1;
+
+            if (aOverdue !== bOverdue) {
+                return aOverdue - bOverdue;
+            }
+
+            const priorityRank: Record<string, number> = {
+                P1: 0,
+                P2: 1,
+                P3: 2,
+                P4: 3,
+            };
+
+            return (priorityRank[a.priority] ?? 4) - (priorityRank[b.priority] ?? 4);
+        })
+        .slice(0, 6);
 
     const renderAdminDashboard = () => (
         <>
             {/* Charts and Recent Activity */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <RecentReportSection />
+                <div className="lg:col-span-4 space-y-4">
+                    {/* Recent Tickets */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Recent Tickets</CardTitle>
+                            <CardDescription>
+                                Latest ticket submissions
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {recentTickets?.map((ticket) => (
+                                <Link
+                                    key={ticket.id}
+                                    href={`/admin/tickets/${ticket.id}`}
+                                    className="flex cursor-pointer items-center justify-between space-x-4"
+                                >
+                                    <div className="flex w-full items-center justify-between pb-4">
+                                        <div className="flex-1 space-y-1">
+                                            <p className="text-sm leading-none font-medium">
+                                                {ticket.title}
+                                            </p>
 
-                {/* Recent Tickets */}
-                <Card className="col-span-3">
-                    <CardHeader>
-                        <CardTitle>Recent Tickets</CardTitle>
-                        <CardDescription>
-                            Latest ticket submissions
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {recentTickets?.map((ticket) => (
-                            <Link
-                                key={ticket.id}
-                                href={`/admin/tickets/${ticket.id}`}
-                                className="flex cursor-pointer items-center justify-between space-x-4"
-                            >
-                                <div className="flex w-full items-center justify-between pb-4">
-                                    <div className="flex-1 space-y-1">
-                                        <p className="text-sm leading-none font-medium">
-                                            {ticket.title}
-                                        </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {ticket.client?.name} •{' '}
+                                                {ticket.ticket_number}
+                                            </p>
+                                        </div>
 
-                                        <p className="text-sm text-muted-foreground">
-                                            {ticket.client?.name} •{' '}
-                                            {ticket.ticket_number}
-                                        </p>
+                                        <Badge
+                                            variant={
+                                                ticket.status === 'open'
+                                                    ? 'destructive'
+                                                    : ticket.status === 'approved'
+                                                        ? 'default'
+                                                        : 'secondary'
+                                            }
+                                            className="h-6"
+                                        >
+                                            {ticket.status}
+                                        </Badge>
                                     </div>
-
-                                    <Badge
-                                        variant={
-                                            ticket.status === 'open'
-                                                ? 'destructive'
-                                                : ticket.status === 'approved'
-                                                  ? 'default'
-                                                  : 'secondary'
-                                        }
-                                        className="h-6"
-                                    >
-                                        {ticket.status}
-                                    </Badge>
-                                </div>
-                            </Link>
-                        ))}
-                    </CardContent>
-                </Card>
+                                </Link>
+                            ))}
+                        </CardContent>
+                    </Card>
+                    <RecentReportSection />
+                </div>
+                <div className="lg:col-span-3">
+                    <AttendanceList date={new Date()} />
+                </div>
             </div>
 
             <MajorTasks employees={employees || []} />
-            
-            <TaskTimeline/>
+
+            <TaskTimeline />
 
             {/* Employee Progress Section */}
             <Card>
@@ -229,12 +310,7 @@ export default function Dashboard(props: DashboardProps) {
                                 employeeId={Number(selectedEmployeeId)}
                             />
                         ) : (
-                            <div className="py-8 text-center text-muted-foreground">
-                                <p>
-                                    Select an employee or all employees to view
-                                    task progress
-                                </p>
-                            </div>
+                            <EmployeeTaskProgress employeeId="all" />
                         )}
                     </div>
                 </CardContent>
@@ -301,61 +377,113 @@ export default function Dashboard(props: DashboardProps) {
         <>
             {/* Manager Stats Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <StatCard
+                    title="Team Members"
+                    value={stats?.total_team_members || 0}
+                    icon={Users}
+                />
+                <StatCard
+                    title="Department Tasks"
+                    value={stats?.total_department_tasks || 0}
+                    icon={FolderKanban}
+                />
+                <StatCard
+                    title="Tasks Due This Week"
+                    value={stats?.tasks_due_this_week || 0}
+                    icon={Clock}
+                    variant={stats?.tasks_due_this_week && stats.tasks_due_this_week > 0 ? 'warning' : 'default'}
+                />
+                <StatCard
+                    title="Overdue Tasks"
+                    value={stats?.overdue_tasks || 0}
+                    icon={AlertCircle}
+                    variant="destructive"
+                />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Team Members
-                        </CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
+                    <CardHeader>
+                        <CardTitle>Department Tasks</CardTitle>
+                        <CardDescription>
+                            Active tasks in your departments
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.total_team_members || 0}
+                        <div className="space-y-4">
+                            {myDepartmentTasks?.map((task) => (
+                                <Link
+                                    key={task.id}
+                                    href={`/admin/tasks/${task.id}`}
+                                    className="flex items-center justify-between rounded-lg p-2 hover:bg-muted"
+                                >
+                                    <div>
+                                        <p className="font-medium">{task.title}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {task.department} • Due:{' '}
+                                            {task.due_date
+                                                ? new Date(task.due_date).toLocaleDateString()
+                                                : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline">
+                                            {task.status}
+                                        </Badge>
+                                        <Badge
+                                            variant={
+                                                task.priority === 'high'
+                                                    ? 'destructive'
+                                                    : 'secondary'
+                                            }
+                                        >
+                                            {task.priority}
+                                        </Badge>
+                                    </div>
+                                </Link>
+                            ))}
                         </div>
                     </CardContent>
                 </Card>
+
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Department Tasks
-                        </CardTitle>
-                        <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                    <CardHeader>
+                        <CardTitle>Department Summary</CardTitle>
+                        <CardDescription>
+                            Task progress across your departments
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.total_department_tasks || 0}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Tasks Due This Week
-                        </CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {stats?.tasks_due_this_week || 0}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Overdue Tasks
-                        </CardTitle>
-                        <AlertCircle className="h-4 w-4 text-destructive" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-destructive">
-                            {stats?.overdue_tasks || 0}
+                        <div className="space-y-3">
+                            {departmentStats?.map((department) => (
+                                <div
+                                    key={department.id}
+                                    className="rounded-lg border border-border p-3"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-medium">
+                                            {department.name}
+                                        </span>
+                                        <Badge variant="outline">
+                                            {department.user_count} users
+                                        </Badge>
+                                    </div>
+                                    <div className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
+                                        <span>
+                                            Pending tasks: {department.pending_tasks}
+                                        </span>
+                                        <span>
+                                            Completed this month:{' '}
+                                            {department.completed_this_month}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Team Workload */}
             <Card>
                 <CardHeader>
                     <CardTitle>Team Workload</CardTitle>
@@ -386,8 +514,8 @@ export default function Dashboard(props: DashboardProps) {
                                             user.status === 'overloaded'
                                                 ? 'destructive'
                                                 : user.status === 'busy'
-                                                  ? 'default'
-                                                  : 'secondary'
+                                                    ? 'default'
+                                                    : 'secondary'
                                         }
                                     >
                                         {user.task_count} tasks
@@ -402,54 +530,18 @@ export default function Dashboard(props: DashboardProps) {
                 </CardContent>
             </Card>
 
-            {/* Department Tasks */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Department Tasks</CardTitle>
+                    <CardTitle>Team Activity Timeline</CardTitle>
                     <CardDescription>
-                        Active tasks in your departments
+                        See recent task flow and status updates for your team
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        {myDepartmentTasks?.map((task) => (
-                            <Link
-                                key={task.id}
-                                href={`/admin/tasks/${task.id}`}
-                                className="flex items-center justify-between rounded-lg p-2 hover:bg-muted"
-                            >
-                                <div>
-                                    <p className="font-medium">{task.title}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {task.department} • Due:{' '}
-                                        {task.due_date
-                                            ? new Date(
-                                                  task.due_date,
-                                              ).toLocaleDateString()
-                                            : 'N/A'}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="outline">
-                                        {task.status}
-                                    </Badge>
-                                    <Badge
-                                        variant={
-                                            task.priority === 'high'
-                                                ? 'destructive'
-                                                : 'secondary'
-                                        }
-                                    >
-                                        {task.priority}
-                                    </Badge>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
+                    <TaskTimeline />
                 </CardContent>
             </Card>
 
-            {/* Quick Actions */}
             <Card>
                 <CardHeader>
                     <CardTitle>Quick Actions</CardTitle>
@@ -488,62 +580,238 @@ export default function Dashboard(props: DashboardProps) {
 
     const renderEmployeeDashboard = () => (
         <>
-            {/* Charts and Recent Activity */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <div className="col-span-3">
-                    <AttendanceCalendar
-                        auth={props.auth}
-                    />
-                </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+                <StatCard
+                    title="Total Tasks"
+                    value={stats?.total_my_tasks || 0}
+                    icon={Briefcase}
+                />
+                <StatCard
+                    title="Pending"
+                    value={stats?.pending_tasks || 0}
+                    icon={AlertCircle}
+                    variant="warning"
+                />
+                <StatCard
+                    title="In Progress"
+                    value={stats?.in_progress_tasks || 0}
+                    icon={Clock}
+                />
+                <StatCard
+                    title="Due Today"
+                    value={stats?.tasks_due_today || 0}
+                    icon={Calendar}
+                    variant={stats?.tasks_due_today && stats.tasks_due_today > 0 ? 'destructive' : 'default'}
+                />
+                <StatCard
+                    title="Overdue"
+                    value={stats?.overdue_tasks || 0}
+                    icon={AlertCircle}
+                    variant="destructive"
+                />
+                <StatCard
+                    title="Completed This Month"
+                    value={stats?.completed_this_month || 0}
+                    icon={CheckCircle}
+                    variant="success"
+                />
+            </div>
 
-                {/* Recent Tickets */}
-                <Card className="col-span-4">
+            <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+                <Card>
                     <CardHeader>
-                        <CardTitle>History</CardTitle>
+                        <CardTitle>Important / Pending Tasks</CardTitle>
                         <CardDescription>
-                            Latest ticket submissions
+                            Your highest priority tasks that need attention first
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {recentTickets?.map((ticket) => (
-                            <Link
-                                key={ticket.id}
-                                href={`/admin/tickets/${ticket.id}`}
-                                className="flex cursor-pointer items-center justify-between space-x-4"
-                            >
-                                <div className="flex w-full items-center justify-between pb-4">
-                                    <div className="flex-1 space-y-1">
-                                        <p className="text-sm leading-none font-medium">
-                                            {ticket.title}
-                                        </p>
+                        {pendingTasks.length ? (
+                            pendingTasks.map((task) => {
+                                const overdue = isOverdueTask(task);
 
+                                return (
+                                    <div
+                                        key={task.id}
+                                        className={`rounded-lg border p-4 ${overdue ? 'border-destructive/30 bg-destructive/5' : 'border-border hover:bg-muted'}`}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="font-medium">{task.title}</p>
+                                            <Badge variant={overdue ? 'destructive' : 'outline'}>
+                                                {task.status ?? task.state}
+                                            </Badge>
+                                        </div>
                                         <p className="text-sm text-muted-foreground">
-                                            {ticket.client?.name} •{' '}
-                                            {ticket.ticket_number}
+                                            Due: {(task.due_date ?? task.due_at)
+                                                ? new Date(task.due_date ?? task.due_at).toLocaleDateString()
+                                                : 'N/A'}
                                         </p>
                                     </div>
+                                );
+                            })
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                No pending tasks assigned to you.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
 
-                                    <Badge
-                                        variant={
-                                            ticket.status === 'open'
-                                                ? 'destructive'
-                                                : ticket.status === 'approved'
-                                                  ? 'default'
-                                                  : 'secondary'
-                                        }
-                                        className="h-6"
-                                    >
-                                        {ticket.status}
-                                    </Badge>
-                                </div>
-                            </Link>
-                        ))}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Attendance Calendar</CardTitle>
+                        <CardDescription>
+                            Your attendance summary for the current period
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <AttendanceCalendar auth={props.auth} />
                     </CardContent>
                 </Card>
             </div>
-            
-            <TaskTimeline/>
 
+            <Card>
+                <CardHeader>
+                    <CardTitle>Task Board</CardTitle>
+                    <CardDescription>
+                        Drag tasks between statuses and keep your work flowing.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {boardError ? (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                            {boardError}
+                        </div>
+                    ) : boardLoading ? (
+                        <div className="py-8 text-center text-muted-foreground">
+                            Loading task board...
+                        </div>
+                    ) : (
+                        <Board tasks={boardTasks} loadTasks={loadBoardTasks} />
+                    )}
+                </CardContent>
+            </Card>
+
+            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Daily Time Spent</CardTitle>
+                        <CardDescription>
+                            Track your daily time spent over the last week or month.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <TimeSpentBarChart data={timeSpentChartData} />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Employee Activities</CardTitle>
+                        <CardDescription>
+                            Recent time entries and activity history for your work.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {recentTimeEntries?.length ? (
+                                recentTimeEntries.map((entry) => (
+                                    <ActivityEntryCard key={entry.id} entry={entry} />
+                                ))
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    No recent activity recorded today.
+                                </p>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Workload Matrix</CardTitle>
+                    <CardDescription>
+                        View the full workload matrix on the dedicated page.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col gap-3">
+                        <p className="text-sm text-muted-foreground">
+                            The workload matrix provides an overview of assignments and capacity for your team.
+                        </p>
+                        <Link href="/admin/workload-matrix">
+                            <Button variant="outline">
+                                View Workload Matrix
+                            </Button>
+                        </Link>
+                    </div>
+                </CardContent>
+            </Card>
+
+
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Forwarded Tasks</CardTitle>
+                        <CardDescription>
+                            Tasks that were forwarded to you
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {forwardedTasks?.length ? (
+                                forwardedTasks.map((forwarded) => (
+                                    <div key={forwarded.id} className="rounded-lg border border-border p-3">
+                                        <p className="font-medium">{forwarded.task_title}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            From {forwarded.from_user} • {forwarded.from_department}
+                                        </p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    No forwarded tasks pending.
+                                </p>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>My Reports</CardTitle>
+                        <CardDescription>
+                            Access your daily reports and summaries
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                                View your daily report history and submit new reports from the report center.
+                            </p>
+                            <Link href="/admin/reports">
+                                <Button variant="outline" size="sm">
+                                    View Reports
+                                </Button>
+                            </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Task Timeline</CardTitle>
+                    <CardDescription>
+                        Activity and status changes for your assigned tasks
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <TaskTimeline />
+                </CardContent>
+            </Card>
         </>
     );
 
@@ -600,90 +868,6 @@ export default function Dashboard(props: DashboardProps) {
                     </div>
                     <NotificationMenu />
                 </div>
-
-                {/* Stats Grid for Admin */}
-                {dashboard_type === 'admin' && stats && (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
-                                    Total Users
-                                </CardTitle>
-                                <Users className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.total_users}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
-                                    Departments
-                                </CardTitle>
-                                <Building2 className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.total_departments}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
-                                    Open Tickets
-                                </CardTitle>
-                                <Ticket className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.open_tickets}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
-                                    Pending Tasks
-                                </CardTitle>
-                                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.pending_tasks}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
-                                    Active Today
-                                </CardTitle>
-                                <UserCheck className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.active_users_today}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
-                                    Completed Today
-                                </CardTitle>
-                                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.tasks_completed_today}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
 
                 {/* Render dashboard based on type */}
                 {renderDashboard()}

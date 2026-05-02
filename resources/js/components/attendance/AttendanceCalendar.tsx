@@ -92,7 +92,7 @@ function calcDuration(punchIn: string | null, punchOut: string | null) {
     return `${hours}h ${mins}m`;
 }
 
-function DayDetailPanel({ date, records,close }: { date: string; records: AttendanceRecord[], close?: () => void }) {
+function DayDetailPanel({ date, records, close }: { date: string; records: AttendanceRecord[], close?: () => void }) {
     const formatted = new Date(date).toLocaleDateString('en-IN', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
@@ -217,7 +217,6 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
         if (!Array.isArray(roles)) {
             return [];
         }
-
         return roles
             .map((role: any) => {
                 if (!role) return '';
@@ -231,7 +230,22 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
         () => userRoles.some((r: string) => ['super-admin', 'admin', 'manager', 'hr'].includes(r)),
         [userRoles]
     );
-    const isOwnRecord = useMemo(() => employee || employeeId === employee?.id, [employeeId, employee]);
+
+    const isOwnRecord = useMemo(() => {
+        if (!employee) return false;
+        // If an employeeId was passed as prop, check if it matches our employee id
+        if (employeeId) {
+            return employeeId === employee?.id;
+        }
+
+        // If we're a manager/admin viewing without an explicit employeeId, it's not "our own"
+        if (canManageAttendance) {
+            return false;
+        }
+
+        // For regular employees, if no employeeId is specified, it's their own record
+        return true;
+    }, [employeeId, employee?.id, canManageAttendance]);
 
     const [month, setMonth] = useState(today.getMonth() + 1);
     const [year, setYear] = useState(today.getFullYear());
@@ -359,7 +373,7 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
             </Card>
 
             {selectedDate && (
-                <DayDetailPanel date={selectedDate} records={punchesForDate} close={()=>setSelectedDate(null)} />
+                <DayDetailPanel date={selectedDate} records={punchesForDate} close={() => setSelectedDate(null)} />
             )}
         </div>
     );

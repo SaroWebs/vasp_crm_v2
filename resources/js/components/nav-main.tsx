@@ -20,7 +20,7 @@ export function NavMain({
 }) {
     const page = usePage();
     const { unreadCount } = useNotifications();
-
+    
     const renderNavItem = (item: NavItem) => (
         <SidebarMenuItem key={item.title}>
             <SidebarMenuButton

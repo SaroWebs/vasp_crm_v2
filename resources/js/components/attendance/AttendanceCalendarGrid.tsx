@@ -120,12 +120,12 @@ function getDayStatus(
         return 'absent';
     }
 
-    if (record.punch_in) {
-        const threshold = workingHours.start ?? '09:00:00';
-        if (record.punch_in > threshold) {
-            return 'late';
-        }
-    }
+    // if (record.punch_in) {
+    //     const threshold = workingHours.start ?? '09:00:00';
+    //     if (record.punch_in > threshold) {
+    //         return 'late';
+    //     }
+    // }
 
     return 'present';
 }

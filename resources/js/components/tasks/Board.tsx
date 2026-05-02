@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { DndProvider, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { parseISO, subDays, isAfter } from 'date-fns';
 import { Task } from '@/types';
 import TaskCreateDrawer from './TaskCreateDrawer';
 import TaskCard from './TaskCard';
@@ -111,8 +112,27 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks }) => {
     loadTasks();
   };
 
+  const isRecentlyCompleted = (task: Task) => {
+    if (!task.completed_at) {
+      return false;
+    }
+
+    const completedAt = parseISO(task.completed_at);
+    return isAfter(completedAt, subDays(new Date(), 3));
+  };
+
   const getTasksByStatus = (status: string) => {
     return tasks.filter((task) => task.state === status);
+  };
+
+  const getRecentlyCompletedTasks = (statuses: string[]) => {
+    return tasks
+      .filter((task) => statuses.includes(task.state) && isRecentlyCompleted(task))
+      .sort((a, b) => {
+        const aDate = a.completed_at ? parseISO(a.completed_at).getTime() : 0;
+        const bDate = b.completed_at ? parseISO(b.completed_at).getTime() : 0;
+        return bDate - aDate;
+      });
   };
 
   const handleCreateSuccess = () => {
@@ -154,7 +174,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks }) => {
           <TaskColumn
             key="Completed"
             status="Done"
-            tasks={getTasksByStatus('Done').concat(getTasksByStatus('Cancelled'), getTasksByStatus('Rejected'))}
+            tasks={getRecentlyCompletedTasks(['Done', 'Cancelled', 'Rejected'])}
             moveTask={moveTask}
             onTaskAction={handleTaskAction}
             activeTaskId={activeTaskId}

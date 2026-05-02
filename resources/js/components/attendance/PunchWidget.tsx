@@ -41,21 +41,6 @@ export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
     return (
         <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
-                <Button
-                    onClick={handlePunch}
-                    loading={loading}
-                    leftSection={<Fingerprint size={16} />}
-                    size="md"
-                >
-                    Punch
-                </Button>
-
-                <Switch
-                    checked={isRemote}
-                    onChange={(e) => setIsRemote(e.currentTarget.checked)}
-                    label="Remote"
-                />
-
                 <Tooltip
                     label={
                         <div style={{ fontSize: 12, lineHeight: 1.5 }}>
@@ -68,7 +53,23 @@ export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
                     multiline
                     w={200}
                 >
-                    <Info size={16} style={{ color: 'var(--mantine-color-dimmed)', cursor: 'pointer' }} />
+                    <div className="flex flex-col gap-2">
+
+                        <Switch
+                            checked={isRemote}
+                            onChange={(e) => setIsRemote(e.currentTarget.checked)}
+                            label="Remote"
+                            labelPosition="left"
+                        />
+                        <Button
+                            onClick={handlePunch}
+                            loading={loading}
+                            leftSection={<Fingerprint size={16} />}
+                            size="md"
+                        >
+                            Punch
+                        </Button>
+                    </div>
                 </Tooltip>
             </div>
 
