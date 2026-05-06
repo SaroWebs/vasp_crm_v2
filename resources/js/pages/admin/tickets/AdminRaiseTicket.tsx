@@ -18,8 +18,7 @@ import {
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { router } from '@inertiajs/react';
-import axios from 'axios';
-import { FileText, Plus, Save, Upload } from 'lucide-react';
+import { FileText, Plus, Save, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 interface Client {
@@ -27,41 +26,25 @@ interface Client {
     name: string;
 }
 
-interface OrganizationUser {
-    id: number;
-    name: string;
-    designation?: string | null;
-}
-
 interface FormData {
-    organization_user_id: number | '';
+    client_id: number | '';
     title: string;
     description: string;
     priority: string;
-    category: string;
-    status: string;
-    client_id: number | '';
 }
 
 interface AdminRaiseTicketProps {
     clients: Client[];
 }
 
-export default function AdminRaiseTicket({
-    clients,
-}: AdminRaiseTicketProps) {
+export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const [open, setOpen] = useState(false);
-    const [organizationUsers, setOrganizationUsers] = useState<OrganizationUser[]>([]);
-    const [loadingOrganizationUsers, setLoadingOrganizationUsers] = useState(false);
 
     const [form, setForm] = useState<FormData>({
-        organization_user_id: '',
+        client_id: '',
         title: '',
         description: '',
         priority: 'low',
-        category: 'technical',
-        status: 'open',
-        client_id: '',
     });
 
     const [files, setFiles] = useState<File[]>([]);
@@ -69,35 +52,8 @@ export default function AdminRaiseTicket({
     const dropRef = useRef<HTMLDivElement>(null);
     const [dragActive, setDragActive] = useState(false);
 
-    const handleClientChange = async (clientId: string) => {
-        const id = parseInt(clientId);
-        setForm((prev) => ({
-            ...prev,
-            client_id: id,
-            organization_user_id: '',
-        }));
-        setOrganizationUsers([]);
-
-        if (id) {
-            setLoadingOrganizationUsers(true);
-            try {
-                const response = await axios.get(
-                    `/admin/clients/${id}/organization-users`,
-                );
-                const users = response.data.organization_users ?? [];
-                setOrganizationUsers(users);
-            } catch (error) {
-                console.error('Failed to fetch data', error);
-            } finally {
-                setLoadingOrganizationUsers(false);
-            }
-        }
-    };
-
     const handleChange = (
-        e: React.ChangeEvent<
-            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-        >,
+        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     ) => {
         const { name, value } = e.target;
         setForm((prev) => ({ ...prev, [name]: value }));
@@ -107,33 +63,29 @@ export default function AdminRaiseTicket({
         setForm((prev) => ({ ...prev, [name]: value }));
     };
 
+    const resetForm = () => {
+        setForm({ client_id: '', title: '', description: '', priority: 'low' });
+        setFiles([]);
+    };
+
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
         const formData = new FormData();
-
-        Object.entries(form).forEach(([key, value]) => {
-            formData.append(key, value.toString());
-        });
+        formData.append('client_id', form.client_id.toString());
+        formData.append('title', form.title);
+        formData.append('description', form.description);
+        formData.append('priority', form.priority);
 
         files.forEach((file) => {
-            formData.append(`attachments[]`, file);
+            formData.append('attachments[]', file);
         });
 
         router.post('/admin/tickets', formData, {
             forceFormData: true,
             onSuccess: () => {
                 setOpen(false);
-                setForm({
-                    organization_user_id: '',
-                    title: '',
-                    description: '',
-                    priority: 'low',
-                    category: 'technical',
-                    status: 'open',
-                    client_id: '',
-                });
-                setFiles([]);
+                resetForm();
             },
         });
     };
@@ -146,33 +98,32 @@ export default function AdminRaiseTicket({
         if (e.target.files) {
             const selected = Array.from(e.target.files);
             setFiles((prev) => [...prev, ...selected]);
+            // Reset input so same file can be re-selected if removed
+            e.target.value = '';
         }
+    };
+
+    const handleRemoveFile = (index: number) => {
+        setFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
         setDragActive(false);
-
         if (e.dataTransfer.files) {
-            const droppedFiles = Array.from(e.dataTransfer.files);
-            setFiles((prev) => [...prev, ...droppedFiles]);
+            setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
         }
     };
 
     const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
-
-        if (e.type === 'dragenter' || e.type === 'dragover') {
-            setDragActive(true);
-        } else if (e.type === 'dragleave') {
-            setDragActive(false);
-        }
+        setDragActive(e.type === 'dragenter' || e.type === 'dragover');
     };
 
     return (
-        <Sheet open={open} onOpenChange={setOpen}>
+        <Sheet open={open} onOpenChange={(val) => { setOpen(val); if (!val) resetForm(); }}>
             <SheetTrigger asChild>
                 <Button>
                     <Plus className="mr-2 h-4 w-4" />
@@ -183,22 +134,22 @@ export default function AdminRaiseTicket({
                 <SheetHeader>
                     <SheetTitle>New Ticket</SheetTitle>
                     <SheetDescription>
-                        Create a new support ticket. Select a client to begin.
+                        Create a support ticket on behalf of a client.
                     </SheetDescription>
                 </SheetHeader>
 
                 <form onSubmit={handleSubmit} className="m-6 space-y-6">
-                    {/* Client Selection */}
+                    {/* Client */}
                     <div className="space-y-2">
                         <Label htmlFor="client_id">Client *</Label>
                         <Select
-                            value={
-                                form.client_id ? form.client_id.toString() : ''
+                            value={form.client_id ? form.client_id.toString() : ''}
+                            onValueChange={(val) =>
+                                handleSelectChange('client_id', val)
                             }
-                            onValueChange={handleClientChange}
                         >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select Client" />
+                            <SelectTrigger id="client_id">
+                                <SelectValue placeholder="Select client" />
                             </SelectTrigger>
                             <SelectContent>
                                 {clients.map((client) => (
@@ -211,49 +162,6 @@ export default function AdminRaiseTicket({
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
-
-                    {/* Organization User Selection */}
-                    <div className="space-y-2">
-                        <Label htmlFor="organization_user_id">
-                            On behalf of *
-                        </Label>
-                        <div className="relative">
-                            <Select
-                                value={
-                                    form.organization_user_id
-                                        ? form.organization_user_id.toString()
-                                        : ''
-                                }
-                                onValueChange={(val) =>
-                                    handleSelectChange(
-                                        'organization_user_id',
-                                        val,
-                                    )
-                                }
-                                disabled={!form.client_id || loadingOrganizationUsers}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue
-                                        placeholder={
-                                            loadingOrganizationUsers
-                                                ? 'Loading organization users...'
-                                                : 'Select Organization User'
-                                        }
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {organizationUsers.map((orgUser) => (
-                                        <SelectItem
-                                            key={orgUser.id}
-                                            value={orgUser.id.toString()}
-                                        >
-                                            {orgUser.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
                     </div>
 
                     {/* Title */}
@@ -276,98 +184,35 @@ export default function AdminRaiseTicket({
                         <Textarea
                             id="description"
                             name="description"
-                            placeholder="Describe your issue or request"
+                            placeholder="Describe the issue or request"
                             value={form.description}
                             onChange={handleChange}
                             rows={4}
                         />
                     </div>
 
-                    {/* Category and Priority */}
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="category">Category</Label>
-                            <Select
-                                value={form.category}
-                                onValueChange={(val) =>
-                                    handleSelectChange('category', val)
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="technical">
-                                        Technical
-                                    </SelectItem>
-                                    <SelectItem value="billing">
-                                        Billing
-                                    </SelectItem>
-                                    <SelectItem value="general">
-                                        General
-                                    </SelectItem>
-                                    <SelectItem value="support">
-                                        Support
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="priority">Priority *</Label>
-                            <Select
-                                value={form.priority}
-                                onValueChange={(val) =>
-                                    handleSelectChange('priority', val)
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select priority" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="low">Low</SelectItem>
-                                    <SelectItem value="medium">
-                                        Medium
-                                    </SelectItem>
-                                    <SelectItem value="high">High</SelectItem>
-                                    <SelectItem value="critical">
-                                        Critical
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="status">Status</Label>
-                            <Select
-                                value={form.status}
-                                onValueChange={(val) =>
-                                    handleSelectChange('status', val)
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="open">Open</SelectItem>
-                                    <SelectItem value="approved">
-                                        Approved
-                                    </SelectItem>
-                                    <SelectItem value="in-progress">
-                                        In Progress
-                                    </SelectItem>
-                                    <SelectItem value="closed">
-                                        Closed
-                                    </SelectItem>
-                                    <SelectItem value="cancelled">
-                                        Cancelled
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {/* Priority */}
+                    <div className="space-y-2">
+                        <Label htmlFor="priority">Priority</Label>
+                        <Select
+                            value={form.priority}
+                            onValueChange={(val) =>
+                                handleSelectChange('priority', val)
+                            }
+                        >
+                            <SelectTrigger id="priority">
+                                <SelectValue placeholder="Select priority" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                                <SelectItem value="critical">Critical</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
-                    {/* File Attachments */}
+                    {/* Attachments */}
                     <div className="space-y-2">
                         <Label>Attachments</Label>
                         <div
@@ -377,7 +222,11 @@ export default function AdminRaiseTicket({
                             onDragLeave={handleDrag}
                             onDragOver={handleDrag}
                             onDrop={handleDrop}
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+                                dragActive
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-300 hover:border-gray-400'
+                            }`}
                         >
                             <Upload className="mx-auto mb-2 h-8 w-8 text-gray-400" />
                             <p className="text-sm text-gray-600">
@@ -394,23 +243,34 @@ export default function AdminRaiseTicket({
                         />
 
                         {files.length > 0 && (
-                            <div className="mt-3 space-y-2">
-                                <p className="text-sm font-medium">
-                                    Selected files:
-                                </p>
-                                <ul className="space-y-1">
-                                    {files.map((f, i) => (
-                                        <li
-                                            key={i}
-                                            className="flex items-center text-sm text-gray-600"
+                            <ul className="mt-3 space-y-1">
+                                {files.map((f, i) => (
+                                    <li
+                                        key={i}
+                                        className="flex items-center justify-between rounded-md border px-3 py-1.5 text-sm text-gray-600"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <FileText className="h-4 w-4 shrink-0" />
+                                            <span className="truncate max-w-[280px]">
+                                                {f.name}
+                                            </span>
+                                            <span className="text-xs text-gray-400">
+                                                ({(f.size / 1024).toFixed(1)} KB)
+                                            </span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveFile(i);
+                                            }}
+                                            className="ml-2 text-gray-400 hover:text-red-500"
                                         >
-                                            <FileText className="mr-2 h-4 w-4" />
-                                            {f.name} (
-                                            {(f.size / 1024).toFixed(1)} KB)
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
                         )}
                     </div>
 
@@ -418,11 +278,11 @@ export default function AdminRaiseTicket({
                         <Button
                             variant="outline"
                             type="button"
-                            onClick={() => setOpen(false)}
+                            onClick={() => { setOpen(false); resetForm(); }}
                         >
                             Cancel
                         </Button>
-                        <Button type="submit">
+                        <Button type="submit" disabled={!form.client_id || !form.title}>
                             <Save className="mr-2 h-4 w-4" />
                             Create Ticket
                         </Button>

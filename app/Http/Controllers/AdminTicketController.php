@@ -209,56 +209,30 @@ class AdminTicketController extends Controller
     {
         $validated = $request->validate([
             'client_id' => ['required', 'integer', 'exists:clients,id'],
-            'organization_user_id' => ['required', 'integer', 'exists:organization_users,id'],
-            'ticket_number' => ['nullable'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'priority' => ['required', 'in:low,medium,high,critical'],
-            'status' => ['required', 'in:open,approved,in-progress,closed,cancelled'],
-            'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
-            'approved_by' => ['nullable', 'integer', 'exists:users,id'],
+            'priority' => ['nullable', 'in:low,medium,high,critical'],
+            'attachments.*' => ['nullable', 'file', 'max:10240'],
         ]);
 
-        // Validate that assigned users are active and valid
-        if ($validated['assigned_to'] ?? null) {
-            $assignedUser = User::find($validated['assigned_to']);
-            if (! $assignedUser) {
-                return back()->withErrors(['assigned_to' => 'Assigned user does not exist']);
-            }
-        }
-
-        if ($validated['approved_by'] ?? null) {
-            $approvedUser = User::find($validated['approved_by']);
-            if (! $approvedUser) {
-                return back()->withErrors(['approved_by' => 'Approving user does not exist']);
-            }
-        }
-
         try {
-            $organizationUser = OrganizationUser::where('id', $validated['organization_user_id'])
-                ->where('client_id', $validated['client_id'])
-                ->first();
-
-            if (! $organizationUser) {
-                return back()->withErrors(['organization_user_id' => 'Organization user does not belong to the specified organization']);
-            }
             $client = Client::find($validated['client_id']);
             if (! $client) {
                 return back()->withErrors(['client_id' => 'Client not found']);
             }
-            $TicketNum = $ticketNumberGenerator->generateForClient($client);
+
+            $ticketNum = $ticketNumberGenerator->generateForClient($client);
 
             $newTicket = Ticket::create([
                 'client_id' => $validated['client_id'],
-                'organization_user_id' => $validated['organization_user_id'],
-                'ticket_number' => $TicketNum,
+                'organization_user_id' => null,
+                'created_by' => Auth::id(),
+                'ticket_number' => $ticketNum,
                 'title' => $validated['title'],
-                'description' => $validated['description'],
-                'priority' => $validated['priority'],
-                'status' => $validated['status'],
-                'assigned_to' => $validated['assigned_to'] ?? null,
-                'approved_by' => $validated['approved_by'] ?? null,
-                'created_by' => Auth::user()->id,
+                'description' => $validated['description'] ?? null,
+                'category' => 'technical',
+                'priority' => $validated['priority'] ?? 'low',
+                'status' => 'open',
             ]);
 
             // Handle Attachments

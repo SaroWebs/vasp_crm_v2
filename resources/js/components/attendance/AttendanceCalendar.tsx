@@ -269,7 +269,7 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
         }
         setLoading(true);
         setError(null);
-        let endpoint = (canManageAttendance && !isOwnRecord) ?
+        const endpoint = (canManageAttendance && !isOwnRecord) ?
             `/admin/employee-attendance/${selectedEmployeeId}` :
             isOwnRecord ? `/api/attendance/${employee?.id}` : null;
 

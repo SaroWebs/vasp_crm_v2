@@ -88,7 +88,6 @@ interface TicketsIndexProps {
 }
 
 export default function TicketsIndex(props: TicketsIndexProps) {
-    const ticket_number = '';
     const {
         tickets,
         filters = {},
@@ -457,13 +456,12 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                     )} */}
                     <AdminRaiseTicket
                         clients={clients}
-                        ticket_number={ticket_number}
                     />
                 </div>
 
                 {/* Stats Cards */}
                 <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-6">
-                    
+
                     {/* {Object.entries(stats).map(([key, value]) => (
                         <WizCard
                             key={key}

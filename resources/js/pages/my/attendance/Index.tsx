@@ -5,6 +5,7 @@ import {
     PunchWidget,
     AttendanceCalendar,
 } from '@/components/attendance';
+import { AttendanceList } from '@/components/attendance/AttendanceList';
 
 interface MyAttendancePageProps {
     breadcrumbs?: BreadcrumbItem[];
@@ -31,10 +32,13 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
             <Head title="My Attendance" />
             <AppLayout breadcrumbs={breadcrumbs}>
 
-                <div className="space-y-6 px-4 p-8 w-[600px]">
-                    <AttendanceCalendar
-                        auth={auth}
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                    <div className="col-span-2">
+                    <AttendanceCalendar auth={auth}/>
+                    </div>
+                    <div className="col-span-3">
+                    <AttendanceList date={new Date()} type="employee" employeeId={auth.user.id}/>
+                    </div>
                 </div>
             </AppLayout>
         </>

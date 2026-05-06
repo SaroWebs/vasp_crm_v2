@@ -9,13 +9,12 @@ class ClientFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->name(),
+            'name' => fake()->company(),
             'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
             'phone' => fake()->phoneNumber(),
-            'password' => bcrypt('password123'), // password
+            'code' => fake()->unique()->lexify('CLT-????'),
             'address' => fake()->address(),
-            'status' => fake()->randomElement(['active', 'inactive']),
+            'status' => 'active',
         ];
     }
 

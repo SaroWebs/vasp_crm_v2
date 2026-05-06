@@ -136,7 +136,13 @@ export default function Dashboard(props: DashboardProps) {
                     <RecentReportSection />
                 </div>
                 <div className="lg:col-span-3">
-                    <AttendanceList date={new Date()} />
+                    <AttendanceList
+                        date={new Date()}
+                        type="admin"
+                        hasPagination={true}
+                        hasFilter={true}
+                        showRecentOnly={false}
+                    />
                 </div>
             </div>
 
