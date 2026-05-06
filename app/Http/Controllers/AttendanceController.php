@@ -430,18 +430,19 @@ class AttendanceController extends Controller
         $records = Attendance::where('attendance_date', $date)
             ->orderBy('attendance_date')
             ->get();
-            
+
         $records->transform(function ($attendance) {
-                if (empty($attendance->employee_name)) {
-                    $employee = Employee::where('code', $attendance->employee_id)->first();
+            if (empty($attendance->employee_name)) {
+                $employee = Employee::where('code', $attendance->employee_id)->first();
 
-                    if ($employee) {
-                        $attendance->employee_name = $employee->name;
-                    }
+                if ($employee) {
+                    $attendance->employee_name = $employee->name;
                 }
+            }
 
-                return $attendance;
-            });
+            return $attendance;
+        });
+
         return response()->json([
             'status' => 'success',
             'message' => 'Attendance records fetched successfully.',

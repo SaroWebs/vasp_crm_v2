@@ -116,6 +116,14 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.attempt');
     Route::middleware(['admin'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
+        // Dashboard API endpoints
+        Route::get('/api/dashboard/stats', [AdminDashboardController::class, 'getStats'])->name('api.dashboard.stats');
+        Route::get('/api/dashboard/tickets', [AdminDashboardController::class, 'getTickets'])->name('api.dashboard.tickets');
+        Route::get('/api/dashboard/tasks', [AdminDashboardController::class, 'getTasks'])->name('api.dashboard.tasks');
+        Route::get('/api/dashboard/activities', [AdminDashboardController::class, 'getActivities'])->name('api.dashboard.activities');
+        Route::get('/api/dashboard/chart-data', [AdminDashboardController::class, 'getChartData'])->name('api.dashboard.chart-data');
+        Route::get('/api/dashboard/recent-reports', [AdminDashboardController::class, 'getRecentReports'])->name('api.dashboard.recent-reports');
         Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
         Route::get('/logout', [AdminAuthController::class, 'logout'])->name('logout.get');
 

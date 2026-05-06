@@ -24,12 +24,82 @@ class AdminDashboardController extends Controller
     {
         $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
 
-        // Get role-specific dashboard data from service
-        $dashboardData = $this->dashboardService->getDashboardData($user);
+        $dashboardType = 'employee';
+        if ($user->hasRole(['super-admin', 'admin'])) {
+            $dashboardType = 'admin';
+        } elseif ($user->hasRole(['manager', 'team-lead'])) {
+            $dashboardType = 'manager';
+        }
 
-        // Always include user permissions
-        $dashboardData['userPermissions'] = $user->getAllPermissions()->pluck('slug')->toArray();
+        $dashboardData = [
+            'dashboard_type' => $dashboardType,
+            'userPermissions' => $user->getAllPermissions()->pluck('slug')->toArray(),
+        ];
 
         return Inertia::render('dashboard', $dashboardData);
+    }
+
+    public function getStats(Request $request)
+    {
+        $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
+
+        if ($user->hasRole(['super-admin', 'admin'])) {
+            $stats = $this->dashboardService->getAdminStats();
+        } elseif ($user->hasRole(['manager', 'team-lead', 'hr'])) {
+            $stats = $this->dashboardService->getManagerStats($user, $this->dashboardService->getUserDepartmentIds($user));
+        } else {
+            $stats = $this->dashboardService->getEmployeeStats($user);
+        }
+
+        return response()->json(['stats' => $stats]);
+    }
+
+    public function getTickets(Request $request)
+    {
+        return response()->json(['tickets' => $this->dashboardService->getRecentTickets()]);
+    }
+
+    public function getTasks(Request $request)
+    {
+        $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
+
+        if ($user->hasRole(['super-admin', 'admin'])) {
+            $tasks = $this->dashboardService->getRecentTasks();
+        } elseif ($user->hasRole(['manager', 'team-lead', 'hr'])) {
+            $tasks = $this->dashboardService->getDepartmentTasks($this->dashboardService->getUserDepartmentIds($user));
+        } else {
+            $tasks = $this->dashboardService->getMyTasks($user);
+        }
+
+        return response()->json(['tasks' => $tasks]);
+    }
+
+    public function getActivities(Request $request)
+    {
+        $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
+
+        return response()->json([
+            'activities' => $this->dashboardService->getRecentActivities($user),
+        ]);
+    }
+
+    public function getChartData(Request $request)
+    {
+        $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
+        $range = $request->query('range', 'weekly');
+        $offset = (int) $request->query('offset', 0);
+
+        return response()->json([
+            'chartData' => $this->dashboardService->getPaginatedChartData($user, $range, $offset),
+        ]);
+    }
+
+    public function getRecentReports(Request $request)
+    {
+        $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
+
+        return response()->json([
+            'reports' => $this->dashboardService->getRecentReports($user),
+        ]);
     }
 }

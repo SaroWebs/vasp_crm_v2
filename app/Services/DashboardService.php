@@ -2,11 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Department;
 use App\Models\Notification;
 use App\Models\Product;
+use App\Models\Report;
 use App\Models\Task;
+use App\Models\TaskAuditEvent;
 use App\Models\TaskForwarding;
 use App\Models\TaskTimeEntry;
 use App\Models\Ticket;
@@ -100,7 +103,7 @@ class DashboardService
     /**
      * Get admin-level statistics.
      */
-    private function getAdminStats(): array
+    public function getAdminStats(): array
     {
         return [
             'total_departments' => Department::active()->count(),
@@ -125,13 +128,14 @@ class DashboardService
     /**
      * Get employee progress data for admin dashboard.
      */
-    private function getEmployeeProgress(): array
+    public function getEmployeeProgress(): array
     {
         $users = User::with('employee')->get();
         $employeeData = [];
         $totalTime = 0;
         $totalTasks = 0;
 
+        /** @var User $user */
         foreach ($users as $user) {
             if ($user->employee) {
                 $taskIds = $user->assignedTasks()->pluck('tasks.id');
@@ -169,7 +173,7 @@ class DashboardService
     /**
      * Get employees list for admin dashboard.
      */
-    private function getEmployees(): array
+    public function getEmployees(): array
     {
         return User::whereHas('employee')
             ->select('id', 'name', 'email')
@@ -180,7 +184,7 @@ class DashboardService
     /**
      * Get manager-level statistics.
      */
-    private function getManagerStats(User $user, array $departmentIds): array
+    public function getManagerStats(User $user, array $departmentIds): array
     {
         $departmentTasks = Task::whereIn('assigned_department_id', $departmentIds);
         $userIds = Department::whereIn('id', $departmentIds)
@@ -193,15 +197,15 @@ class DashboardService
 
         return [
             'total_team_members' => count($userIds),
-            'total_department_tasks' => $departmentTasks->count(),
-            'pending_tasks' => $departmentTasks->where('state', 'Draft')->count(),
-            'in_progress_tasks' => $departmentTasks->where('state', 'InProgress')->count(),
-            'completed_tasks_this_month' => $departmentTasks->where('state', 'Done')
+            'total_department_tasks' => (clone $departmentTasks)->count(),
+            'pending_tasks' => (clone $departmentTasks)->where('state', 'Draft')->count(),
+            'in_progress_tasks' => (clone $departmentTasks)->where('state', 'InProgress')->count(),
+            'completed_tasks_this_month' => (clone $departmentTasks)->where('state', 'Done')
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
-            'tasks_due_today' => $departmentTasks->whereDate('due_at', today())->count(),
-            'tasks_due_this_week' => $departmentTasks->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
-            'overdue_tasks' => $departmentTasks->where('state', '!=', 'Done')
+            'tasks_due_today' => (clone $departmentTasks)->whereDate('due_at', today())->count(),
+            'tasks_due_this_week' => (clone $departmentTasks)->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
+            'overdue_tasks' => (clone $departmentTasks)->where('state', '!=', 'Done')
                 ->whereDate('due_at', '<', today())
                 ->count(),
         ];
@@ -210,24 +214,24 @@ class DashboardService
     /**
      * Get employee-level statistics.
      */
-    private function getEmployeeStats(User $user): array
+    public function getEmployeeStats(User $user): array
     {
         $myTasks = Task::whereHas('assignedUsers', function ($query) use ($user) {
             $query->where('user_id', $user->id);
         });
 
         return [
-            'total_my_tasks' => $myTasks->count(),
-            'pending_tasks' => $myTasks->where('state', 'Draft')->count(),
-            'in_progress_tasks' => $myTasks->where('state', 'InProgress')->count(),
-            'waiting_tasks' => $myTasks->where('state', 'InReview')->count(),
-            'completed_tasks' => $myTasks->where('state', 'Done')->count(),
-            'completed_this_month' => $myTasks->where('state', 'Done')
+            'total_my_tasks' => (clone $myTasks)->count(),
+            'pending_tasks' => (clone $myTasks)->where('state', 'Draft')->count(),
+            'in_progress_tasks' => (clone $myTasks)->where('state', 'InProgress')->count(),
+            'waiting_tasks' => (clone $myTasks)->where('state', 'InReview')->count(),
+            'completed_tasks' => (clone $myTasks)->where('state', 'Done')->count(),
+            'completed_this_month' => (clone $myTasks)->where('state', 'Done')
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
-            'tasks_due_today' => $myTasks->whereDate('due_at', today())->count(),
-            'tasks_due_this_week' => $myTasks->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
-            'overdue_tasks' => $myTasks->where('state', '!=', 'Done')
+            'tasks_due_today' => (clone $myTasks)->whereDate('due_at', today())->count(),
+            'tasks_due_this_week' => (clone $myTasks)->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
+            'overdue_tasks' => (clone $myTasks)->where('state', '!=', 'Done')
                 ->whereDate('due_at', '<', today())
                 ->count(),
             'forwarded_tasks_count' => TaskForwarding::where('to_user_id', $user->id)
@@ -239,7 +243,7 @@ class DashboardService
     /**
      * Get recent tickets (admin view).
      */
-    private function getRecentTickets()
+    public function getRecentTickets()
     {
         return Ticket::with(['client', 'organizationUser'])
             ->latest('created_at')
@@ -261,7 +265,7 @@ class DashboardService
     /**
      * Get recent tasks (admin view).
      */
-    private function getRecentTasks()
+    public function getRecentTasks()
     {
         return Task::with(['ticket', 'assignedDepartment', 'assignedUsers'])
             ->latest('created_at')
@@ -284,7 +288,7 @@ class DashboardService
     /**
      * Get department statistics (admin view).
      */
-    private function getDepartmentStats()
+    public function getDepartmentStats()
     {
         return Department::active()
             ->withCount([
@@ -311,7 +315,7 @@ class DashboardService
     /**
      * Get ticket status distribution.
      */
-    private function getTicketStats(): array
+    public function getTicketStats(): array
     {
         return [
             'open' => Ticket::where('status', 'open')->count(),
@@ -325,7 +329,7 @@ class DashboardService
     /**
      * Get task status distribution.
      */
-    private function getTaskStats(): array
+    public function getTaskStats(): array
     {
         return [
             'pending' => Task::where('state', 'Draft')->count(),
@@ -338,7 +342,7 @@ class DashboardService
     /**
      * Get unread notifications count for a user.
      */
-    private function getUnreadNotifications(User $user): int
+    public function getUnreadNotifications(User $user): int
     {
         return Notification::getUnreadCountForUser($user->id);
     }
@@ -346,15 +350,17 @@ class DashboardService
     /**
      * Get unread notifications list for a user.
      */
-    private function getUnreadNotificationsList(User $user)
+    public function getUnreadNotificationsList(User $user)
     {
         return Notification::whereHas('users', function ($query) use ($user) {
             $query->where('user_id', $user->id)
                 ->where('users_notifications.read', false);
         })
-            ->with(['users' => function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            }])
+            ->with([
+                'users' => function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                },
+            ])
             ->latest()
             ->limit(10)
             ->get()
@@ -372,7 +378,7 @@ class DashboardService
     /**
      * Get user's department IDs.
      */
-    private function getUserDepartmentIds(User $user): array
+    public function getUserDepartmentIds(User $user): array
     {
         return $user->departmentUsers()
             ->pluck('department_id')
@@ -382,7 +388,7 @@ class DashboardService
     /**
      * Get tasks for specific departments.
      */
-    private function getDepartmentTasks(array $departmentIds)
+    public function getDepartmentTasks(array $departmentIds)
     {
         return Task::whereIn('assigned_department_id', $departmentIds)
             ->where('state', '!=', 'Done')
@@ -406,7 +412,7 @@ class DashboardService
     /**
      * Get team workload (tasks per user in departments).
      */
-    private function getTeamWorkload(array $departmentIds)
+    public function getTeamWorkload(array $departmentIds)
     {
         $userIds = Department::whereIn('id', $departmentIds)
             ->with('users')
@@ -443,7 +449,7 @@ class DashboardService
     /**
      * Get recent tasks for departments.
      */
-    private function getRecentTasksForDepartments(array $departmentIds)
+    public function getRecentTasksForDepartments(array $departmentIds)
     {
         return Task::whereIn('assigned_department_id', $departmentIds)
             ->with(['assignedDepartment', 'assignedUsers'])
@@ -466,7 +472,7 @@ class DashboardService
     /**
      * Get department stats for manager view.
      */
-    private function getDepartmentStatsForManager(array $departmentIds)
+    public function getDepartmentStatsForManager(array $departmentIds)
     {
         return Department::whereIn('id', $departmentIds)
             ->active()
@@ -494,7 +500,7 @@ class DashboardService
     /**
      * Get user's personal tasks.
      */
-    private function getMyTasks(User $user)
+    public function getMyTasks(User $user)
     {
         return Task::whereHas('assignedUsers', function ($query) use ($user) {
             $query->where('user_id', $user->id);
@@ -519,7 +525,7 @@ class DashboardService
     /**
      * Get user's task statistics.
      */
-    private function getMyTaskStats(User $user): array
+    public function getMyTaskStats(User $user): array
     {
         $myTasks = Task::whereHas('assignedUsers', function ($query) use ($user) {
             $query->where('user_id', $user->id);
@@ -536,7 +542,7 @@ class DashboardService
     /**
      * Get tasks forwarded to user.
      */
-    private function getForwardedTasks(User $user)
+    public function getForwardedTasks(User $user)
     {
         return TaskForwarding::where('to_user_id', $user->id)
             ->where('status', 'pending')
@@ -560,7 +566,7 @@ class DashboardService
     /**
      * Get upcoming deadlines for user's tasks.
      */
-    private function getUpcomingDeadlines(User $user)
+    public function getUpcomingDeadlines(User $user)
     {
         return Task::whereHas('assignedUsers', function ($query) use ($user) {
             $query->where('user_id', $user->id);
@@ -584,36 +590,117 @@ class DashboardService
     }
 
     /**
-     * Get recent time entries for user.
+     * Get recent activities for user (unified polymorphic stream).
      */
-    private function getRecentTimeEntries(User $user)
+    public function getRecentActivities(User $user)
     {
-        $taskIds = $user->assignedTasks()->pluck('tasks.id');
+        $activities = collect();
 
-        return TaskTimeEntry::whereIn('task_id', $taskIds)
-            ->whereDate('created_at', today())
-            ->with(['task'])
-            ->latest()
+        // 1. Task Audit Events
+        $taskEvents = TaskAuditEvent::with('task')
+            ->where('actor_user_id', $user->id)
+            ->whereIn('action', ['CREATE', 'ASSIGN', 'COMPLETE', 'FORWARD', 'COMMENT_ADD', 'STATE_CHANGE'])
+            ->latest('occurred_at')
             ->limit(10)
             ->get()
-            ->map(function ($entry) {
+            ->map(function ($event) {
+                $title = 'Task Event';
+                $description = $event->description;
+                $icon = 'Activity';
+                $link = $event->task_id ? "/admin/tasks/{$event->task_id}" : null;
+
+                if ($event->action === 'CREATE') {
+                    $title = 'Task Created';
+                    $description = "Created task '{$event->task?->title}'";
+                    $icon = 'PlusCircle';
+                } elseif ($event->action === 'COMPLETE') {
+                    $title = 'Task Completed';
+                    $description = "Completed task '{$event->task?->title}'";
+                    $icon = 'CheckCircle';
+                } elseif ($event->action === 'ASSIGN') {
+                    $title = 'Task Assigned';
+                    $description = "Assigned to task '{$event->task?->title}'";
+                    $icon = 'UserPlus';
+                } elseif ($event->action === 'FORWARD') {
+                    $title = 'Task Forwarded';
+                    $description = "Forwarded task '{$event->task?->title}'";
+                    $icon = 'ArrowRight';
+                } elseif ($event->action === 'COMMENT_ADD') {
+                    $title = 'Comment Added';
+                    $description = "Commented on '{$event->task?->title}'";
+                    $icon = 'MessageSquare';
+                } elseif ($event->action === 'STATE_CHANGE') {
+                    $title = 'Status Updated';
+                    $description = "Updated status of '{$event->task?->title}' to {$event->to_state}";
+                    $icon = 'RefreshCcw';
+                }
+
                 return [
-                    'id' => $entry->id,
-                    'task_title' => $entry->task?->title,
-                    'hours' => $entry->hours,
-                    'minutes' => $entry->minutes,
-                    'created_at' => $entry->created_at->toISOString(),
+                    'id' => 'task_event_'.$event->id,
+                    'type' => 'task_event',
+                    'title' => $title,
+                    'description' => $description,
+                    'timestamp' => $event->occurred_at,
+                    'icon' => $icon,
+                    'link' => $link,
                 ];
             });
+
+        $activities = $activities->concat($taskEvents);
+
+        // 2. Attendance Punches
+        if ($user->employee) {
+            $punches = Attendance::where('employee_id', $user->employee->id)
+                ->latest('created_at')
+                ->limit(10)
+                ->get();
+
+            foreach ($punches as $punch) {
+                if ($punch->punch_in) {
+                    $activities->push([
+                        'id' => 'punch_in_'.$punch->id,
+                        'type' => 'punch_in',
+                        'title' => 'Punched In',
+                        'description' => 'Punched in for work',
+                        'timestamp' => $punch->punch_in,
+                        'icon' => 'Clock',
+                        'link' => null,
+                    ]);
+                }
+                if ($punch->punch_out) {
+                    $activities->push([
+                        'id' => 'punch_out_'.$punch->id,
+                        'type' => 'punch_out',
+                        'title' => 'Punched Out',
+                        'description' => 'Punched out from work',
+                        'timestamp' => $punch->punch_out,
+                        'icon' => 'LogOut',
+                        'link' => null,
+                    ]);
+                }
+            }
+        }
+
+        // Sort by timestamp descending and take top 10
+        return $activities->sortByDesc('timestamp')->values()->take(10)->map(function ($activity) {
+            $activity['timestamp'] = Carbon::parse($activity['timestamp'])->toISOString();
+
+            return $activity;
+        })->toArray();
     }
 
     /**
-     * Get daily time spent chart data for the current user.
+     * Get daily time spent chart data for the current user with pagination.
      */
-    private function getTimeSpentChartData(User $user): array
+    public function getPaginatedChartData(User $user, string $range, int $offset): array
     {
-        $rangeStart = Carbon::now()->subDays(29)->startOfDay();
-        $rangeEnd = Carbon::now()->endOfDay();
+        $days = $range === 'monthly' ? 30 : 7;
+
+        // End date for the calculation (offset moves the window back in time)
+        $baseEndDate = Carbon::now()->subDays($offset * $days);
+
+        $rangeEnd = (clone $baseEndDate)->endOfDay();
+        $rangeStart = (clone $baseEndDate)->subDays($days - 1)->startOfDay();
 
         $timeEntries = TaskTimeEntry::where('user_id', $user->id)
             ->where(function ($query) use ($rangeStart, $rangeEnd) {
@@ -626,20 +713,11 @@ class DashboardService
             })
             ->get();
 
-        return [
-            'weekly' => $this->buildTimeSpentChartSeries($timeEntries, 7),
-            'monthly' => $this->buildTimeSpentChartSeries($timeEntries, 30),
-        ];
-    }
-
-    private function buildTimeSpentChartSeries($timeEntries, int $days): array
-    {
         $series = [];
-
-        for ($day = $days - 1; $day >= 0; $day--) {
-            $date = Carbon::now()->subDays($day)->startOfDay();
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = (clone $baseEndDate)->subDays($i)->startOfDay();
             $series[] = [
-                'label' => $days === 7 ? $date->format('D') : $date->format('M j'),
+                'label' => $range === 'weekly' ? $date->format('D') : $date->format('M j'),
                 'date' => $date->toDateString(),
                 'hours' => round($this->calculateTotalHoursForDate($timeEntries, $date->toDateString()), 2),
             ];
@@ -657,5 +735,17 @@ class DashboardService
         }
 
         return $totalSeconds / 3600;
+    }
+
+    /**
+     * Get recent reports for a user.
+     */
+    public function getRecentReports(User $user, int $limit = 5): array
+    {
+        return Report::where('user_id', $user->id)
+            ->latest()
+            ->limit($limit)
+            ->get()
+            ->toArray();
     }
 }

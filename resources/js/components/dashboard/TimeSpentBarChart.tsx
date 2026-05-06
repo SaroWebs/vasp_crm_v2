@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import {
     Bar,
     BarChart,
@@ -8,21 +9,14 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, parseISO, subDays } from 'date-fns';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 
 interface TimeSpentPoint {
     label: string;
     date: string;
     hours: number;
-}
-
-interface TimeSpentBarChartProps {
-    data?: {
-        weekly: TimeSpentPoint[];
-        monthly: TimeSpentPoint[];
-    };
 }
 
 function ChartTooltip({ active, payload }: any) {
@@ -40,51 +34,21 @@ function ChartTooltip({ active, payload }: any) {
     );
 }
 
-export default function TimeSpentBarChart({ data }: TimeSpentBarChartProps) {
+export default function TimeSpentBarChart() {
     const [range, setRange] = useState<'weekly' | 'monthly'>('weekly');
     const [offset, setOffset] = useState(0);
+    const [chartData, setChartData] = useState<TimeSpentPoint[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const buildEmptySeries = (days: number) => {
-        const series: TimeSpentPoint[] = [];
-        const today = new Date();
-
-        for (let day = days - 1; day >= 0; day -= 1) {
-            const date = subDays(today, day);
-            series.push({
-                label: days === 7 ? format(date, 'EEE') : format(date, 'MMM d'),
-                date: format(date, 'yyyy-MM-dd'),
-                hours: 0,
-            });
-        }
-
-        return series;
-    };
-
-    const currentSeries = useMemo(() => {
-        const baseSeries = data?.[range] ?? [];
-        const windowSize = range === 'weekly' ? 7 : 30;
-
-        if (baseSeries.length === 0) {
-            return buildEmptySeries(windowSize);
-        }
-
-        const sortedSeries = [...baseSeries].sort((a, b) =>
-            parseISO(a.date).getTime() - parseISO(b.date).getTime(),
-        );
-
-        return sortedSeries;
-    }, [data, range]);
-
-    const windowSize = range === 'weekly' ? 7 : 30;
-    const maxOffset = Math.max(0, currentSeries.length - windowSize);
-
-    const chartData = useMemo(() => {
-        const currentOffset = Math.min(Math.max(offset, 0), maxOffset);
-        const start = Math.max(0, currentSeries.length - windowSize - currentOffset);
-        const end = currentSeries.length - currentOffset;
-
-        return currentSeries.slice(start, end);
-    }, [currentSeries, offset, windowSize, maxOffset]);
+    useEffect(() => {
+        setLoading(true);
+        axios.get(`/admin/api/dashboard/chart-data?range=${range}&offset=${offset}`)
+            .then(res => {
+                setChartData(res.data.chartData || []);
+            })
+            .catch(err => console.error(err))
+            .finally(() => setLoading(false));
+    }, [range, offset]);
 
     const handleRangeChange = (newRange: 'weekly' | 'monthly') => {
         setRange(newRange);
@@ -92,19 +56,19 @@ export default function TimeSpentBarChart({ data }: TimeSpentBarChartProps) {
     };
 
     const handlePrevious = () => {
-        setOffset((previous) => Math.min(previous + windowSize, maxOffset));
+        setOffset((prev) => prev + 1);
     };
 
     const handleNext = () => {
-        setOffset((previous) => Math.max(previous - windowSize, 0));
+        setOffset((prev) => Math.max(0, prev - 1));
     };
 
-    const canPrevious = offset < maxOffset;
     const canNext = offset > 0;
 
-    const periodLabel = chartData.length
-        ? `${format(parseISO(chartData[0].date), 'MMM d')} - ${format(parseISO(chartData[chartData.length - 1].date), 'MMM d')}`
-        : '';
+    const periodLabel = useMemo(() => {
+        if (!chartData.length) return '';
+        return `${format(parseISO(chartData[0].date), 'MMM d')} - ${format(parseISO(chartData[chartData.length - 1].date), 'MMM d')}`;
+    }, [chartData]);
 
     return (
         <div className="space-y-4">
@@ -139,7 +103,7 @@ export default function TimeSpentBarChart({ data }: TimeSpentBarChartProps) {
                         </label>
                     </div>
                     <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={handlePrevious} disabled={!canPrevious}>
+                        <Button size="sm" variant="outline" onClick={handlePrevious}>
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="outline" onClick={handleNext} disabled={!canNext}>
@@ -149,12 +113,18 @@ export default function TimeSpentBarChart({ data }: TimeSpentBarChartProps) {
                 </div>
             </div>
 
-            {chartData.length === 0 ? (
-                <div className="rounded-lg border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
-                    No time entry data available for this period.
-                </div>
-            ) : (
-                <div className="h-[320px]">
+            <div className="relative h-[320px]">
+                {loading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                )}
+                
+                {chartData.length === 0 && !loading ? (
+                    <div className="flex h-full items-center justify-center rounded-lg border border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                        No time entry data available for this period.
+                    </div>
+                ) : (
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -164,8 +134,8 @@ export default function TimeSpentBarChart({ data }: TimeSpentBarChartProps) {
                             <Bar dataKey="hours" fill="#4F46E5" radius={[6, 6, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

@@ -34,8 +34,12 @@ import {
     Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import TimeSpentBarChart from '@/components/dashboard/TimeSpentBarChart';
 import { AttendanceList } from '@/components/attendance/AttendanceList';
+import DashboardStatsWidget from '@/components/dashboard/widgets/DashboardStatsWidget';
+import RecentTicketsWidget from '@/components/dashboard/widgets/RecentTicketsWidget';
+import DashboardTasksWidget from '@/components/dashboard/widgets/DashboardTasksWidget';
+import EmployeeActivitiesWidget from '@/components/dashboard/widgets/EmployeeActivitiesWidget';
+import EmployeeRecentReportsWidget from '@/components/dashboard/widgets/EmployeeRecentReportsWidget';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -44,47 +48,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-interface DashboardStats {
-    total_departments?: number;
-    total_users?: number;
-    total_clients?: number;
-    total_products?: number;
-    total_tickets?: number;
-    total_tasks?: number;
-    open_tickets?: number;
-    pending_tasks?: number;
-    completed_tasks_this_month?: number;
-    active_users_today?: number;
-    tickets_created_today?: number;
-    tasks_completed_today?: number;
-    // Manager stats
-    total_team_members?: number;
-    total_department_tasks?: number;
-    in_progress_tasks?: number;
-    tasks_due_today?: number;
-    tasks_due_this_week?: number;
-    overdue_tasks?: number;
-    // Employee stats
-    total_my_tasks?: number;
-    waiting_tasks?: number;
-    completed_tasks?: number;
-    completed_this_month?: number;
-    forwarded_tasks_count?: number;
-}
 
 interface DashboardProps {
     dashboard_type: 'admin' | 'manager' | 'employee';
     auth: any;
-    stats?: DashboardStats;
-    recentTickets?: any[];
-    recentTasks?: any[];
-    employeeProgress?: {
-        data: any[];
-        total_employees: number;
-        total_time: number;
-        total_tasks: number;
-        avg_time_per_employee: number;
-    };
     employees?: Array<{
         id: number;
         name: string;
@@ -99,24 +66,15 @@ interface DashboardProps {
     teamWorkload?: any[];
     departmentStats?: any[];
     // Employee specific
-    myTasks?: any[];
     myTaskStats?: Record<string, number>;
     forwardedTasks?: any[];
     upcomingDeadlines?: any[];
-    recentTimeEntries?: any[];
-    timeSpentChartData?: {
-        weekly: Array<{ label: string; date: string; hours: number }>;
-        monthly: Array<{ label: string; date: string; hours: number }>;
-    };
     unreadNotificationsList?: any[];
 }
 
 export default function Dashboard(props: DashboardProps) {
     const {
         dashboard_type,
-        stats,
-        recentTimeEntries,
-        recentTickets,
         employees,
         ticketStats,
         taskStats,
@@ -125,11 +83,6 @@ export default function Dashboard(props: DashboardProps) {
         teamWorkload,
         departmentStats,
         auth,
-        myTasks,
-        myTaskStats,
-        forwardedTasks,
-        upcomingDeadlines,
-        timeSpentChartData,
     } = props;
 
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
@@ -171,90 +124,15 @@ export default function Dashboard(props: DashboardProps) {
         }
     }, [auth?.user?.id]);
 
-    const isOverdueTask = (task: any): boolean => {
-        const dueDateString = task.due_date ?? task.due_at;
-        const completed = ['Done', 'Cancelled', 'Rejected'].includes(task.status ?? task.state);
-        if (!dueDateString || completed) {
-            return false;
-        }
 
-        const dueDate = new Date(dueDateString);
-        return dueDate < new Date() && !['Done', 'Cancelled', 'Rejected'].includes(task.status ?? task.state);
-    };
-
-    const pendingTasks = (myTasks ?? [])
-        .filter((task) => {
-            const isPendingState = ['Draft', 'Assigned'].includes(task.status ?? task.state);
-            return isPendingState;
-        })
-        .sort((a, b) => {
-            const aOverdue = isOverdueTask(a) ? 0 : 1;
-            const bOverdue = isOverdueTask(b) ? 0 : 1;
-
-            if (aOverdue !== bOverdue) {
-                return aOverdue - bOverdue;
-            }
-
-            const priorityRank: Record<string, number> = {
-                P1: 0,
-                P2: 1,
-                P3: 2,
-                P4: 3,
-            };
-
-            return (priorityRank[a.priority] ?? 4) - (priorityRank[b.priority] ?? 4);
-        })
-        .slice(0, 6);
 
     const renderAdminDashboard = () => (
         <>
             {/* Charts and Recent Activity */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
                 <div className="lg:col-span-4 space-y-4">
-                    {/* Recent Tickets */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Recent Tickets</CardTitle>
-                            <CardDescription>
-                                Latest ticket submissions
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {recentTickets?.map((ticket) => (
-                                <Link
-                                    key={ticket.id}
-                                    href={`/admin/tickets/${ticket.id}`}
-                                    className="flex cursor-pointer items-center justify-between space-x-4"
-                                >
-                                    <div className="flex w-full items-center justify-between pb-4">
-                                        <div className="flex-1 space-y-1">
-                                            <p className="text-sm leading-none font-medium">
-                                                {ticket.title}
-                                            </p>
-
-                                            <p className="text-sm text-muted-foreground">
-                                                {ticket.client?.name} •{' '}
-                                                {ticket.ticket_number}
-                                            </p>
-                                        </div>
-
-                                        <Badge
-                                            variant={
-                                                ticket.status === 'open'
-                                                    ? 'destructive'
-                                                    : ticket.status === 'approved'
-                                                        ? 'default'
-                                                        : 'secondary'
-                                            }
-                                            className="h-6"
-                                        >
-                                            {ticket.status}
-                                        </Badge>
-                                    </div>
-                                </Link>
-                            ))}
-                        </CardContent>
-                    </Card>
+                    {/* Recent Tickets Widget */}
+                    <RecentTicketsWidget />
                     <RecentReportSection />
                 </div>
                 <div className="lg:col-span-3">
@@ -375,31 +253,8 @@ export default function Dashboard(props: DashboardProps) {
 
     const renderManagerDashboard = () => (
         <>
-            {/* Manager Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <StatCard
-                    title="Team Members"
-                    value={stats?.total_team_members || 0}
-                    icon={Users}
-                />
-                <StatCard
-                    title="Department Tasks"
-                    value={stats?.total_department_tasks || 0}
-                    icon={FolderKanban}
-                />
-                <StatCard
-                    title="Tasks Due This Week"
-                    value={stats?.tasks_due_this_week || 0}
-                    icon={Clock}
-                    variant={stats?.tasks_due_this_week && stats.tasks_due_this_week > 0 ? 'warning' : 'default'}
-                />
-                <StatCard
-                    title="Overdue Tasks"
-                    value={stats?.overdue_tasks || 0}
-                    icon={AlertCircle}
-                    variant="destructive"
-                />
-            </div>
+            {/* Manager Stats Grid Widget */}
+            <DashboardStatsWidget dashboardType="manager" />
 
             <div className="grid gap-4 md:grid-cols-2">
                 <Card>
@@ -580,82 +435,11 @@ export default function Dashboard(props: DashboardProps) {
 
     const renderEmployeeDashboard = () => (
         <>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-                <StatCard
-                    title="Total Tasks"
-                    value={stats?.total_my_tasks || 0}
-                    icon={Briefcase}
-                />
-                <StatCard
-                    title="Pending"
-                    value={stats?.pending_tasks || 0}
-                    icon={AlertCircle}
-                    variant="warning"
-                />
-                <StatCard
-                    title="In Progress"
-                    value={stats?.in_progress_tasks || 0}
-                    icon={Clock}
-                />
-                <StatCard
-                    title="Due Today"
-                    value={stats?.tasks_due_today || 0}
-                    icon={Calendar}
-                    variant={stats?.tasks_due_today && stats.tasks_due_today > 0 ? 'destructive' : 'default'}
-                />
-                <StatCard
-                    title="Overdue"
-                    value={stats?.overdue_tasks || 0}
-                    icon={AlertCircle}
-                    variant="destructive"
-                />
-                <StatCard
-                    title="Completed This Month"
-                    value={stats?.completed_this_month || 0}
-                    icon={CheckCircle}
-                    variant="success"
-                />
-            </div>
+            {/* Employee Stats Grid Widget */}
+            <DashboardStatsWidget dashboardType="employee" />
 
             <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Important / Pending Tasks</CardTitle>
-                        <CardDescription>
-                            Your highest priority tasks that need attention first
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {pendingTasks.length ? (
-                            pendingTasks.map((task) => {
-                                const overdue = isOverdueTask(task);
-
-                                return (
-                                    <div
-                                        key={task.id}
-                                        className={`rounded-lg border p-4 ${overdue ? 'border-destructive/30 bg-destructive/5' : 'border-border hover:bg-muted'}`}
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <p className="font-medium">{task.title}</p>
-                                            <Badge variant={overdue ? 'destructive' : 'outline'}>
-                                                {task.status ?? task.state}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground">
-                                            Due: {(task.due_date ?? task.due_at)
-                                                ? new Date(task.due_date ?? task.due_at).toLocaleDateString()
-                                                : 'N/A'}
-                                        </p>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                No pending tasks assigned to you.
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
+                <DashboardTasksWidget />
 
                 <Card>
                     <CardHeader>
@@ -692,113 +476,33 @@ export default function Dashboard(props: DashboardProps) {
                 </CardContent>
             </Card>
 
-            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Daily Time Spent</CardTitle>
-                        <CardDescription>
-                            Track your daily time spent over the last week or month.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <TimeSpentBarChart data={timeSpentChartData} />
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Employee Activities</CardTitle>
-                        <CardDescription>
-                            Recent time entries and activity history for your work.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {recentTimeEntries?.length ? (
-                                recentTimeEntries.map((entry) => (
-                                    <ActivityEntryCard key={entry.id} entry={entry} />
-                                ))
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    No recent activity recorded today.
-                                </p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Workload Matrix</CardTitle>
-                    <CardDescription>
-                        View the full workload matrix on the dedicated page.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col gap-3">
-                        <p className="text-sm text-muted-foreground">
-                            The workload matrix provides an overview of assignments and capacity for your team.
-                        </p>
-                        <Link href="/admin/workload-matrix">
-                            <Button variant="outline">
-                                View Workload Matrix
-                            </Button>
-                        </Link>
-                    </div>
-                </CardContent>
-            </Card>
-
+            <EmployeeActivitiesWidget />
 
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Forwarded Tasks</CardTitle>
+                        <CardTitle>Workload Matrix</CardTitle>
                         <CardDescription>
-                            Tasks that were forwarded to you
+                            View the full workload matrix on the dedicated page.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-3">
-                            {forwardedTasks?.length ? (
-                                forwardedTasks.map((forwarded) => (
-                                    <div key={forwarded.id} className="rounded-lg border border-border p-3">
-                                        <p className="font-medium">{forwarded.task_title}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            From {forwarded.from_user} • {forwarded.from_department}
-                                        </p>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    No forwarded tasks pending.
-                                </p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>My Reports</CardTitle>
-                        <CardDescription>
-                            Access your daily reports and summaries
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
+                        <div className="flex flex-col gap-3">
                             <p className="text-sm text-muted-foreground">
-                                View your daily report history and submit new reports from the report center.
+                                The workload matrix provides an overview of assignments and capacity for your team.
                             </p>
-                            <Link href="/admin/reports">
-                                <Button variant="outline" size="sm">
-                                    View Reports
+                            <Link href="/admin/workload-matrix">
+                                <Button variant="outline">
+                                    View Workload Matrix
                                 </Button>
                             </Link>
                         </div>
                     </CardContent>
                 </Card>
+
+
+                <EmployeeRecentReportsWidget className="lg:col-span-2" />
             </div>
 
             <Card>
@@ -818,8 +522,6 @@ export default function Dashboard(props: DashboardProps) {
     // Render based on dashboard type
     const renderDashboard = () => {
         switch (dashboard_type) {
-            case 'manager':
-                return renderManagerDashboard();
             case 'employee':
                 return renderEmployeeDashboard();
             default:
@@ -830,8 +532,6 @@ export default function Dashboard(props: DashboardProps) {
     // Get title based on dashboard type
     const getDashboardTitle = () => {
         switch (dashboard_type) {
-            case 'manager':
-                return 'Manager Dashboard';
             case 'employee':
                 return 'Employee Dashboard';
             default:
@@ -842,8 +542,6 @@ export default function Dashboard(props: DashboardProps) {
     // Get subtitle based on dashboard type
     const getDashboardSubtitle = () => {
         switch (dashboard_type) {
-            case 'manager':
-                return 'Overview of your team and department performance';
             case 'employee':
                 return 'Your personal task overview and progress';
             default:

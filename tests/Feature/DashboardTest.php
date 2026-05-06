@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\AdminMiddleware;
 use App\Http\Middleware\ValidateUserSession;
 use App\Models\Role;
 use App\Models\Task;
@@ -65,5 +66,27 @@ class DashboardTest extends TestCase
                 ->has('auth.user.roles', 1)
                 ->where('auth.user.roles.0.slug', 'super-admin')
             );
+    }
+
+    public function test_admin_dashboard_redirects_to_admin_login_when_not_authenticated(): void
+    {
+        $this->withoutMiddleware(AdminMiddleware::class)
+            ->get(route('admin.dashboard'))
+            ->assertRedirect('/admin/login');
+    }
+
+    public function test_inertia_root_view_does_not_require_a_page_specific_vite_entry(): void
+    {
+        $html = view('app', [
+            'page' => [
+                'component' => '__missing_component__',
+                'props' => [],
+                'url' => '/',
+                'version' => null,
+            ],
+        ])->render();
+
+        $this->assertIsString($html);
+        $this->assertNotEmpty($html);
     }
 }
