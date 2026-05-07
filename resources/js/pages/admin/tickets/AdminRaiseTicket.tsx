@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { Button as MantineButton } from '@mantine/core';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -125,10 +125,9 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     return (
         <Sheet open={open} onOpenChange={(val) => { setOpen(val); if (!val) resetForm(); }}>
             <SheetTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Ticket
-                </Button>
+                <MantineButton size="xs" leftSection={<Plus size={14} />}>
+                    New Ticket
+                </MantineButton>
             </SheetTrigger>
             <SheetContent className="overflow-y-auto sm:max-w-xl">
                 <SheetHeader>
@@ -222,11 +221,10 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                             onDragLeave={handleDrag}
                             onDragOver={handleDrag}
                             onDrop={handleDrop}
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
-                                dragActive
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-300 hover:border-gray-400'
-                            }`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${dragActive
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-300 hover:border-gray-400'
+                                }`}
                         >
                             <Upload className="mx-auto mb-2 h-8 w-8 text-gray-400" />
                             <p className="text-sm text-gray-600">
@@ -275,17 +273,20 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                     </div>
 
                     <div className="flex justify-end space-x-2 pt-4">
-                        <Button
-                            variant="outline"
+                        <MantineButton
+                            variant="default"
                             type="button"
                             onClick={() => { setOpen(false); resetForm(); }}
                         >
                             Cancel
-                        </Button>
-                        <Button type="submit" disabled={!form.client_id || !form.title}>
-                            <Save className="mr-2 h-4 w-4" />
+                        </MantineButton>
+                        <MantineButton
+                            type="submit"
+                            disabled={!form.client_id || !form.title}
+                            leftSection={<Save size={14} />}
+                        >
                             Create Ticket
-                        </Button>
+                        </MantineButton>
                     </div>
                 </form>
             </SheetContent>

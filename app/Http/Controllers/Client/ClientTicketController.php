@@ -22,7 +22,10 @@ class ClientTicketController extends Controller
 
         $query = Ticket::query()
             ->where('client_id', $client->id)
-            ->where('organization_user_id', $organizationUser->id)
+            ->where(function ($q) use ($organizationUser): void {
+                $q->where('organization_user_id', $organizationUser->id)
+                    ->orWhereNull('organization_user_id');
+            })
             ->latest();
 
         if ($request->filled('search')) {
@@ -145,7 +148,8 @@ class ClientTicketController extends Controller
             abort(404);
         }
 
-        if ((int) $ticket->organization_user_id !== (int) $organizationUser->id) {
+        // Admin-created tickets have no organization_user_id; any org user of the same client may access them.
+        if ($ticket->organization_user_id !== null && (int) $ticket->organization_user_id !== (int) $organizationUser->id) {
             abort(404);
         }
     }

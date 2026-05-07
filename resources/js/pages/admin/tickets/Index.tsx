@@ -15,14 +15,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
     Table,
@@ -34,6 +26,8 @@ import {
 } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { Ticket, type BreadcrumbItem } from '@/types';
+import { Select as MantineSelect, TextInput } from '@mantine/core';
+import { useDebouncedValue } from '@mantine/hooks';
 import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -44,7 +38,6 @@ import {
     Clock,
     Edit,
     Eye,
-    Filter,
     ListChecks,
     MoreHorizontal,
     Search,
@@ -53,8 +46,9 @@ import {
     User,
     XCircle,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import AdminRaiseTicket from './AdminRaiseTicket';
+import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -85,7 +79,15 @@ interface TicketsIndexProps {
     };
     userPermissions?: string[];
     clients?: Array<{ id: number; name: string }>;
+    stats: {
+        total_open: number;
+        open_today: number;
+        in_progress: number;
+        completed: number;
+    };
 }
+
+
 
 export default function TicketsIndex(props: TicketsIndexProps) {
     const {
@@ -93,42 +95,29 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         filters = {},
         userPermissions = [],
         clients = [],
+        stats,
     } = props;
 
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
-    const [priorityFilter, setPriorityFilter] = useState(
-        filters.priority || 'all',
-    );
     const [clientFilter, setClientFilter] = useState(
         filters.client_id || 'all',
     );
     const [isLoading, setIsLoading] = useState(false);
 
-    // Filter tickets based on search query
-    const filteredTickets = useMemo(() => {
-        if (!searchQuery.trim()) return tickets.data;
+    const [debouncedSearch] = useDebouncedValue(searchQuery, 800);
 
-        const query = searchQuery.toLowerCase();
-        return tickets.data.filter(
-            (ticket: Ticket) =>
-                ticket.title.toLowerCase().includes(query) ||
-                ticket.ticket_number.toLowerCase().includes(query) ||
-                (ticket.description?.toLowerCase().includes(query) ?? false) ||
-                (ticket.client?.name?.toLowerCase().includes(query) ?? false),
-        );
-    }, [tickets.data, searchQuery]);
-
-    // Handle filter changes
-    const handleFilterChange = () => {
+    const applyFilters = (overrides: { search?: string; status?: string; client_id?: string } = {}) => {
         setIsLoading(true);
+        const search = 'search' in overrides ? overrides.search : debouncedSearch;
+        const status = 'status' in overrides ? overrides.status : statusFilter;
+        const client = 'client_id' in overrides ? overrides.client_id : clientFilter;
         router.get(
             '/admin/tickets',
             {
-                search: searchQuery || undefined,
-                status: statusFilter !== 'all' ? statusFilter : undefined,
-                priority: priorityFilter !== 'all' ? priorityFilter : undefined,
-                client_id: clientFilter !== 'all' ? clientFilter : undefined,
+                search: search || undefined,
+                status: status !== 'all' ? status : undefined,
+                client_id: client !== 'all' ? client : undefined,
             },
             {
                 preserveScroll: true,
@@ -137,16 +126,27 @@ export default function TicketsIndex(props: TicketsIndexProps) {
             },
         );
     };
+
+    // Auto-fire when debounced search changes (skip on mount)
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        if (!mounted) { setMounted(true); return; }
+        applyFilters({ search: debouncedSearch });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch]);
+
+    // Handle filter changes (kept for pagination)
+    const handleFilterChange = () => applyFilters();
 
     // Handle pagination
     const handlePageChange = (page: number) => {
         setIsLoading(true);
         router.get(
-            `/admin/tickets?page=${page}`,
+            '/admin/tickets',
             {
+                page,
                 search: searchQuery || undefined,
                 status: statusFilter !== 'all' ? statusFilter : undefined,
-                priority: priorityFilter !== 'all' ? priorityFilter : undefined,
                 client_id: clientFilter !== 'all' ? clientFilter : undefined,
             },
             {
@@ -157,40 +157,8 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         );
     };
 
-    const getStatusBadge = (status: string) => {
-        const variants: Record<
-            string,
-            'default' | 'secondary' | 'destructive' | 'outline'
-        > = {
-            open: 'destructive',
-            approved: 'default',
-            'in-progress': 'secondary',
-            completed: 'outline',
-            cancelled: 'destructive',
-            closed: 'outline',
-        };
-
-        const icons: Record<string, any> = {
-            open: Clock,
-            approved: CheckCircle,
-            'in-progress': Clock,
-            completed: CheckCircle,
-            cancelled: XCircle,
-            closed: CheckCircle,
-        };
-
-        const Icon = icons[status] || Clock;
-
-        return (
-            <Badge
-                variant={variants[status] || 'secondary'}
-                className="flex items-center gap-1"
-            >
-                <Icon className="h-3 w-3" />
-                {status.replace('-', ' ').toUpperCase()}
-            </Badge>
-        );
-    };
+    // tickets.data is already server-filtered; use directly
+    const filteredTickets = tickets.data;
 
     const getPriorityBadge = (priority: string) => {
         const variants: Record<
@@ -418,292 +386,86 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         );
     };
 
-    // Calculate statistics
-    const stats = useMemo(() => {
-        const allTickets: Ticket[] = tickets.data;
-        return {
-            total: allTickets.length,
-            open: allTickets.filter((t: Ticket) => t.status === 'open').length,
-            approved: allTickets.filter((t: Ticket) => t.status === 'approved')
-                .length,
-            inProgress: allTickets.filter(
-                (t: Ticket) => t.status === 'in-progress',
-            ).length,
-            completed: allTickets.filter((t: Ticket) => t.status === 'closed')
-                .length,
-            cancelled: allTickets.filter(
-                (t: Ticket) => t.status === 'cancelled',
-            ).length,
-        };
-    }, [tickets.data]);
+    const wizCards = [
+        { title: "Total Open", text: "All active tickets", stats: stats.total_open, icon: TicketIcon, color: "orange" },
+        { title: "Open Today", text: "Today's opened tickets", stats: stats.open_today, icon: Clock, color: "blue" },
+        { title: "In Progress", text: "In-progress tickets", stats: stats.in_progress, icon: Clock, color: "purple" },
+        { title: "Completed", text: "Completed tickets", stats: stats.completed, icon: CheckCircle, color: "green" },
+    ] as const;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Tickets" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">
-                            Tickets
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Manage support tickets from clients
-                        </p>
-                    </div>
-                    {/* {userPermissions.includes('ticket.create') && (
-                    )} */}
-                    <AdminRaiseTicket
-                        clients={clients}
-                    />
+
+                <div className="grid gap-2 md:grid-cols-4">
+                    {wizCards.map((card) => (
+                        <WizCardDesign1 key={card.title} {...card} />
+                    ))}
                 </div>
-
-                {/* Stats Cards */}
-                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-6">
-
-                    {/* {Object.entries(stats).map(([key, value]) => (
-                        <WizCard
-                            key={key}
-                            title={key.charAt(0).toUpperCase() + key.slice(1)}
-                            text={`All ${key} tickets`}
-                            stats={value}
-                            icon={TicketIcon}
-                        />
-                    ))} */}
-                    <WizCard title="Total Tickets" text="All tickets in system" stats={stats.total} icon={TicketIcon} />
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Open
-                            </CardTitle>
-                            <Clock className="h-4 w-4 text-red-500" />
-                        </CardHeader>
-                        <CardContent className="pt-2">
-                            <div className="text-2xl font-bold text-red-600">
-                                {stats.open}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Pending review
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Approved
-                            </CardTitle>
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent className="pt-2">
-                            <div className="text-2xl font-bold text-green-600">
-                                {stats.approved}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Ready for tasks
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                In Progress
-                            </CardTitle>
-                            <Clock className="h-4 w-4 text-blue-500" />
-                        </CardHeader>
-                        <CardContent className="pt-2">
-                            <div className="text-2xl font-bold text-blue-600">
-                                {stats.inProgress}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Currently being worked on
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Completed
-                            </CardTitle>
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent className="pt-2">
-                            <div className="text-2xl font-bold text-green-600">
-                                {stats.completed}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Resolved tickets
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Cancelled
-                            </CardTitle>
-                            <XCircle className="h-4 w-4 text-gray-500" />
-                        </CardHeader>
-                        <CardContent className="pt-2">
-                            <div className="text-2xl font-bold text-gray-600">
-                                {stats.cancelled}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Cancelled tickets
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Filters */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Filter & Search</CardTitle>
-                        <CardDescription>
-                            Search and filter tickets by various criteria
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">
-                                    Search
-                                </label>
-                                <div className="relative">
-                                    <Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        placeholder="Search tickets..."
-                                        value={searchQuery}
-                                        onChange={(e) =>
-                                            setSearchQuery(e.target.value)
-                                        }
-                                        onKeyDown={(e) =>
-                                            e.key === 'Enter' &&
-                                            handleFilterChange()
-                                        }
-                                        className="pl-8"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">
-                                    Status
-                                </label>
-                                <Select
-                                    value={statusFilter}
-                                    onValueChange={setStatusFilter}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select status" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            All Statuses
-                                        </SelectItem>
-                                        <SelectItem value="open">
-                                            Open
-                                        </SelectItem>
-                                        <SelectItem value="approved">
-                                            Approved
-                                        </SelectItem>
-                                        <SelectItem value="in-progress">
-                                            In Progress
-                                        </SelectItem>
-                                        <SelectItem value="closed">
-                                            Closed
-                                        </SelectItem>
-                                        <SelectItem value="cancelled">
-                                            Cancelled
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">
-                                    Priority
-                                </label>
-                                <Select
-                                    value={priorityFilter}
-                                    onValueChange={setPriorityFilter}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select priority" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            All Priorities
-                                        </SelectItem>
-                                        <SelectItem value="low">Low</SelectItem>
-                                        <SelectItem value="medium">
-                                            Medium
-                                        </SelectItem>
-                                        <SelectItem value="high">
-                                            High
-                                        </SelectItem>
-                                        <SelectItem value="critical">
-                                            Critical
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">
-                                    Client
-                                </label>
-                                <Select
-                                    value={clientFilter}
-                                    onValueChange={setClientFilter}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select client" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            All Clients
-                                        </SelectItem>
-                                        {clients.map((client) => (
-                                            <SelectItem
-                                                key={client.id}
-                                                value={client.id.toString()}
-                                            >
-                                                {client.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">
-                                    &nbsp;
-                                </label>
-                                <Button
-                                    onClick={handleFilterChange}
-                                    className="w-full"
-                                    disabled={isLoading}
-                                >
-                                    <Filter className="mr-2 h-4 w-4" />
-                                    Apply Filters
-                                </Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
                 {/* Ticket Table */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>All Tickets</CardTitle>
-                        <CardDescription>
-                            Complete list of all tickets in the system (
-                            {tickets.total} total)
-                        </CardDescription>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <CardTitle>All Tickets</CardTitle>
+                                <CardDescription>
+                                    {tickets.total} ticket{tickets.total !== 1 ? 's' : ''} in the system
+                                </CardDescription>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <TextInput
+                                    placeholder="Search tickets..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    leftSection={<Search size={14} />}
+                                    size="xs"
+                                    w={180}
+                                    rightSection={isLoading ? <span className="animate-spin text-xs">⏳</span> : undefined}
+                                />
+                                <MantineSelect
+                                    placeholder="All Clients"
+                                    value={clientFilter === 'all' ? null : clientFilter}
+                                    onChange={(val) => {
+                                        const next = val ?? 'all';
+                                        setClientFilter(next);
+                                        applyFilters({ client_id: next });
+                                    }}
+                                    data={[
+                                        { value: 'all', label: 'All Clients' },
+                                        ...clients.map((c) => ({ value: c.id.toString(), label: c.name })),
+                                    ]}
+                                    size="xs"
+                                    w={160}
+                                    clearable
+                                    searchable
+                                />
+                                <MantineSelect
+                                    placeholder="All Statuses"
+                                    value={statusFilter === 'all' ? null : statusFilter}
+                                    onChange={(val) => {
+                                        const next = val ?? 'all';
+                                        setStatusFilter(next);
+                                        applyFilters({ status: next });
+                                    }}
+                                    data={[
+                                        { value: 'all', label: 'All Statuses' },
+                                        { value: 'open', label: 'Open' },
+                                        { value: 'approved', label: 'Approved' },
+                                        { value: 'in-progress', label: 'In Progress' },
+                                        { value: 'closed', label: 'Closed' },
+                                        { value: 'cancelled', label: 'Cancelled' },
+                                    ]}
+                                    size="xs"
+                                    w={140}
+                                    clearable
+                                />
+                                <AdminRaiseTicket
+                                    clients={clients}
+                                />
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? (
@@ -731,7 +493,6 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                 <p className="mt-1 text-sm text-gray-500">
                                     {searchQuery ||
                                         statusFilter !== 'all' ||
-                                        priorityFilter !== 'all' ||
                                         clientFilter !== 'all'
                                         ? 'Try adjusting your search criteria'
                                         : 'Get started by creating a new ticket'}
@@ -976,25 +737,3 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         </AppLayout>
     );
 }
-
-
-const WizCard = ({ title, text, stats, icon: Icon }: { title: string; text: string; stats: any; icon: React.ElementType }) => {
-    return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                    {title}
-                </CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="pt-2">
-                <div className="text-2xl font-bold">
-                    {stats}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                    {text}
-                </p>
-            </CardContent>
-        </Card>
-    );
-};

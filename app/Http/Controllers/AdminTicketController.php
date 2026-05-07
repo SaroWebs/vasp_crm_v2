@@ -154,10 +154,19 @@ class AdminTicketController extends Controller
         // Get clients for filter dropdown
         $clients = Client::select('id', 'name')->where('status', 'active')->get();
 
+        // Calculate global statistics (unfiltered)
+        $stats = [
+            'total_open' => Ticket::whereIn('status', ['open', 'approved', 'in-progress'])->count(),
+            'open_today' => Ticket::whereDate('created_at', Carbon::today())->count(),
+            'in_progress' => Ticket::where('status', 'in-progress')->count(),
+            'completed' => Ticket::where('status', 'closed')->count(),
+        ];
+
         return Inertia::render('admin/tickets/Index', [
             'tickets' => $tickets,
             'filters' => $request->only(['status', 'priority', 'client_id', 'search']),
             'clients' => $clients,
+            'stats' => $stats,
         ]);
     }
 

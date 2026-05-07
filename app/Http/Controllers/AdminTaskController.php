@@ -91,9 +91,12 @@ class AdminTaskController extends Controller
         $page = (int) ($validated['page'] ?? 1);
         $sortBy = $validated['sort_by'] ?? 'created_at';
         $sortOrder = $validated['sort_order'] ?? 'desc';
-
-        $query = Task::withTrashed()
-            ->select('tasks.*')
+        if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
+            $query = Task::withTrashed();
+        } else {
+            $query = Task::query();
+        }
+        $query->select('tasks.*')
             ->with([
                 'createdBy:id,name',
                 'assignedDepartment:id,name',
@@ -162,10 +165,16 @@ class AdminTaskController extends Controller
                 return $task;
             })
         );
-        $stateCounts = Task::withTrashed()
-            ->selectRaw('state, COUNT(*) as total')
-            ->groupBy('state')
-            ->pluck('total', 'state');
+        if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
+            $stateCounts = Task::withTrashed()
+                ->selectRaw('state, COUNT(*) as total')
+                ->groupBy('state')
+                ->pluck('total', 'state');
+        } else {
+            $stateCounts = Task::selectRaw('state, COUNT(*) as total')
+                ->groupBy('state')
+                ->pluck('total', 'state');
+        }
 
         $stats = [
             'total' => (int) $stateCounts->sum(),
@@ -267,32 +276,36 @@ class AdminTaskController extends Controller
         if (! $currentUser->hasPermission('task.read')) {
             abort(403, 'Insufficient permissions');
         }
+        if ($currentUser->hasRole(['super-admin', 'admin', 'manager'])) {
+            $tsk = Task::withTrashed();
+        } else {
+            $tsk = Task::query();
+        }
 
-        $tsk = Task::withTrashed()
-            ->with([
-                'createdBy:id,name,email',
-                'assignedDepartment:id,name',
-                'assignedUsers:id,name,email',
-                'taskType:id,name,code',
-                'slaPolicy:id,name,priority',
-                'parentTask:id,title,task_code',
-                'childTasks:id,title,task_code',
-                'ticket:id,ticket_number,title,client_id',
-                'ticket.client:id,name',
-                'comments',
-                'comments.user:id,name',
-                'attachments',
-                'forwardings:id,from_user_id,to_user_id,to_department_id,remarks,status,forwarded_at,is_end_user,created_at',
-                'forwardings.fromUser:id,name',
-                'forwardings.toUser:id,name',
-                'forwardings.toDepartment:id,name',
-                'history:id,old_status,new_status,changed_by,created_at',
-                'auditEvents.actorUser',
-                'timeEntries',
-                'taskAssignments',
-                'dependencies',
-                'timelineEvents',
-            ])
+        $tsk = $tsk->with([
+            'createdBy:id,name,email',
+            'assignedDepartment:id,name',
+            'assignedUsers:id,name,email',
+            'taskType:id,name,code',
+            'slaPolicy:id,name,priority',
+            'parentTask:id,title,task_code',
+            'childTasks:id,title,task_code',
+            'ticket:id,ticket_number,title,client_id',
+            'ticket.client:id,name',
+            'comments',
+            'comments.user:id,name',
+            'attachments',
+            'forwardings:id,from_user_id,to_user_id,to_department_id,remarks,status,forwarded_at,is_end_user,created_at',
+            'forwardings.fromUser:id,name',
+            'forwardings.toUser:id,name',
+            'forwardings.toDepartment:id,name',
+            'history:id,old_status,new_status,changed_by,created_at',
+            'auditEvents.actorUser',
+            'timeEntries',
+            'taskAssignments',
+            'dependencies',
+            'timelineEvents',
+        ])
             ->find($task);
 
         if (! $tsk) {

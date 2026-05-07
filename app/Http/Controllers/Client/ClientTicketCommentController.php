@@ -185,7 +185,8 @@ class ClientTicketCommentController extends Controller
             abort(404);
         }
 
-        if ((int) $ticket->organization_user_id !== (int) $organizationUser->id) {
+        // Admin-created tickets have no organization_user_id; any org user of the same client may access them.
+        if ($ticket->organization_user_id !== null && (int) $ticket->organization_user_id !== (int) $organizationUser->id) {
             abort(404);
         }
     }
