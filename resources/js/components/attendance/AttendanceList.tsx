@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Clock, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { format } from 'date-fns';
+import { Text } from '@mantine/core';
 
 interface AttendanceRecord {
     id?: number;
@@ -281,7 +282,7 @@ export function AttendanceList({
                         )}
                     </div>
                 </div>
-                {hasFilter && (
+                {(hasFilter && records.length > 0) && (
                     <div className="mt-3">
                         <input
                             value={filter}
@@ -305,7 +306,7 @@ export function AttendanceList({
                                     <div className="flex justify-between items-center">
                                         <div className="flex items-center gap-2">
                                             <User className="h-3 w-3" />
-                                            <span>{record.employee_name ?? `Employee #${record.employee_id ?? ''}`}</span>
+                                            <Text className='font-mono text-xs'>{record.employee_name ?? `Employee #${record.employee_id ?? ''}`}</Text>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <div className="flex items-center gap-1">

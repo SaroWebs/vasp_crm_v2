@@ -1,11 +1,8 @@
 import axios from 'axios';
-import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
 import TaskTimeline from '@/components/admin/TaskTimeline';
 import { AttendanceCalendar } from '@/components/attendance';
 import Board from '@/components/tasks/Board';
-import NotificationMenu from '@/components/notifications/NotificationMenu';
 import RecentReportSection from '@/components/reports/RecentReportSection';
-import MajorTasks from '@/components/tasks/MajorTasks';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,21 +12,16 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import StatCard from '@/components/dashboard/StatCard';
-import ActivityEntryCard from '@/components/dashboard/ActivityEntryCard';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Task } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
-    AlertCircle,
-    ArrowRight,
-    Briefcase,
     Building2,
     Calendar,
     CheckCircle,
     Clock,
-    FolderKanban,
     Ticket,
+    TicketIcon,
     UserCheck,
     Users,
 } from 'lucide-react';
@@ -40,6 +32,8 @@ import RecentTicketsWidget from '@/components/dashboard/widgets/RecentTicketsWid
 import DashboardTasksWidget from '@/components/dashboard/widgets/DashboardTasksWidget';
 import EmployeeActivitiesWidget from '@/components/dashboard/widgets/EmployeeActivitiesWidget';
 import EmployeeRecentReportsWidget from '@/components/dashboard/widgets/EmployeeRecentReportsWidget';
+import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
+import { useDashboardStats } from '@/hooks/use-dashboard-stats';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -85,7 +79,8 @@ export default function Dashboard(props: DashboardProps) {
         auth,
     } = props;
 
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+    const { stats: dashboardStats } = useDashboardStats(auth?.user?.id);
+
     const [boardTasks, setBoardTasks] = useState<Task[]>([]);
     const [boardLoading, setBoardLoading] = useState(false);
     const [boardError, setBoardError] = useState<string | null>(null);
@@ -125,17 +120,60 @@ export default function Dashboard(props: DashboardProps) {
     }, [auth?.user?.id]);
 
 
+    const wizCards = [
+        {
+            title: 'Open Tickets',
+            text: 'All active tickets',
+            stats: dashboardStats.open_tickets ?? 0,
+            icon: TicketIcon,
+            color: 'orange',
+        },
+        {
+            title: 'Closed Tickets',
+            text: 'All closed tickets',
+            stats: dashboardStats.closed_tickets ?? 0,
+            icon: CheckCircle,
+            color: 'blue',
+        },
+        {
+            title: 'Pending Tasks',
+            text: 'All pending tasks',
+            stats: dashboardStats.pending_tasks ?? 0,
+            icon: Clock,
+            color: 'purple',
+        },
+        {
+            title: 'Completed Tasks',
+            text: 'All completed tasks',
+            stats: dashboardStats.completed_tasks ?? 0,
+            icon: CheckCircle,
+            color: 'green',
+        },
+    ] as const;
 
     const renderAdminDashboard = () => (
         <>
             {/* Charts and Recent Activity */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <div className="lg:col-span-4 space-y-4">
-                    {/* Recent Tickets Widget */}
-                    <RecentTicketsWidget />
-                    <RecentReportSection />
+            <div className="grid gap-4 md:grid-cols-5">
+                <div className="md:col-span-5">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                        {wizCards.map((wizCard) => (
+                            <WizCardDesign1
+                                key={wizCard.title}
+                                title={wizCard.title}
+                                text={wizCard.text}
+                                stats={wizCard.stats}
+                                icon={wizCard.icon}
+                                color={wizCard.color}
+                            />
+                        ))}
+                    </div>
                 </div>
-                <div className="lg:col-span-3">
+                <div className="md:col-span-3 space-y-4">
+                    <RecentTicketsWidget />
+
+                </div>
+                <div className="md:col-span-2 space-y-4">
                     <AttendanceList
                         date={new Date()}
                         type="admin"
@@ -143,62 +181,11 @@ export default function Dashboard(props: DashboardProps) {
                         hasFilter={true}
                         showRecentOnly={false}
                     />
+                    <RecentReportSection />
                 </div>
             </div>
 
-            <MajorTasks employees={employees || []} />
-
             <TaskTimeline />
-
-            {/* Employee Progress Section */}
-            <Card>
-                <CardHeader>
-                    <div className="">
-                        <CardTitle>Employee Progress</CardTitle>
-                        <CardDescription>
-                            Task time entries and progress tracking
-                        </CardDescription>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        {/* Employee Selection */}
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 text-muted-foreground" />
-                                <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={selectedEmployeeId}
-                                    onChange={(e) => {
-                                        setSelectedEmployeeId(e.target.value);
-                                    }}
-                                >
-                                    <option value="all">All employees</option>
-                                    {(employees || []).map((employee) => (
-                                        <option
-                                            key={employee.id}
-                                            value={employee.id}
-                                        >
-                                            {employee.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Employee Task Progress Component */}
-                        {selectedEmployeeId === 'all' ? (
-                            <EmployeeTaskProgress employeeId="all" />
-                        ) : selectedEmployeeId ? (
-                            <EmployeeTaskProgress
-                                employeeId={Number(selectedEmployeeId)}
-                            />
-                        ) : (
-                            <EmployeeTaskProgress employeeId="all" />
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
 
             {/* Task Status Overview */}
             <div className="grid gap-4 md:grid-cols-2">
@@ -545,35 +532,10 @@ export default function Dashboard(props: DashboardProps) {
         }
     };
 
-    // Get subtitle based on dashboard type
-    const getDashboardSubtitle = () => {
-        switch (dashboard_type) {
-            case 'employee':
-                return 'Your personal task overview and progress';
-            default:
-                return 'Overview of your VASP ticket management system';
-        }
-    };
-
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={getDashboardTitle()} />
-
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">
-                            {getDashboardTitle()}
-                        </h1>
-                        <p className="text-muted-foreground">
-                            {getDashboardSubtitle()}
-                        </p>
-                    </div>
-                    <NotificationMenu />
-                </div>
-
-                {/* Render dashboard based on type */}
                 {renderDashboard()}
             </div>
         </AppLayout>

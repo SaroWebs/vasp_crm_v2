@@ -45,3 +45,11 @@ Broadcast::channel('notifications.{userId}', function ($user, $userId) {
     // Allow regular users to only receive their own notifications
     return (int) $user->id === (int) $userId;
 });
+
+Broadcast::channel('dashboard.{userId}', function ($user, $userId) {
+    if (Auth::guard('admin')->check()) {
+        return true;
+    }
+
+    return (int) $user->id === (int) $userId;
+});

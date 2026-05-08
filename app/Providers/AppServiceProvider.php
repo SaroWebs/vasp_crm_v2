@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use App\Models\OrganizationUser;
+use App\Models\Task;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Observers\DashboardTaskObserver;
+use App\Observers\DashboardTicketObserver;
 use App\Observers\TicketObserver;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -32,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
         Schema::defaultStringLength(191);
 
         Ticket::observe(TicketObserver::class);
+        Ticket::observe(DashboardTicketObserver::class);
+        Task::observe(DashboardTaskObserver::class);
 
         Event::listen(Login::class, function (Login $event): void {
             if ($event->user instanceof OrganizationUser || $event->guard === 'organization') {

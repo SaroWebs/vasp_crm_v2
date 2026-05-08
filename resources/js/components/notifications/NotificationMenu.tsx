@@ -90,9 +90,8 @@ const NotificationMenu = () => {
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="relative">
-                    <Bell className="mr-2 h-4 w-4" />
-                    Notifications
-                    {typeof unreadCount === 'number' ? (
+                    <Bell className="h-4 w-4" />
+                    {typeof unreadCount === 'number' && unreadCount > 0 ? (
                         <Badge variant="destructive" className="ml-2">
                             {unreadCount}
                         </Badge>
@@ -112,49 +111,49 @@ const NotificationMenu = () => {
                 ) : null}
                 {!loading && notifications.length > 0
                     ? notifications.map((note) => (
-                          <DropdownMenuItem
-                              onClick={() => void handleOpenNotification(note)}
-                              key={note.id}
-                              className="flex items-start space-x-3 p-3"
-                          >
-                              <div className="mt-0.5 shrink-0">
-                                  {getIcon(note)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                  <p className="truncate text-xs font-medium text-gray-900">
-                                      {note.title}
-                                  </p>
-                                  {note.target_url ? (
-                                      <Link
-                                          href={note.target_url}
-                                          className="line-clamp-2 block text-xs text-blue-600 hover:underline"
-                                          onClick={(event) =>
-                                              event.stopPropagation()
-                                          }
-                                      >
-                                          {note.message}
-                                      </Link>
-                                  ) : (
-                                      <p className="line-clamp-2 text-xs text-gray-500">
-                                          {note.message}
-                                      </p>
-                                  )}
-                                  <p className="mt-1 text-xs text-gray-400">
-                                      {formatTime(note.created_at)}
-                                  </p>
-                                  {note.target_url ? (
-                                      <p className="mt-1 text-xs font-medium text-blue-600">
-                                          Open {note.target_type ?? 'item'}
-                                      </p>
-                                  ) : null}
-                              </div>
-                              {note.status === 'unread' ? (
-                                  <div className="shrink-0">
-                                      <div className="h-2 w-2 rounded-full bg-blue-500" />
-                                  </div>
-                              ) : null}
-                          </DropdownMenuItem>
-                      ))
+                        <DropdownMenuItem
+                            onClick={() => void handleOpenNotification(note)}
+                            key={note.id}
+                            className="flex items-start space-x-3 p-3"
+                        >
+                            <div className="mt-0.5 shrink-0">
+                                {getIcon(note)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium text-gray-900">
+                                    {note.title}
+                                </p>
+                                {note.target_url ? (
+                                    <Link
+                                        href={note.target_url}
+                                        className="line-clamp-2 block text-xs text-blue-600 hover:underline"
+                                        onClick={(event) =>
+                                            event.stopPropagation()
+                                        }
+                                    >
+                                        {note.message}
+                                    </Link>
+                                ) : (
+                                    <p className="line-clamp-2 text-xs text-gray-500">
+                                        {note.message}
+                                    </p>
+                                )}
+                                <p className="mt-1 text-xs text-gray-400">
+                                    {formatTime(note.created_at)}
+                                </p>
+                                {note.target_url ? (
+                                    <p className="mt-1 text-xs font-medium text-blue-600">
+                                        Open {note.target_type ?? 'item'}
+                                    </p>
+                                ) : null}
+                            </div>
+                            {note.status === 'unread' ? (
+                                <div className="shrink-0">
+                                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                </div>
+                            ) : null}
+                        </DropdownMenuItem>
+                    ))
                     : null}
                 <DropdownMenuItem asChild>
                     <Link

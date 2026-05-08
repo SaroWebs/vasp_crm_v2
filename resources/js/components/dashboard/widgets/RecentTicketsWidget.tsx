@@ -1,72 +1,152 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from '@inertiajs/react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import {
+    Card,
+    Table,
+    Badge,
+    Text,
+    Skeleton,
+    Group,
+    Stack,
+} from '@mantine/core';
+import { TicketIcon } from 'lucide-react';
+
+type Ticket = {
+    id: number;
+    ticket_number: string;
+    subject: string | null;
+    status: 'open' | 'in-progress' | 'closed';
+    priority: 'low' | 'medium' | 'high';
+    client: string;
+    created_at: string;
+};
+
+const statusColor: Record<string, string> = {
+    open: 'blue',
+    'in-progress': 'yellow',
+    closed: 'gray',
+};
+
+const priorityColor: Record<string, string> = {
+    low: 'green',
+    medium: 'orange',
+    high: 'red',
+};
+
+function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    const weeks = Math.floor(days / 7);
+    const months = Math.floor(days / 30);
+
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min${mins > 1 ? 's' : ''} ago`;
+    if (hours < 24) return `${hours} hr${hours > 1 ? 's' : ''} ago`;
+    if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (weeks < 5) return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+    return `${months} month${months > 1 ? 's' : ''} ago`;
+}
 
 export default function RecentTicketsWidget() {
-    const [tickets, setTickets] = useState<any[]>([]);
+    const [tickets, setTickets] = useState<Ticket[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        axios.get('/admin/api/dashboard/tickets')
-            .then(res => setTickets(res.data.tickets || []))
-            .catch(err => console.error(err))
+        axios
+            .get('/admin/api/dashboard/tickets')
+            .then((res) => setTickets(res.data.tickets || []))
+            .catch((err) => console.error(err))
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Recent Tickets</CardTitle>
-                    <CardDescription>Loading tickets...</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="h-48 animate-pulse bg-muted rounded-md" />
-                </CardContent>
-            </Card>
-        );
-    }
-
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Recent Tickets</CardTitle>
-                <CardDescription>Latest ticket submissions</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {tickets.length > 0 ? tickets.map((ticket) => (
-                    <Link
-                        key={ticket.id}
-                        href={`/admin/tickets/${ticket.id}`}
-                        className="flex cursor-pointer items-center justify-between space-x-4"
+        <Card withBorder radius="md">
+            <Card.Section withBorder inheritPadding py="sm" mb="sm">
+                <Group gap="xs">
+                    <TicketIcon size={18} className="text-blue-500" />
+                    <Text fw={600} size="sm">Recent Tickets</Text>
+                </Group>
+            </Card.Section>
+
+            {loading ? (
+                <Stack gap="xs">
+                    {[...Array(4)].map((_, i) => (
+                        <Skeleton key={i} height={36} radius="sm" />
+                    ))}
+                </Stack>
+            ) : tickets.length === 0 ? (
+                <Text size="sm" c="dimmed" ta="center" py="xl">
+                    No recent tickets.
+                </Text>
+            ) : (
+                <div className="max-h-72 overflow-y-auto">
+                    <Table
+                        striped
+                        highlightOnHover
+                        withTableBorder
+                        withColumnBorders
+                        verticalSpacing="xs"
+                        horizontalSpacing="sm"
+                        fz="sm"
                     >
-                        <div className="flex w-full items-center justify-between pb-4">
-                            <div className="flex-1 space-y-1">
-                                <p className="text-sm leading-none font-medium">{ticket.subject || ticket.title}</p>
-                                <p className="text-sm text-muted-foreground">
-                                    {ticket.client || ticket.client?.name} • {ticket.ticket_number}
-                                </p>
-                            </div>
-                            <Badge
-                                variant={
-                                    ticket.status === 'open'
-                                        ? 'destructive'
-                                        : ticket.status === 'approved'
-                                            ? 'default'
-                                            : 'secondary'
-                                }
-                                className="h-6"
-                            >
-                                {ticket.status}
-                            </Badge>
-                        </div>
-                    </Link>
-                )) : (
-                    <p className="text-sm text-muted-foreground">No recent tickets.</p>
-                )}
-            </CardContent>
+                        <Table.Thead>
+                            <Table.Tr>
+                                <Table.Th>Subject</Table.Th>
+                                <Table.Th>Client</Table.Th>
+                                <Table.Th>Priority</Table.Th>
+                                <Table.Th>Status</Table.Th>
+                                <Table.Th>Time</Table.Th>
+                            </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                            {tickets.map((ticket) => (
+                                <Table.Tr key={ticket.id} className="cursor-pointer">
+                                    <Table.Td miw={200}>
+                                        <Link
+                                            href={`/admin/tickets/${ticket.id}`}
+                                            className="text-blue-600 capitalize hover:underline max-w-[180px] truncate"
+                                        >
+                                            {ticket.subject}
+                                        </Link>
+                                    </Table.Td>
+
+                                    <Table.Td w={120}>
+                                        <Text size="xs" fw={200} truncate maw={120} className='font-mono text-xs'>
+                                            {ticket.client}
+                                        </Text>
+                                    </Table.Td>
+                                    <Table.Td w={80}>
+                                        <Badge
+                                            size="xs"
+                                            variant="light"
+                                            color={priorityColor[ticket.priority] ?? 'gray'}
+                                        >
+                                            {ticket.priority}
+                                        </Badge>
+                                    </Table.Td>
+                                    <Table.Td w={110}>
+                                        <Badge
+                                            size="xs"
+                                            variant="filled"
+                                            color={statusColor[ticket.status] ?? 'gray'}
+                                        >
+                                            {ticket.status}
+                                        </Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Text size="xs" c="dimmed">
+                                            {timeAgo(ticket.created_at)}
+                                        </Text>
+                                    </Table.Td>
+                                </Table.Tr>
+                            ))}
+                        </Table.Tbody>
+                    </Table>
+                </div>
+            )}
         </Card>
     );
 }

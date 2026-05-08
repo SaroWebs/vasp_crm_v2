@@ -45,10 +45,14 @@ import {
     Trash2,
     User,
     XCircle,
+    X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import axios from 'axios';
+import { toast } from 'sonner';
 import AdminRaiseTicket from './AdminRaiseTicket';
 import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
+import TicketAssignmentDialog from '@/components/ticket-assignment-dialog';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -104,6 +108,26 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         filters.client_id || 'all',
     );
     const [isLoading, setIsLoading] = useState(false);
+    const [closingTicketId, setClosingTicketId] = useState<number | null>(null);
+
+    const handleCloseTicket = (ticketId: number) => {
+        setClosingTicketId(ticketId);
+        axios
+            .patch(`/admin/tickets/${ticketId}/status`, { status: 'closed' })
+            .then(() => {
+                toast.success('Ticket closed successfully!');
+                window.location.reload();
+            })
+            .catch((err) => {
+                toast.error(
+                    'Failed to close ticket: ' +
+                    (err.response?.data?.message || err.message),
+                );
+            })
+            .finally(() => {
+                setClosingTicketId(null);
+            });
+    };
 
     const [debouncedSearch] = useDebouncedValue(searchQuery, 800);
 
@@ -134,9 +158,6 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         applyFilters({ search: debouncedSearch });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearch]);
-
-    // Handle filter changes (kept for pagination)
-    const handleFilterChange = () => applyFilters();
 
     // Handle pagination
     const handlePageChange = (page: number) => {
@@ -572,9 +593,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                             </span>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-sm text-muted-foreground">
-                                                            Unassigned
-                                                        </span>
+                                                        <TicketAssignmentDialog type="button" ticketId={ticket.id} />
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
@@ -627,6 +646,23 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                                         View Details
                                                                     </Link>
                                                                 </DropdownMenuItem>
+                                                                {(ticket.status != "closed" && ticket.status != "cancelled") && (
+                                                                    <DropdownMenuItem asChild>
+                                                                        <TicketAssignmentDialog type="link" ticketId={ticket.id} />
+                                                                    </DropdownMenuItem>
+                                                                )}
+
+                                                                {/* Close Ticket */}
+                                                                {(['open', 'approved', 'in-progress'] as Ticket['status'][]).includes(ticket.status) && (
+                                                                    <DropdownMenuItem
+                                                                        onClick={() => handleCloseTicket(ticket.id)}
+                                                                        disabled={closingTicketId === ticket.id}
+                                                                        className="flex items-center gap-2 cursor-pointer text-orange-600 focus:text-orange-600"
+                                                                    >
+                                                                        <X className="h-4 w-4" />
+                                                                        {closingTicketId === ticket.id ? 'Closing...' : 'Close Ticket'}
+                                                                    </DropdownMenuItem>
+                                                                )}
 
                                                                 {/* Edit Ticket */}
                                                                 <DropdownMenuItem asChild>

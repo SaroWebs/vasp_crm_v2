@@ -13,6 +13,7 @@ use App\Models\TicketHistory;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\TicketNumberGenerator;
+use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -194,6 +195,30 @@ class AdminTicketController extends Controller
 
         return Inertia::render('admin/tickets/Show', [
             'ticket' => $ticket,
+        ]);
+    }
+
+    public function getTicketData(Ticket $ticket, WorkingHoursService $workingHoursService): JsonResponse
+    {
+        $ticket->load([
+            'client',
+            'organizationUser',
+            'assignedTo',
+            'approvedBy',
+            'attachments',
+            'tasks' => function ($query) {
+                $query->with(['assignedUsers', 'assignedDepartment', 'createdBy'])
+                    ->latest('created_at');
+            },
+        ]);
+
+        $workingHoursConfig = $workingHoursService->getWorkingHoursConfig();
+        $holidaysConfig = $workingHoursService->getHolidaysConfig();
+
+        return response()->json([
+            'ticket' => $ticket,
+            'working_hours' => $workingHoursConfig,
+            'holidays' => $holidaysConfig['holidays'] ?? [],
         ]);
     }
 
@@ -518,8 +543,8 @@ class AdminTicketController extends Controller
             'ticket_assigned',
             $previousAssignedTo ? 'Ticket Reassigned' : 'New Ticket Assignment',
             $previousAssignedTo
-                ? "Ticket #{$ticket->ticket_number} has been reassigned to you: {$ticket->title}"
-                : "You have been assigned ticket #{$ticket->ticket_number}: {$ticket->title}",
+            ? "Ticket #{$ticket->ticket_number} has been reassigned to you: {$ticket->title}"
+            : "You have been assigned ticket #{$ticket->ticket_number}: {$ticket->title}",
             [
                 'ticket_id' => $ticket->id,
                 'ticket_number' => $ticket->ticket_number,

@@ -113,7 +113,9 @@ class DashboardService
             'total_tickets' => Ticket::count(),
             'total_tasks' => Task::count(),
             'open_tickets' => Ticket::where('status', 'open')->count(),
+            'closed_tickets' => Ticket::where('status', 'closed')->count(),
             'pending_tasks' => Task::where('state', 'Draft')->count(),
+            'completed_tasks' => Task::where('state', 'Done')->count(),
             'completed_tasks_this_month' => Task::where('state', 'Done')
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
@@ -245,7 +247,7 @@ class DashboardService
      */
     public function getRecentTickets()
     {
-        return Ticket::with(['client', 'organizationUser'])
+        return Ticket::with(['client', 'organizationUser', 'assignedTo'])
             ->latest('created_at')
             ->limit(10)
             ->get()
@@ -253,10 +255,16 @@ class DashboardService
                 return [
                     'id' => $ticket->id,
                     'ticket_number' => $ticket->ticket_number,
-                    'subject' => $ticket->subject,
+                    'subject' => $ticket->subject ?? $ticket->title,
                     'status' => $ticket->status,
                     'priority' => $ticket->priority,
                     'client' => $ticket->client?->name,
+                    'assigned_to' => $ticket->assignedTo
+                        ? [
+                            'id' => $ticket->assignedTo->id,
+                            'name' => $ticket->assignedTo->name,
+                        ]
+                        : null,
                     'created_at' => $ticket->created_at->toISOString(),
                 ];
             });

@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { X } from 'lucide-react';
@@ -93,18 +92,18 @@ const TaskDurationPicker = ({
     };
 
     return (
-        <div className="space-y-2">
+        <div className="">
             <div className="flex justify-between">
-                <Label htmlFor={id}>
+                <Label htmlFor={id} className="text-xs">
                     {label}
                     {required && <span className="ml-1 text-red-500">*</span>}
                 </Label>
                 {!!displayValue && (
-                    <X className="mr-2 h-6 w-6 cursor-pointer text-muted-foreground" onClick={() => onChange('')} />
+                    <X className="mr-2 h-4 w-4 cursor-pointer text-muted-foreground" onClick={() => onChange('')} />
                 )}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-2 md:grid-cols-3">
                 <div className="space-y-1">
                     <Label htmlFor={`${id}-days`} className="text-xs text-muted-foreground">
                         Days
@@ -118,6 +117,7 @@ const TaskDurationPicker = ({
                             updatePart({ days: Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0) })
                         }
                         disabled={disabled}
+                        className='text-xs'
                     />
                 </div>
 
@@ -130,7 +130,7 @@ const TaskDurationPicker = ({
                         value={parts.hours}
                         onChange={(e) => updatePart({ hours: Number.parseInt(e.target.value, 10) || 0 })}
                         disabled={disabled}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
                     >
                         {hourOptions.map((hour) => (
                             <option key={hour} value={hour}>
@@ -149,7 +149,7 @@ const TaskDurationPicker = ({
                         value={parts.minutes}
                         onChange={(e) => updatePart({ minutes: Number.parseInt(e.target.value, 10) || 0 })}
                         disabled={disabled}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
                     >
                         {minuteOptions.map((minute) => (
                             <option key={minute} value={minute}>
@@ -160,8 +160,8 @@ const TaskDurationPicker = ({
                 </div>
             </div>
 
-            {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {helperText && <p className="text-xs text-muted-foreground">{helperText}</p>}
+            {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
     );
 };

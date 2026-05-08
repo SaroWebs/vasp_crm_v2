@@ -54,7 +54,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import TaskDurationPicker from '@/components/tasks/TaskDurationPicker';
+import TicketAssignmentDialog from '@/components/ticket-assignment-dialog';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -111,7 +111,7 @@ interface AssignmentUser {
 
 export default function TicketsShow({ ticket }: TicketsShowProps) {
     const [isApproving, setIsApproving] = useState(false);
-    const [showUserAssignment, setShowUserAssignment] = useState(false);
+
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [
         showPermanentDeleteConfirmation,
@@ -310,43 +310,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             });
     };
 
-    const handleCancelUserAssignment = () => {
-        setShowUserAssignment(false);
-    };
 
-    const handleSubmitUserAssignment = (payload: UserAssignmentPayload) => {
-        setIsApproving(true);
-        axios
-            .post(`/admin/ticket/${ticket.id}/assign`, {
-                assignedTo: payload.assignedTo,
-                task: {
-                    title: payload.task.title,
-                    description: payload.task.description,
-                    start_at: payload.task.startAt || undefined,
-                    due_at: payload.task.dueAt || undefined,
-                    estimate_hours: payload.task.estimateHours
-                        ? Number(payload.task.estimateHours)
-                        : undefined,
-                    assignment_notes: payload.task.assignmentNotes || undefined,
-                },
-            })
-            .then((res) => {
-                console.log(res.data);
-                toast.success('Ticket assigned and task created successfully');
-                setShowUserAssignment(false);
-                window.location.reload();
-            })
-            .catch((err) => {
-                console.log(err.message);
-                toast.error(
-                    'Failed to assign ticket: ' +
-                    (err.response?.data?.message || err.message),
-                );
-            })
-            .finally(() => {
-                setIsApproving(false);
-            });
-    };
 
     const handleRejectTicket = () => {
         setShowRejectConfirmation(true);
@@ -824,14 +788,10 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                             Reopen Ticket
                                         </DropdownMenuItem>
                                     ) : (
-                                        <DropdownMenuItem
-                                            onClick={() =>
-                                                setShowUserAssignment(true)
-                                            }
-                                        >
-                                            <User className="mr-2 h-4 w-4" />
-                                            Assign User
-                                        </DropdownMenuItem>
+                                        <TicketAssignmentDialog
+                                            ticketId={ticket.id}
+                                            type="link"
+                                        />
                                     )}
 
                                     {/* Mark In Progress - show for approved status */}
@@ -1027,20 +987,10 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                                 'approved',
                                                 'in-progress',
                                             ].includes(ticket.status) && (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            setShowUserAssignment(
-                                                                true,
-                                                            )
-                                                        }
-                                                    >
-                                                        <User className="mr-2 h-4 w-4" />
-                                                        {ticket.assigned_to
-                                                            ? 'Reassign'
-                                                            : 'Assign User'}
-                                                    </Button>
+                                                    <TicketAssignmentDialog
+                                                        ticketId={ticket.id}
+                                                        type="button"
+                                                    />
                                                 )}
                                         </div>
                                     </div>
@@ -1093,89 +1043,89 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                                                 </div>
                                             </div>
                                         )}
-                                {/* Related Tasks Summary */}
+                                    {/* Related Tasks Summary */}
 
-                                {ticket.tasks &&
-                                    ticket.tasks.length > 0 && (
-                                        <div className="space-y-3">
-                                            <span className="text-sm font-medium">
-                                                Tasks Summary (
-                                                {ticket.tasks.length})
-                                            </span>
-                                            <div className="rounded-lg border p-3">
-                                                <div className="mb-3 flex flex-wrap gap-2">
-                                                    <Badge variant="outline">
-                                                        {
-                                                            taskStats.total
-                                                        }{' '}
-                                                        Total
-                                                    </Badge>
-                                                    <Badge variant="secondary">
-                                                        {
-                                                            taskStats.pending
-                                                        }{' '}
-                                                        Pending
-                                                    </Badge>
-                                                    <Badge className="bg-blue-100 text-blue-700">
-                                                        {
-                                                            taskStats.inProgress
-                                                        }{' '}
-                                                        In Progress
-                                                    </Badge>
-                                                    <Badge className="bg-green-100 text-green-700">
-                                                        {
-                                                            taskStats.completed
-                                                        }{' '}
-                                                        Completed
-                                                    </Badge>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {ticket.tasks
-                                                        .slice(0, 3)
-                                                        .map(
-                                                            (
-                                                                task: Task,
-                                                            ) => (
-                                                                <div
-                                                                    key={
-                                                                        task.id
-                                                                    }
-                                                                    className="flex items-center justify-between text-sm"
-                                                                >
-                                                                    <Link
-                                                                        href={`/admin/tasks/${task.id}`}
-                                                                        className="hover:underline"
+                                    {ticket.tasks &&
+                                        ticket.tasks.length > 0 && (
+                                            <div className="space-y-3">
+                                                <span className="text-sm font-medium">
+                                                    Tasks Summary (
+                                                    {ticket.tasks.length})
+                                                </span>
+                                                <div className="rounded-lg border p-3">
+                                                    <div className="mb-3 flex flex-wrap gap-2">
+                                                        <Badge variant="outline">
+                                                            {
+                                                                taskStats.total
+                                                            }{' '}
+                                                            Total
+                                                        </Badge>
+                                                        <Badge variant="secondary">
+                                                            {
+                                                                taskStats.pending
+                                                            }{' '}
+                                                            Pending
+                                                        </Badge>
+                                                        <Badge className="bg-blue-100 text-blue-700">
+                                                            {
+                                                                taskStats.inProgress
+                                                            }{' '}
+                                                            In Progress
+                                                        </Badge>
+                                                        <Badge className="bg-green-100 text-green-700">
+                                                            {
+                                                                taskStats.completed
+                                                            }{' '}
+                                                            Completed
+                                                        </Badge>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {ticket.tasks
+                                                            .slice(0, 3)
+                                                            .map(
+                                                                (
+                                                                    task: Task,
+                                                                ) => (
+                                                                    <div
+                                                                        key={
+                                                                            task.id
+                                                                        }
+                                                                        className="flex items-center justify-between text-sm"
                                                                     >
-                                                                        <div className="">
-                                                                            <h3>{task.title}</h3>
-                                                                            <p className="text-xs text-muted-foreground">
-                                                                                {
-                                                                                    task.task_code
-                                                                                }
-                                                                            </p>
-                                                                        </div>
-                                                                    </Link>
-                                                                    {getTaskStatusBadge(
-                                                                        task.state,
-                                                                    )}
-                                                                </div>
-                                                            ),
-                                                        )}
-                                                    {ticket.tasks
-                                                        .length > 3 && (
-                                                            <p className="text-xs text-muted-foreground">
-                                                                +
-                                                                {ticket
-                                                                    .tasks
-                                                                    .length -
-                                                                    3}{' '}
-                                                                more tasks
-                                                            </p>
-                                                        )}
+                                                                        <Link
+                                                                            href={`/admin/tasks/${task.id}`}
+                                                                            className="hover:underline"
+                                                                        >
+                                                                            <div className="">
+                                                                                <h3>{task.title}</h3>
+                                                                                <p className="text-xs text-muted-foreground">
+                                                                                    {
+                                                                                        task.task_code
+                                                                                    }
+                                                                                </p>
+                                                                            </div>
+                                                                        </Link>
+                                                                        {getTaskStatusBadge(
+                                                                            task.state,
+                                                                        )}
+                                                                    </div>
+                                                                ),
+                                                            )}
+                                                        {ticket.tasks
+                                                            .length > 3 && (
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    +
+                                                                    {ticket
+                                                                        .tasks
+                                                                        .length -
+                                                                        3}{' '}
+                                                                    more tasks
+                                                                </p>
+                                                            )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
                                 </CardContent>
 
                             </Card>
@@ -1421,32 +1371,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                 </div>
             )}
 
-            {showUserAssignment && (
-                <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
-                    <Card className="w-full max-w-2xl">
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>
-                                Assign User and Configure Task
-                            </CardTitle>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={handleCancelUserAssignment}
-                            >
-                                <X className="h-4 w-4" />
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
-                            <UserAssignmentForm
-                                ticket={ticket}
-                                onSubmit={handleSubmitUserAssignment}
-                                isSubmitting={isApproving}
-                                onCancel={handleCancelUserAssignment}
-                            />
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+
             {/* Delete Confirmation Modal */}
             <ConfirmationModal
                 title="Delete Ticket"
@@ -1605,254 +1530,3 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
     );
 }
 
-const UserAssignmentForm = ({
-    ticket,
-    onSubmit,
-    onCancel,
-    isSubmitting,
-}: UserAssignmentFormProps) => {
-    const [assignedTo, setAssignedTo] = useState<number | null>(null);
-    const [users, setUsers] = useState<AssignmentUser[]>([]);
-    const [taskTitle, setTaskTitle] = useState(ticket.title || '');
-    const [taskDescription, setTaskDescription] = useState(
-        ticket.description || '',
-    );
-    const [taskStartAt, setTaskStartAt] = useState(
-        new Date().toISOString().slice(0, 16),
-    );
-    const [taskDueAt, setTaskDueAt] = useState('');
-    const [taskEstimateHours, setTaskEstimateHours] = useState('');
-    const [assignmentNotes, setAssignmentNotes] = useState('');
-    const selectedUser = users.find((user) => user.id === assignedTo) || null;
-
-    const getLoadBadgeVariant = (status: string) => {
-        if (status === 'busy') return 'destructive';
-        return 'outline';
-    };
-
-    const handleLoadUsers = () => {
-        axios
-            .get('/admin/data/users/assignment')
-            .then((res) => {
-                if (res.data.users && res.data.users.length > 0) {
-                    setUsers(res.data.users);
-                }
-            })
-            .catch(() => {
-                toast.error('Failed to load users for assignment');
-            });
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!assignedTo) {
-            toast.error('Please select a user to assign');
-            return;
-        }
-
-        if (!taskTitle.trim()) {
-            toast.error('Task title is required');
-            return;
-        }
-
-        onSubmit({
-            assignedTo,
-            task: {
-                title: taskTitle.trim(),
-                description: taskDescription,
-                startAt: taskStartAt,
-                dueAt: taskDueAt || undefined,
-                estimateHours: taskEstimateHours || undefined,
-                assignmentNotes: assignmentNotes || undefined,
-            },
-        });
-    };
-
-    useEffect(() => {
-        handleLoadUsers();
-    }, []);
-
-    return (
-        <form
-            onSubmit={handleSubmit}
-            className="max-h-[70vh] overflow-y-auto px-2 py-4"
-        >
-            <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="user-assignment">
-                            Assign Ticket To
-                        </Label>
-                        <Select
-                            value={assignedTo?.toString() || ''}
-                            onValueChange={(value) =>
-                                setAssignedTo(value ? parseInt(value) : null)
-                            }
-                        >
-                            <SelectTrigger id="user-assignment">
-                                <SelectValue placeholder="Select user to assign" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {users.map((user) => (
-                                    <SelectItem
-                                        key={user.id}
-                                        value={user.id.toString()}
-                                    >
-                                        <span className="flex w-full items-center justify-between gap-2">
-                                            <span>{`${user.name}`}</span>
-                                            <small className="text-red-500">
-                                                {`(${user.in_progress_task_count > 0 ? user.in_progress_task_count : 'No'} task(s) running)`}
-                                            </small>
-                                        </span>
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {selectedUser && (
-                            <div className="rounded-md border bg-muted/40 p-3 text-xs">
-                                <div className="mb-2 flex items-center justify-between gap-2">
-                                    <div>
-                                        <p className="font-medium text-foreground">
-                                            {selectedUser.name}
-                                        </p>
-                                        <p className="text-muted-foreground">
-                                            {selectedUser.department_name ||
-                                                selectedUser.email}
-                                        </p>
-                                    </div>
-                                    <Badge
-                                        variant={getLoadBadgeVariant(
-                                            selectedUser.load_status,
-                                        )}
-                                    >
-                                        {selectedUser.load_status === 'busy'
-                                            ? 'Busy'
-                                            : 'Free'}
-                                    </Badge>
-                                </div>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <div className="rounded border bg-background p-2">
-                                        <p className="text-muted-foreground">
-                                            Active
-                                        </p>
-                                        <p className="font-semibold">
-                                            {selectedUser.active_task_count}
-                                        </p>
-                                    </div>
-                                    <div className="rounded border bg-background p-2">
-                                        <p className="text-muted-foreground">
-                                            Working
-                                        </p>
-                                        <p className="font-semibold">
-                                            {
-                                                selectedUser.in_progress_task_count
-                                            }
-                                        </p>
-                                    </div>
-                                    <div className="rounded border bg-background p-2">
-                                        <p className="text-muted-foreground">
-                                            Pending
-                                        </p>
-                                        <p className="font-semibold">
-                                            {selectedUser.pending_task_count}
-                                        </p>
-                                    </div>
-                                </div>
-                                <p className="mt-2 text-muted-foreground">
-                                    {selectedUser.load_status === 'busy'
-                                        ? `Busy because ${selectedUser.in_progress_task_count} running task(s) are in progress.`
-                                        : 'Free because no running task is currently in progress.'}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <TaskDurationPicker
-                        id="task-estimate-hours"
-                        label="Estimated Duration"
-                        value={taskEstimateHours}
-                        onChange={(value) => setTaskEstimateHours(value)}
-                        helperText="Optional. Choose a duration using days, hours, and minutes."
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="task-title">Task Title</Label>
-                    <Input
-                        id="task-title"
-                        value={taskTitle}
-                        onChange={(e) => setTaskTitle(e.target.value)}
-                        placeholder="Enter task title"
-                        required
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="task-description">Task Description</Label>
-                    <Textarea
-                        id="task-description"
-                        value={taskDescription}
-                        onChange={(e) => setTaskDescription(e.target.value)}
-                        placeholder="Enter task description"
-                        rows={4}
-                    />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="task-start-at">Start At</Label>
-                        <Input
-                            id="task-start-at"
-                            type="datetime-local"
-                            value={taskStartAt}
-                            onChange={(e) => {
-                                const newStart = e.target.value;
-                                setTaskStartAt(newStart);
-                                if (taskDueAt && taskDueAt < newStart) {
-                                    setTaskDueAt(newStart);
-                                }
-                            }}
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="task-due-at">Due At</Label>
-                        <Input
-                            id="task-due-at"
-                            type="datetime-local"
-                            value={taskDueAt}
-                            min={taskStartAt}
-                            onChange={(e) => setTaskDueAt(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="assignment-notes">Assignment Notes</Label>
-                    <Textarea
-                        id="assignment-notes"
-                        value={assignmentNotes}
-                        onChange={(e) => setAssignmentNotes(e.target.value)}
-                        placeholder="Optional notes for assignee"
-                        rows={3}
-                    />
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={onCancel}
-                        disabled={isSubmitting}
-                    >
-                        Cancel
-                    </Button>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Assigning...' : 'Assign Ticket'}
-                    </Button>
-                </div>
-            </div>
-        </form>
-    );
-};

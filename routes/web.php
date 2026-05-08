@@ -228,6 +228,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
 
         // Ticket routes (used in frontend)
         Route::get('/tickets', [AdminTicketController::class, 'index']);
+        Route::get('/data/tickets/{ticket}', [AdminTicketController::class, 'getTicketData'])->name('tickets.data');
         Route::post('/tickets', [AdminTicketController::class, 'store']);
         Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('tickets.show');
         Route::get('/tickets/{ticket}/edit', [AdminTicketController::class, 'edit'])->name('tickets.edit');
@@ -569,4 +570,4 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
 });
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
