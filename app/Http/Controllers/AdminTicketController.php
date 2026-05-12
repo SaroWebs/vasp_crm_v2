@@ -157,8 +157,8 @@ class AdminTicketController extends Controller
 
         // Calculate global statistics (unfiltered)
         $stats = [
-            'total_open' => Ticket::whereIn('status', ['open', 'approved', 'in-progress'])->count(),
-            'open_today' => Ticket::whereDate('created_at', Carbon::today())->count(),
+            'total_open' => Ticket::where('status', 'open')->count(),
+            'open_today' => Ticket::where('status', 'open')->whereDate('created_at', Carbon::today())->count(),
             'in_progress' => Ticket::where('status', 'in-progress')->count(),
             'completed' => Ticket::where('status', 'closed')->count(),
         ];

@@ -82,7 +82,7 @@ export default function RecentTicketsWidget() {
                     No recent tickets.
                 </Text>
             ) : (
-                <div className="max-h-72 overflow-y-auto">
+                <div className="max-h-90 overflow-y-auto">
                     <Table
                         striped
                         highlightOnHover
@@ -96,49 +96,50 @@ export default function RecentTicketsWidget() {
                             <Table.Tr>
                                 <Table.Th>Subject</Table.Th>
                                 <Table.Th>Client</Table.Th>
-                                <Table.Th>Priority</Table.Th>
-                                <Table.Th>Status</Table.Th>
-                                <Table.Th>Time</Table.Th>
                             </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
                             {tickets.map((ticket) => (
                                 <Table.Tr key={ticket.id} className="cursor-pointer">
-                                    <Table.Td miw={200}>
-                                        <Link
-                                            href={`/admin/tickets/${ticket.id}`}
-                                            className="text-blue-600 capitalize hover:underline max-w-[180px] truncate"
-                                        >
-                                            {ticket.subject}
-                                        </Link>
+                                    <Table.Td maw={200} style={{ overflow: 'hidden' }}>
+                                        <div className="flex flex-col">
+                                            <Link
+                                                href={`/admin/tickets/${ticket.id}`}
+                                                className="text-gray-500 capitalize hover:underline block truncate"
+                                            >
+                                                {ticket.subject}
+                                            </Link>
+                                            <div className="flex gap-2 items-center mt-1">
+                                                <Badge
+                                                    size="xs"
+                                                    variant="outline"
+                                                    color={priorityColor[ticket.priority] ?? 'gray'}
+                                                >
+                                                    {ticket.priority}
+                                                </Badge>
+                                                <span className="text-xs text-gray-200">
+                                                    ●
+                                                </span>
+                                                <Badge
+                                                    size="xs"
+                                                    variant="outline"
+                                                    color={statusColor[ticket.status] ?? 'gray'}
+                                                >
+                                                    {ticket.status}
+                                                </Badge>
+                                                <span className="text-xs text-gray-200">
+                                                    ●
+                                                </span>
+                                                <Text size="xs" c="dimmed" truncate maw={200} className='font-mono text-xs'>
+                                                    {timeAgo(ticket.created_at)}
+                                                </Text>
+                                            </div>
+                                        </div>
                                     </Table.Td>
 
                                     <Table.Td w={120}>
                                         <Text size="xs" fw={200} truncate maw={120} className='font-mono text-xs'>
                                             {ticket.client}
-                                        </Text>
-                                    </Table.Td>
-                                    <Table.Td w={80}>
-                                        <Badge
-                                            size="xs"
-                                            variant="light"
-                                            color={priorityColor[ticket.priority] ?? 'gray'}
-                                        >
-                                            {ticket.priority}
-                                        </Badge>
-                                    </Table.Td>
-                                    <Table.Td w={110}>
-                                        <Badge
-                                            size="xs"
-                                            variant="filled"
-                                            color={statusColor[ticket.status] ?? 'gray'}
-                                        >
-                                            {ticket.status}
-                                        </Badge>
-                                    </Table.Td>
-                                    <Table.Td>
-                                        <Text size="xs" c="dimmed">
-                                            {timeAgo(ticket.created_at)}
                                         </Text>
                                     </Table.Td>
                                 </Table.Tr>

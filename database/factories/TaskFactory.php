@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Task;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class TaskFactory extends Factory
@@ -12,25 +13,29 @@ class TaskFactory extends Factory
     public function definition()
     {
         return [
+            'task_code' => $this->faker->unique()->bothify('TASK-####'),
             'title' => $this->faker->sentence,
             'description' => $this->faker->paragraph,
-            'task_code' => $this->faker->unique()->bothify('TASK-##'),
-            'ticket_id' => null,
-            'parent_task_id' => null,
-            'assigned_department_id' => null,
-            'status' => 'pending',
-            'priority' => 'medium',
-            'due_at' => $this->faker->dateTimeBetween('now', '+1 week'),
             'task_type_id' => null,
             'sla_policy_id' => null,
-            'estimated_hours' => $this->faker->numberBetween(1, 8),
-            'actual_hours' => null,
-            'progress' => 0,
+            'project_id' => null,
+            'department_id' => null,
+            'current_owner_kind' => 'UNASSIGNED',
+            'current_owner_id' => null,
             'state' => 'Draft',
-            'workflow_definition' => [],
+            'start_at' => null,
+            'due_at' => $this->faker->dateTimeBetween('now', '+1 week'),
+            'completed_at' => null,
+            'estimate_hours' => $this->faker->randomFloat(2, 1, 8),
+            'tags' => [],
+            'version' => 1,
             'metadata' => [],
-            'created_at' => now(),
-            'updated_at' => now(),
+            'parent_task_id' => null,
+            'ticket_id' => null,
+            'created_by' => User::factory(),
+            'assigned_to' => null,
+            'assigned_department_id' => null,
+            'completion_notes' => null,
         ];
     }
 }

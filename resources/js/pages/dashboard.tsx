@@ -127,6 +127,7 @@ export default function Dashboard(props: DashboardProps) {
             stats: dashboardStats.open_tickets ?? 0,
             icon: TicketIcon,
             color: 'orange',
+            link: '/admin/tickets?status=open',
         },
         {
             title: 'Closed Tickets',
@@ -134,6 +135,7 @@ export default function Dashboard(props: DashboardProps) {
             stats: dashboardStats.closed_tickets ?? 0,
             icon: CheckCircle,
             color: 'blue',
+            link: '/admin/tickets?status=closed',
         },
         {
             title: 'Pending Tasks',
@@ -141,6 +143,7 @@ export default function Dashboard(props: DashboardProps) {
             stats: dashboardStats.pending_tasks ?? 0,
             icon: Clock,
             color: 'purple',
+            link: '/admin/tasks?status=pending',
         },
         {
             title: 'Completed Tasks',
@@ -148,6 +151,7 @@ export default function Dashboard(props: DashboardProps) {
             stats: dashboardStats.completed_tasks ?? 0,
             icon: CheckCircle,
             color: 'green',
+            link: '/admin/tasks?status=completed',
         },
     ] as const;
 
@@ -165,6 +169,7 @@ export default function Dashboard(props: DashboardProps) {
                                 stats={wizCard.stats}
                                 icon={wizCard.icon}
                                 color={wizCard.color}
+                                link={wizCard.link}
                             />
                         ))}
                     </div>
@@ -241,188 +246,6 @@ export default function Dashboard(props: DashboardProps) {
                     </CardContent>
                 </Card>
             </div>
-        </>
-    );
-
-    const renderManagerDashboard = () => (
-        <>
-            {/* Manager Stats Grid Widget */}
-            <DashboardStatsWidget dashboardType="manager" />
-
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Department Tasks</CardTitle>
-                        <CardDescription>
-                            Active tasks in your departments
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {myDepartmentTasks?.map((task) => (
-                                <Link
-                                    key={task.id}
-                                    href={`/admin/tasks/${task.id}`}
-                                    className="flex items-center justify-between rounded-lg p-2 hover:bg-muted"
-                                >
-                                    <div>
-                                        <p className="font-medium">{task.title}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {task.department} • Due:{' '}
-                                            {task.due_date
-                                                ? new Date(task.due_date).toLocaleDateString()
-                                                : 'N/A'}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="outline">
-                                            {task.status}
-                                        </Badge>
-                                        <Badge
-                                            variant={
-                                                task.priority === 'high'
-                                                    ? 'destructive'
-                                                    : 'secondary'
-                                            }
-                                        >
-                                            {task.priority}
-                                        </Badge>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Department Summary</CardTitle>
-                        <CardDescription>
-                            Task progress across your departments
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {departmentStats?.map((department) => (
-                                <div
-                                    key={department.id}
-                                    className="rounded-lg border border-border p-3"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-medium">
-                                            {department.name}
-                                        </span>
-                                        <Badge variant="outline">
-                                            {department.user_count} users
-                                        </Badge>
-                                    </div>
-                                    <div className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
-                                        <span>
-                                            Pending tasks: {department.pending_tasks}
-                                        </span>
-                                        <span>
-                                            Completed this month:{' '}
-                                            {department.completed_this_month}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Team Workload</CardTitle>
-                    <CardDescription>
-                        Current task distribution across team members
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        {teamWorkload?.map((user) => (
-                            <div
-                                key={user.user_id}
-                                className="flex items-center justify-between"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                                        <span className="text-xs font-medium">
-                                            {user.name.charAt(0)}
-                                        </span>
-                                    </div>
-                                    <span className="font-medium">
-                                        {user.name}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge
-                                        variant={
-                                            user.status === 'overloaded'
-                                                ? 'destructive'
-                                                : user.status === 'busy'
-                                                    ? 'default'
-                                                    : 'secondary'
-                                        }
-                                    >
-                                        {user.task_count} tasks
-                                    </Badge>
-                                    <Badge variant="outline">
-                                        {user.status}
-                                    </Badge>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Team Activity Timeline</CardTitle>
-                    <CardDescription>
-                        See recent task flow and status updates for your team
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <TaskTimeline />
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                        {userPermissions?.includes('task.read') && (
-                            <Link href="/admin/tasks">
-                                <Button variant="outline">
-                                    <CheckCircle className="mr-2 h-4 w-4" />
-                                    View Tasks
-                                </Button>
-                            </Link>
-                        )}
-                        {userPermissions?.includes('ticket.read') && (
-                            <Link href="/admin/tickets">
-                                <Button variant="outline">
-                                    <Ticket className="mr-2 h-4 w-4" />
-                                    View Tickets
-                                </Button>
-                            </Link>
-                        )}
-                        {userPermissions?.includes('department.read') && (
-                            <Link href="/admin/departments">
-                                <Button variant="outline">
-                                    <Building2 className="mr-2 h-4 w-4" />
-                                    Departments
-                                </Button>
-                            </Link>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
         </>
     );
 

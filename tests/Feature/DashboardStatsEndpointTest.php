@@ -76,8 +76,24 @@ class DashboardStatsEndpointTest extends TestCase
 
             Task::query()->create([
                 'task_code' => 'TASK-'.Str::upper(Str::random(10)),
+                'title' => 'Assigned task',
+                'state' => 'Assigned',
+                'created_by' => $admin->id,
+            ]);
+
+            $softDeletedDoneTask = Task::query()->create([
+                'task_code' => 'TASK-'.Str::upper(Str::random(10)),
                 'title' => 'Done task',
                 'state' => 'Done',
+                'created_by' => $admin->id,
+            ]);
+
+            $softDeletedDoneTask->delete();
+
+            Task::query()->create([
+                'task_code' => 'TASK-'.Str::upper(Str::random(10)),
+                'title' => 'Cancelled task',
+                'state' => 'Cancelled',
                 'created_by' => $admin->id,
             ]);
         });
@@ -92,7 +108,7 @@ class DashboardStatsEndpointTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('stats.open_tickets', 1);
         $response->assertJsonPath('stats.closed_tickets', 1);
-        $response->assertJsonPath('stats.pending_tasks', 2);
-        $response->assertJsonPath('stats.completed_tasks', 1);
+        $response->assertJsonPath('stats.pending_tasks', 3);
+        $response->assertJsonPath('stats.completed_tasks', 2);
     }
 }

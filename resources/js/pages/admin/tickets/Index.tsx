@@ -408,10 +408,10 @@ export default function TicketsIndex(props: TicketsIndexProps) {
     };
 
     const wizCards = [
-        { title: "Total Open", text: "All active tickets", stats: stats.total_open, icon: TicketIcon, color: "orange" },
-        { title: "Open Today", text: "Today's opened tickets", stats: stats.open_today, icon: Clock, color: "blue" },
-        { title: "In Progress", text: "In-progress tickets", stats: stats.in_progress, icon: Clock, color: "purple" },
-        { title: "Completed", text: "Completed tickets", stats: stats.completed, icon: CheckCircle, color: "green" },
+        { title: "Total Open", text: "All active tickets", stats: stats.total_open, icon: TicketIcon, color: "orange", link: '/admin/tickets?status=open' },
+        { title: "Open Today", text: "Today's opened tickets", stats: stats.open_today, icon: Clock, color: "blue", link: '/admin/tickets?status=open' },
+        { title: "In Progress", text: "In-progress tickets", stats: stats.in_progress, icon: Clock, color: "purple", link: '/admin/tickets?status=in-progress' },
+        { title: "Completed", text: "Closed tickets", stats: stats.completed, icon: CheckCircle, color: "green", link: '/admin/tickets?status=closed' },
     ] as const;
 
     return (

@@ -47,17 +47,17 @@ class AdminTaskController extends Controller
         $users = User::select('id', 'name')->where('status', 'active')->get();
         $departments = Department::select('id', 'name')->where('status', 'active')->get();
 
+        $filters = $request->only([
+            'status',
+            'priority',
+            'assigned_department_id',
+            'search',
+            'assigned_to',
+            'per_page',
+        ]);
+
         return Inertia::render('admin/tasks/Index', [
-            'filters' => $request->only([
-                'state',
-                'priority',
-                'assigned_department_id',
-                'search',
-                'assigned_to',
-                'per_page',
-                'sort_by',
-                'sort_order',
-            ]),
+            'filters' => $filters,
             'users' => $users,
             'departments' => $departments,
         ]);
@@ -77,6 +77,7 @@ class AdminTaskController extends Controller
 
         $validated = $request->validate([
             'state' => ['nullable', 'string'],
+            'status' => ['nullable', 'string', 'in:pending,inprogress,completed'],
             'priority' => ['nullable', 'string', 'in:all,P1,P2,P3,P4'],
             'assigned_department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
@@ -86,6 +87,13 @@ class AdminTaskController extends Controller
             'sort_by' => ['nullable', 'string', 'in:created_at,title,task_code,state,due_at,priority'],
             'sort_order' => ['nullable', 'string', 'in:asc,desc'],
         ]);
+
+        if (empty($validated['state']) && ! empty($validated['status'])) {
+            $validatedStates = $this->mapStatusToStates($validated['status']);
+            if ($validatedStates) {
+                $validated['state'] = $validatedStates;
+            }
+        }
 
         $perPage = (int) ($validated['per_page'] ?? 10);
         $page = (int) ($validated['page'] ?? 1);
@@ -110,8 +118,13 @@ class AdminTaskController extends Controller
                 'auditEvents:id,task_id,action,actor_user_id,occurred_at',
             ]);
 
-        if (! empty($validated['state']) && $validated['state'] !== 'all') {
-            $query->where('state', $validated['state']);
+        // Handle state filtering - either single state or multiple states from status mapping
+        if (! empty($validated['state'])) {
+            if (is_array($validated['state'])) {
+                $query->whereIn('state', $validated['state']);
+            } else {
+                $query->where('state', $validated['state']);
+            }
         }
 
         if (! empty($validated['priority']) && $validated['priority'] !== 'all') {
@@ -165,6 +178,8 @@ class AdminTaskController extends Controller
                 return $task;
             })
         );
+
+        // Count tasks by simplified status
         if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
             $stateCounts = Task::withTrashed()
                 ->selectRaw('state, COUNT(*) as total')
@@ -176,22 +191,37 @@ class AdminTaskController extends Controller
                 ->pluck('total', 'state');
         }
 
+        $totalTasks = (int) $stateCounts->sum();
+
+        // Map states to simplified statuses
+        $pendingCount = (int) (($stateCounts->get('Draft') ?? 0) + ($stateCounts->get('Assigned') ?? 0) + ($stateCounts->get('Blocked') ?? 0));
+        $inProgressCount = (int) (($stateCounts->get('InProgress') ?? 0) + ($stateCounts->get('InReview') ?? 0));
+        $completedCount = (int) (($stateCounts->get('Done') ?? 0) + ($stateCounts->get('Cancelled') ?? 0) + ($stateCounts->get('Rejected') ?? 0));
+
         $stats = [
-            'total' => (int) $stateCounts->sum(),
-            'draft' => (int) ($stateCounts->get('Draft') ?? 0),
-            'assigned' => (int) ($stateCounts->get('Assigned') ?? 0),
-            'in_progress' => (int) ($stateCounts->get('InProgress') ?? 0),
-            'blocked' => (int) ($stateCounts->get('Blocked') ?? 0),
-            'in_review' => (int) ($stateCounts->get('InReview') ?? 0),
-            'done' => (int) ($stateCounts->get('Done') ?? 0),
-            'cancelled' => (int) ($stateCounts->get('Cancelled') ?? 0),
-            'rejected' => (int) ($stateCounts->get('Rejected') ?? 0),
+            'total' => $totalTasks,
+            'pending' => $pendingCount,
+            'inprogress' => $inProgressCount,
+            'completed' => $completedCount,
         ];
 
         return response()->json([
             'tasks' => $tasks,
             'stats' => $stats,
         ]);
+    }
+
+    /**
+     * Map simplified status to array of task states
+     */
+    private function mapStatusToStates(?string $status): ?array
+    {
+        return match ($status) {
+            'pending' => ['Draft', 'Assigned', 'Blocked'],
+            'inprogress' => ['InProgress', 'InReview'],
+            'completed' => ['Done', 'Cancelled', 'Rejected'],
+            default => null,
+        };
     }
 
     /**

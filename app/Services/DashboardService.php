@@ -14,10 +14,17 @@ use App\Models\TaskForwarding;
 use App\Models\TaskTimeEntry;
 use App\Models\Ticket;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 class DashboardService
 {
+    private const TASK_STATES_PENDING = ['Draft', 'Assigned', 'Blocked'];
+
+    private const TASK_STATES_IN_PROGRESS = ['InProgress', 'InReview'];
+
+    private const TASK_STATES_COMPLETED = ['Done', 'Cancelled', 'Rejected'];
+
     /**
      * Get dashboard data based on user role.
      */
@@ -105,23 +112,27 @@ class DashboardService
      */
     public function getAdminStats(): array
     {
+        $taskStats = $this->getSimplifiedTaskCountsForQuery(Task::withTrashed());
+
         return [
             'total_departments' => Department::active()->count(),
             'total_users' => User::count(),
             'total_clients' => Client::where('status', 'active')->count(),
             'total_products' => Product::where('status', 'active')->count(),
             'total_tickets' => Ticket::count(),
-            'total_tasks' => Task::count(),
+            'total_tasks' => $taskStats['total'],
             'open_tickets' => Ticket::where('status', 'open')->count(),
             'closed_tickets' => Ticket::where('status', 'closed')->count(),
-            'pending_tasks' => Task::where('state', 'Draft')->count(),
-            'completed_tasks' => Task::where('state', 'Done')->count(),
-            'completed_tasks_this_month' => Task::where('state', 'Done')
+            'pending_tasks' => $taskStats['pending'],
+            'completed_tasks' => $taskStats['completed'],
+            'completed_tasks_this_month' => Task::withTrashed()
+                ->whereIn('state', self::TASK_STATES_COMPLETED)
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
             'active_users_today' => User::where('last_login_at', '>=', today())->count(),
             'tickets_created_today' => Ticket::whereDate('created_at', today())->count(),
-            'tasks_completed_today' => Task::where('state', 'Done')
+            'tasks_completed_today' => Task::withTrashed()
+                ->whereIn('state', self::TASK_STATES_COMPLETED)
                 ->whereDate('updated_at', today())
                 ->count(),
         ];
@@ -188,7 +199,7 @@ class DashboardService
      */
     public function getManagerStats(User $user, array $departmentIds): array
     {
-        $departmentTasks = Task::whereIn('assigned_department_id', $departmentIds);
+        $departmentTasks = Task::withTrashed()->whereIn('assigned_department_id', $departmentIds);
         $userIds = Department::whereIn('id', $departmentIds)
             ->with('users')
             ->get()
@@ -200,14 +211,14 @@ class DashboardService
         return [
             'total_team_members' => count($userIds),
             'total_department_tasks' => (clone $departmentTasks)->count(),
-            'pending_tasks' => (clone $departmentTasks)->where('state', 'Draft')->count(),
-            'in_progress_tasks' => (clone $departmentTasks)->where('state', 'InProgress')->count(),
-            'completed_tasks_this_month' => (clone $departmentTasks)->where('state', 'Done')
+            'pending_tasks' => (clone $departmentTasks)->whereIn('state', self::TASK_STATES_PENDING)->count(),
+            'in_progress_tasks' => (clone $departmentTasks)->whereIn('state', self::TASK_STATES_IN_PROGRESS)->count(),
+            'completed_tasks_this_month' => (clone $departmentTasks)->whereIn('state', self::TASK_STATES_COMPLETED)
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
             'tasks_due_today' => (clone $departmentTasks)->whereDate('due_at', today())->count(),
             'tasks_due_this_week' => (clone $departmentTasks)->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
-            'overdue_tasks' => (clone $departmentTasks)->where('state', '!=', 'Done')
+            'overdue_tasks' => (clone $departmentTasks)->whereNotIn('state', self::TASK_STATES_COMPLETED)
                 ->whereDate('due_at', '<', today())
                 ->count(),
         ];
@@ -224,16 +235,16 @@ class DashboardService
 
         return [
             'total_my_tasks' => (clone $myTasks)->count(),
-            'pending_tasks' => (clone $myTasks)->where('state', 'Draft')->count(),
+            'pending_tasks' => (clone $myTasks)->whereIn('state', self::TASK_STATES_PENDING)->count(),
             'in_progress_tasks' => (clone $myTasks)->where('state', 'InProgress')->count(),
             'waiting_tasks' => (clone $myTasks)->where('state', 'InReview')->count(),
-            'completed_tasks' => (clone $myTasks)->where('state', 'Done')->count(),
-            'completed_this_month' => (clone $myTasks)->where('state', 'Done')
+            'completed_tasks' => (clone $myTasks)->whereIn('state', self::TASK_STATES_COMPLETED)->count(),
+            'completed_this_month' => (clone $myTasks)->whereIn('state', self::TASK_STATES_COMPLETED)
                 ->whereMonth('updated_at', now()->month)
                 ->count(),
             'tasks_due_today' => (clone $myTasks)->whereDate('due_at', today())->count(),
             'tasks_due_this_week' => (clone $myTasks)->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
-            'overdue_tasks' => (clone $myTasks)->where('state', '!=', 'Done')
+            'overdue_tasks' => (clone $myTasks)->whereNotIn('state', self::TASK_STATES_COMPLETED)
                 ->whereDate('due_at', '<', today())
                 ->count(),
             'forwarded_tasks_count' => TaskForwarding::where('to_user_id', $user->id)
@@ -339,11 +350,28 @@ class DashboardService
      */
     public function getTaskStats(): array
     {
+        $taskStats = $this->getSimplifiedTaskCountsForQuery(Task::query());
+
         return [
-            'pending' => Task::where('state', 'Draft')->count(),
-            'in_progress' => Task::where('state', 'InProgress')->count(),
+            'pending' => $taskStats['pending'],
+            'in_progress' => $taskStats['inprogress'],
             'waiting' => Task::where('state', 'InReview')->count(),
-            'completed' => Task::where('state', 'Done')->count(),
+            'completed' => $taskStats['completed'],
+        ];
+    }
+
+    /**
+     * @return array{total:int,pending:int,inprogress:int,completed:int}
+     */
+    private function getSimplifiedTaskCountsForQuery(Builder $query): array
+    {
+        $baseQuery = clone $query;
+
+        return [
+            'total' => (int) $baseQuery->count(),
+            'pending' => (int) (clone $query)->whereIn('state', self::TASK_STATES_PENDING)->count(),
+            'inprogress' => (int) (clone $query)->whereIn('state', self::TASK_STATES_IN_PROGRESS)->count(),
+            'completed' => (int) (clone $query)->whereIn('state', self::TASK_STATES_COMPLETED)->count(),
         ];
     }
 
