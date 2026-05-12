@@ -11,11 +11,13 @@ import { Form, Head } from '@inertiajs/react';
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
+    forgotPasswordHref?: string;
 }
 
 export default function Login({
     status,
     canResetPassword,
+    forgotPasswordHref = '/forgot-password',
 }: LoginProps) {
     return (
         <AuthLayout
@@ -53,7 +55,7 @@ export default function Login({
                                     <Label htmlFor="password">Password</Label>
                                     {canResetPassword && (
                                         <TextLink
-                                            href="/forgot-password"
+                                            href={forgotPasswordHref}
                                             className="ml-auto text-sm"
                                             tabIndex={5}
                                         >

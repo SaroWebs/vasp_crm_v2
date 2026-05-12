@@ -4,6 +4,7 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AdminClientSsoTestController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminPasswordResetController;
 use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
@@ -114,6 +115,12 @@ Route::prefix('c/{client:code}')
 Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
     Route::get('/login', [AdminAuthController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.attempt');
+
+    Route::get('/forgot-password', [AdminPasswordResetController::class, 'create'])->name('password.request');
+    Route::post('/forgot-password', [AdminPasswordResetController::class, 'store'])->name('password.email');
+    Route::get('/reset-password/{token}', [AdminPasswordResetController::class, 'edit'])->name('password.reset');
+    Route::post('/reset-password', [AdminPasswordResetController::class, 'update'])->name('password.update');
+
     Route::middleware(['admin'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 
@@ -570,4 +577,4 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
 });
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';

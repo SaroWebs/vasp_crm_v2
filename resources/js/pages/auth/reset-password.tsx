@@ -10,9 +10,14 @@ import AuthLayout from '@/layouts/auth-layout';
 interface ResetPasswordProps {
     token: string;
     email: string;
+    action?: string;
 }
 
-export default function ResetPassword({ token, email }: ResetPasswordProps) {
+export default function ResetPassword({
+    token,
+    email,
+    action = '/reset-password',
+}: ResetPasswordProps) {
     return (
         <AuthLayout
             title="Reset password"
@@ -21,7 +26,7 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
             <Head title="Reset password" />
 
             <Form
-                action="/reset-password"
+                action={action}
                 method="post"
                 transform={(data) => ({ ...data, token, email })}
                 resetOnSuccess={['password', 'password_confirmation']}

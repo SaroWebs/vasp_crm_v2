@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -17,7 +18,8 @@ class AdminAuthController extends Controller
 
         return inertia('auth/login', [
             'isAdmin' => true,
-            'canResetPassword' => false,
+            'canResetPassword' => true,
+            'forgotPasswordHref' => '/admin/forgot-password',
             'status' => session('status'),
         ]);
     }
@@ -31,7 +33,7 @@ class AdminAuthController extends Controller
 
         $credentials = $request->only('email', 'password');
 
-        $user = \App\Models\User::where('email', $credentials['email'])->first();
+        $user = User::where('email', $credentials['email'])->first();
 
         if ($user && $user->session_id && $user->session_id !== $request->session()->getId()) {
             // User has an active session on a different device - invalidate it

@@ -814,7 +814,19 @@ class AdminTicketController extends Controller
      */
     public function checkTaskStatus(Request $request, $ticket_id)
     {
-        $ticket = Ticket::with(['tasks.assignedUsers', 'tasks.assignedDepartment'])->find($ticket_id);
+        $ticket = Ticket::with([
+            'tasks' => function ($query) {
+                $query->with(['assignedUsers', 'assignedDepartment'])
+                    ->withCount([
+                        'comments',
+                        'history',
+                        'timeEntries',
+                        'auditEvents',
+                        'attachments',
+                        'forwardings',
+                    ]);
+            },
+        ])->find($ticket_id);
 
         if (! $ticket) {
             return response()->json(['message' => 'Ticket not found'], 404);
@@ -839,6 +851,13 @@ class AdminTicketController extends Controller
                 ];
             });
 
+            $activityCount = (int) ($task->comments_count ?? 0)
+                + (int) ($task->history_count ?? 0)
+                + (int) ($task->time_entries_count ?? 0)
+                + (int) ($task->audit_events_count ?? 0)
+                + (int) ($task->attachments_count ?? 0)
+                + (int) ($task->forwardings_count ?? 0);
+
             return [
                 'id' => $task->id,
                 'task_code' => $task->task_code,
@@ -851,10 +870,15 @@ class AdminTicketController extends Controller
                     'name' => $task->assignedDepartment->name,
                 ] : null,
                 'is_completed' => in_array($task->state, ['Done', 'Cancelled', 'Rejected']),
+                'activity_count' => $activityCount,
             ];
         });
 
         $canClose = $incompleteTasks->isEmpty();
+
+        $taskActivityTasks = $taskDetails
+            ->filter(fn ($task) => ($task['activity_count'] ?? 0) > 0)
+            ->values();
 
         return response()->json([
             'can_close' => $canClose,
@@ -864,6 +888,16 @@ class AdminTicketController extends Controller
             })->count(),
             'incomplete_tasks' => $incompleteTasks->count(),
             'tasks' => $taskDetails,
+            'has_task_activity' => $taskActivityTasks->isNotEmpty(),
+            'task_activity_task_count' => $taskActivityTasks->count(),
+            'task_activity_tasks' => $taskActivityTasks->map(function ($task) {
+                return [
+                    'id' => $task['id'],
+                    'task_code' => $task['task_code'],
+                    'title' => $task['title'],
+                    'activity_count' => $task['activity_count'],
+                ];
+            }),
             'incomplete_task_details' => $incompleteTasks->map(function ($task) {
                 $primaryAssignee = $task->assignedUsers->first();
 
@@ -1006,9 +1040,14 @@ class AdminTicketController extends Controller
             }
 
             $taskDescription = $taskInput['description'] ?? $ticket->description;
-            $taskStartAt = $taskInput['start_at'] ?? now();
-            $taskDueAt = $taskInput['due_at'] ?? null;
-            $taskEstimateHours = $taskInput['estimate_hours'] ?? null;
+
+            $hasStartAt = array_key_exists('start_at', $taskInput);
+            $hasDueAt = array_key_exists('due_at', $taskInput);
+            $hasEstimateHours = array_key_exists('estimate_hours', $taskInput);
+
+            $taskStartAt = $hasStartAt ? $taskInput['start_at'] : null;
+            $taskDueAt = $hasDueAt ? $taskInput['due_at'] : null;
+            $taskEstimateHours = $hasEstimateHours ? $taskInput['estimate_hours'] : null;
             $taskSlaPolicyId = $taskInput['sla_policy_id'] ?? $matchedSlaPolicy?->id;
             $assignmentNotes = trim((string) ($taskInput['assignment_notes'] ?? ''));
             if ($assignmentNotes === '') {
@@ -1032,21 +1071,59 @@ class AdminTicketController extends Controller
                 'status' => $newStatus,
             ]);
 
-            // Create a Task for this ticket assignment
-            $task = Task::create([
-                'ticket_id' => $ticket->id,
-                'title' => $taskTitle,
-                'description' => $taskDescription,
-                'sla_policy_id' => $taskSlaPolicyId,
-                'state' => 'Assigned',
-                'created_by' => $currentUser->id,
-                'task_code' => 'TSK-'.$ticket->ticket_number.'-'.Str::random(4),
-                'current_owner_id' => $assignedUserId,
-                'current_owner_kind' => 'USER',
-                'start_at' => $taskStartAt,
-                'due_at' => $taskDueAt,
-                'estimate_hours' => $taskEstimateHours,
-            ]);
+            $terminalStates = ['Done', 'Cancelled', 'Rejected'];
+
+            $task = null;
+
+            if ($previousAssignedTo) {
+                $task = Task::query()
+                    ->where('ticket_id', $ticket->id)
+                    ->whereNotIn('state', $terminalStates)
+                    ->latest('id')
+                    ->first();
+            }
+
+            if (! $task) {
+                // Create a Task for this ticket assignment
+                $task = Task::create([
+                    'ticket_id' => $ticket->id,
+                    'title' => $taskTitle,
+                    'description' => $taskDescription,
+                    'sla_policy_id' => $taskSlaPolicyId,
+                    'state' => 'Assigned',
+                    'created_by' => $currentUser->id,
+                    'task_code' => 'TSK-'.$ticket->ticket_number.'-'.Str::random(4),
+                    'current_owner_id' => $assignedUserId,
+                    'current_owner_kind' => 'USER',
+                    'start_at' => $taskStartAt ?? now(),
+                    'due_at' => $taskDueAt,
+                    'estimate_hours' => $taskEstimateHours,
+                ]);
+            } else {
+                $taskUpdatePayload = [
+                    'current_owner_id' => $assignedUserId,
+                    'current_owner_kind' => 'USER',
+                    'sla_policy_id' => $taskSlaPolicyId ?? $task->sla_policy_id,
+                    'title' => $taskTitle ?: $task->title,
+                    'description' => $taskDescription ?? $task->description,
+                ];
+
+                if ($hasStartAt) {
+                    $taskUpdatePayload['start_at'] = $taskStartAt;
+                }
+
+                if ($hasDueAt) {
+                    $taskUpdatePayload['due_at'] = $taskDueAt;
+                }
+
+                if ($hasEstimateHours) {
+                    $taskUpdatePayload['estimate_hours'] = $taskEstimateHours;
+                }
+
+                $task->update($taskUpdatePayload);
+
+                $task->taskAssignments()->where('is_active', true)->update(['is_active' => false]);
+            }
 
             // Assign user to task using the helper method in Task model
             $task->assignUser($assignedUserId, $currentUser->id, $assignmentNotes);

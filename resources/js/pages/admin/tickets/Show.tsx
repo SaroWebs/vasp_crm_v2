@@ -135,6 +135,15 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             assignees: Array<{ id: number; name: string }>;
             assigned_department: { id: number; name: string } | null;
             is_completed: boolean;
+            activity_count: number;
+        }>;
+        has_task_activity: boolean;
+        task_activity_task_count: number;
+        task_activity_tasks: Array<{
+            id: number;
+            task_code: string;
+            title: string;
+            activity_count: number;
         }>;
         incomplete_task_details: Array<{
             id: number;
@@ -1455,6 +1464,26 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                             </div>
                         </div>
 
+                        {taskCheckData?.has_task_activity ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+                                <div className="flex items-start gap-2">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                                    <div className="space-y-1">
+                                        <div className="font-medium text-amber-800">
+                                            Task activity exists for this ticket
+                                        </div>
+                                        <div className="text-amber-800/80">
+                                            {taskCheckData.task_activity_task_count}{' '}
+                                            {taskCheckData.task_activity_task_count === 1
+                                                ? 'task has'
+                                                : 'tasks have'}{' '}
+                                            activity (comments, time entries, history, etc.). Please review before proceeding.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
+
                         {/* Task Details */}
                         <div className="space-y-2">
                             {taskCheckData?.tasks?.map((task) => (
@@ -1529,4 +1558,3 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         </AppLayout>
     );
 }
-
