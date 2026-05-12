@@ -1,15 +1,9 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { Select } from '@mantine/core';
 
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 
 type Employee = {
     id: number;
@@ -78,42 +72,21 @@ export default function TaskAssigneeSelect({
                 {required ? ' *' : ''}
             </Label>
             <Select
-                value={value}
-                onValueChange={onChange}
+                id={id}
+                placeholder={loading ? 'Loading employees...' : placeholder}
+                value={value || null}
+                onChange={(nextValue) => onChange(nextValue ?? '')}
                 disabled={disabled || loading}
-            >
-                <SelectTrigger id={id} aria-invalid={!!error}>
-                    <SelectValue
-                        placeholder={
-                            loading ? 'Loading employees...' : placeholder
-                        }
-                    />
-                </SelectTrigger>
-                <SelectContent>
-                    {loading ? (
-                        <SelectItem value="__loading" disabled>
-                            <span className="flex items-center gap-2">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Loading employees...
-                            </span>
-                        </SelectItem>
-                    ) : employees.length === 0 ? (
-                        <SelectItem value="__empty" disabled>
-                            No employees found
-                        </SelectItem>
-                    ) : (
-                        employees.map((employee) => (
-                            <SelectItem
-                                key={employee.id}
-                                value={employee.id.toString()}
-                            >
-                                {employee.name}
-                                {employee.email ? ` (${employee.email})` : ''}
-                            </SelectItem>
-                        ))
-                    )}
-                </SelectContent>
-            </Select>
+                data={employees.map((employee) => ({
+                    value: employee.id.toString(),
+                    label: `${employee.name}${employee.email ? ` (${employee.email})` : ''}`,
+                }))}
+                searchable
+                clearable={!required}
+                nothingFoundMessage={loading ? 'Loading employees...' : 'No employees found'}
+                leftSection={loading ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}
+                aria-invalid={!!error}
+            />
             {helperText && !error && (
                 <p className="text-xs text-muted-foreground">{helperText}</p>
             )}

@@ -2,12 +2,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-    Select,
+    Select as UiSelect,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Select as MantineSelect } from '@mantine/core';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { Ticket, type BreadcrumbItem } from '@/types';
@@ -68,6 +69,12 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
     const [loadingOrganizationUsers, setLoadingOrganizationUsers] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const [clientSearchValue, setClientSearchValue] = useState('');
+    const [organizationUserSearchValue, setOrganizationUserSearchValue] =
+        useState('');
+    const [assignedToSearchValue, setAssignedToSearchValue] = useState('');
+    const [approvedBySearchValue, setApprovedBySearchValue] = useState('');
+
     const [form, setForm] = useState({
         client_id: ticket.client_id?.toString() || '',
         organization_user_id: ticket.organization_user_id?.toString() || '',
@@ -119,6 +126,7 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                 organization_user_id: '',
             }));
             setOrganizationUsers([]);
+            setOrganizationUserSearchValue('');
             return;
         }
 
@@ -203,7 +211,7 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                                 {/* Priority */}
                                 <div className="space-y-2">
                                     <Label htmlFor="priority">Priority</Label>
-                                    <Select
+                                    <UiSelect
                                         name="priority"
                                         value={form.priority}
                                         onValueChange={(value) =>
@@ -219,7 +227,7 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                                             <SelectItem value="high">High</SelectItem>
                                             <SelectItem value="critical">Critical</SelectItem>
                                         </SelectContent>
-                                    </Select>
+                                    </UiSelect>
                                 </div>
                             </div>
 
@@ -263,27 +271,23 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                             {/* Client */}
                             <div className="space-y-2">
                                 <Label htmlFor="client_id">Client</Label>
-                                <Select
-                                    name="client_id"
-                                    value={form.client_id}
-                                    onValueChange={(value) =>
-                                        handleSelectChange('client_id', value)
+                                <MantineSelect
+                                    id="client_id"
+                                    placeholder="Select client"
+                                    searchable
+                                    clearable
+                                    nothingFoundMessage="No clients found"
+                                    data={clients.map((client) => ({
+                                        value: client.id.toString(),
+                                        label: client.name,
+                                    }))}
+                                    value={form.client_id ? form.client_id : null}
+                                    searchValue={clientSearchValue}
+                                    onSearchChange={setClientSearchValue}
+                                    onChange={(value) =>
+                                        handleSelectChange('client_id', value ?? '')
                                     }
-                                >
-                                    <SelectTrigger id="client_id">
-                                        <SelectValue placeholder="Select client" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {clients.map((client) => (
-                                            <SelectItem
-                                                key={client.id}
-                                                value={client.id.toString()}
-                                            >
-                                                {client.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                />
                             </div>
 
                             {/* Organization User */}
@@ -291,39 +295,41 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                                 <Label htmlFor="organization_user_id">
                                     Organization User
                                 </Label>
-                                <Select
-                                    name="organization_user_id"
-                                    value={form.organization_user_id}
-                                    onValueChange={(value) =>
+                                <MantineSelect
+                                    id="organization_user_id"
+                                    placeholder={
+                                        !form.client_id
+                                            ? 'Select client first'
+                                            : loadingOrganizationUsers
+                                              ? 'Loading...'
+                                              : 'Select organization user'
+                                    }
+                                    searchable
+                                    clearable
+                                    nothingFoundMessage={
+                                        loadingOrganizationUsers
+                                            ? 'Loading...'
+                                            : 'No organization users found'
+                                    }
+                                    data={organizationUsers.map((orgUser) => ({
+                                        value: orgUser.id.toString(),
+                                        label: orgUser.name,
+                                    }))}
+                                    value={
+                                        form.organization_user_id
+                                            ? form.organization_user_id
+                                            : null
+                                    }
+                                    searchValue={organizationUserSearchValue}
+                                    onSearchChange={setOrganizationUserSearchValue}
+                                    onChange={(value) =>
                                         handleSelectChange(
                                             'organization_user_id',
-                                            value,
+                                            value ?? '',
                                         )
                                     }
                                     disabled={!form.client_id || loadingOrganizationUsers}
-                                >
-                                    <SelectTrigger id="organization_user_id">
-                                        <SelectValue
-                                            placeholder={
-                                                !form.client_id
-                                                    ? 'Select client first'
-                                                    : loadingOrganizationUsers
-                                                    ? 'Loading...'
-                                                    : 'Select organization user'
-                                            }
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {organizationUsers.map((orgUser) => (
-                                            <SelectItem
-                                                key={orgUser.id}
-                                                value={orgUser.id.toString()}
-                                            >
-                                                {orgUser.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                />
                             </div>
                         </div>
                     </div>
@@ -341,40 +347,37 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                                 {/* Assigned To */}
                                 <div className="space-y-2">
                                     <Label htmlFor="assigned_to">Assigned To</Label>
-                                    <Select
-                                        name="assigned_to"
-                                        value={form.assigned_to || 'none'}
-                                        onValueChange={(value) =>
+                                    <MantineSelect
+                                        id="assigned_to"
+                                        placeholder="Select assignee"
+                                        searchable
+                                        clearable
+                                        nothingFoundMessage="No users found"
+                                        data={[
+                                            { value: 'none', label: 'Unassigned' },
+                                            ...users.map((user) => ({
+                                                value: user.id.toString(),
+                                                label: user.name,
+                                            })),
+                                        ]}
+                                        value={form.assigned_to ? form.assigned_to : 'none'}
+                                        searchValue={assignedToSearchValue}
+                                        onSearchChange={setAssignedToSearchValue}
+                                        onChange={(value) =>
                                             handleSelectChange(
                                                 'assigned_to',
-                                                value === 'none' ? '' : value,
+                                                value === 'none'
+                                                    ? ''
+                                                    : (value ?? ''),
                                             )
                                         }
-                                    >
-                                        <SelectTrigger id="assigned_to">
-                                            <SelectValue placeholder="Select assignee" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">Unassigned</SelectItem>
-                                            {users.map((user) => (
-                                                <SelectItem
-                                                    key={user.id}
-                                                    value={user.id.toString()}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <User className="h-4 w-4" />
-                                                        {user.name}
-                                                    </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    />
                                 </div>
 
                                 {/* Status */}
                                 <div className="space-y-2">
                                     <Label htmlFor="status">Status</Label>
-                                    <Select
+                                    <UiSelect
                                         name="status"
                                         value={form.status}
                                         onValueChange={(value) =>
@@ -395,7 +398,7 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                                                 Cancelled
                                             </SelectItem>
                                         </SelectContent>
-                                    </Select>
+                                    </UiSelect>
                                 </div>
                             </div>
 
@@ -405,34 +408,31 @@ export default function TicketsEdit({ ticket, clients, users }: TicketsEditProps
                                 form.status === 'closed') && (
                                 <div className="space-y-2">
                                     <Label htmlFor="approved_by">Approved By</Label>
-                                    <Select
-                                        name="approved_by"
-                                        value={form.approved_by || 'none'}
-                                        onValueChange={(value) =>
+                                    <MantineSelect
+                                        id="approved_by"
+                                        placeholder="Select approver"
+                                        searchable
+                                        clearable
+                                        nothingFoundMessage="No users found"
+                                        data={[
+                                            { value: 'none', label: 'Not Approved' },
+                                            ...users.map((user) => ({
+                                                value: user.id.toString(),
+                                                label: user.name,
+                                            })),
+                                        ]}
+                                        value={form.approved_by ? form.approved_by : 'none'}
+                                        searchValue={approvedBySearchValue}
+                                        onSearchChange={setApprovedBySearchValue}
+                                        onChange={(value) =>
                                             handleSelectChange(
                                                 'approved_by',
-                                                value === 'none' ? '' : value,
+                                                value === 'none'
+                                                    ? ''
+                                                    : (value ?? ''),
                                             )
                                         }
-                                    >
-                                        <SelectTrigger id="approved_by">
-                                            <SelectValue placeholder="Select approver" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">Not Approved</SelectItem>
-                                            {users.map((user) => (
-                                                <SelectItem
-                                                    key={user.id}
-                                                    value={user.id.toString()}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <User className="h-4 w-4" />
-                                                        {user.name}
-                                                    </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    />
                                 </div>
                             )}
                         </div>

@@ -1,8 +1,8 @@
-import { Button as MantineButton } from '@mantine/core';
+import { Button as MantineButton, Select } from '@mantine/core';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-    Select,
+    Select as UiSelect,
     SelectContent,
     SelectItem,
     SelectTrigger,
@@ -39,6 +39,9 @@ interface AdminRaiseTicketProps {
 
 export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const [open, setOpen] = useState(false);
+    const [clientSearchValue, setClientSearchValue] = useState('');
+    const [sheetPortalTarget, setSheetPortalTarget] =
+        useState<HTMLDivElement | null>(null);
 
     const [form, setForm] = useState<FormData>({
         client_id: '',
@@ -60,12 +63,19 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     };
 
     const handleSelectChange = (name: keyof FormData, value: string) => {
-        setForm((prev) => ({ ...prev, [name]: value }));
+        setForm((prev) => {
+            if (name === 'client_id') {
+                return { ...prev, client_id: value ? Number(value) : '' };
+            }
+
+            return { ...prev, [name]: value };
+        });
     };
 
     const resetForm = () => {
         setForm({ client_id: '', title: '', description: '', priority: 'low' });
         setFiles([]);
+        setClientSearchValue('');
     };
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -129,7 +139,11 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                     New Ticket
                 </MantineButton>
             </SheetTrigger>
-            <SheetContent className="overflow-y-auto sm:max-w-xl">
+            <SheetContent
+                ref={setSheetPortalTarget}
+                className="overflow-y-auto sm:max-w-xl"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 <SheetHeader>
                     <SheetTitle>New Ticket</SheetTitle>
                     <SheetDescription>
@@ -142,25 +156,34 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                     <div className="space-y-2">
                         <Label htmlFor="client_id">Client *</Label>
                         <Select
-                            value={form.client_id ? form.client_id.toString() : ''}
-                            onValueChange={(val) =>
-                                handleSelectChange('client_id', val)
+                            id="client_id"
+                            className="w-full"
+                            placeholder="Select client"
+                            searchable
+                            clearable
+                            nothingFoundMessage="No clients found"
+                            defaultDropdownOpened={false}
+                            searchValue={clientSearchValue}
+                            onSearchChange={setClientSearchValue}
+                            data={clients.map((client) => ({
+                                value: client.id.toString(),
+                                label: client.name,
+                            }))}
+                            value={
+                                form.client_id === ''
+                                    ? null
+                                    : form.client_id.toString()
                             }
-                        >
-                            <SelectTrigger id="client_id">
-                                <SelectValue placeholder="Select client" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {clients.map((client) => (
-                                    <SelectItem
-                                        key={client.id}
-                                        value={client.id.toString()}
-                                    >
-                                        {client.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            onChange={(val) =>
+                                handleSelectChange('client_id', val ?? '')
+                            }
+                            comboboxProps={{
+                                withinPortal: true,
+                                portalProps: {
+                                    target: sheetPortalTarget ?? undefined,
+                                },
+                            }}
+                        />
                     </div>
 
                     {/* Title */}
@@ -193,7 +216,7 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                     {/* Priority */}
                     <div className="space-y-2">
                         <Label htmlFor="priority">Priority</Label>
-                        <Select
+                        <UiSelect
                             value={form.priority}
                             onValueChange={(val) =>
                                 handleSelectChange('priority', val)
@@ -208,7 +231,7 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                                 <SelectItem value="high">High</SelectItem>
                                 <SelectItem value="critical">Critical</SelectItem>
                             </SelectContent>
-                        </Select>
+                        </UiSelect>
                     </div>
 
                     {/* Attachments */}
