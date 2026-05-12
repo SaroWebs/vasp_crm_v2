@@ -101,13 +101,13 @@ export default function RecentTicketsWidget() {
                         <Table.Tbody>
                             {tickets.map((ticket) => (
                                 <Table.Tr key={ticket.id} className="cursor-pointer">
-                                    <Table.Td maw={200} style={{ overflow: 'hidden' }}>
+                                    <Table.Td maw={300} style={{ overflow: 'hidden' }}>
                                         <div className="flex flex-col">
                                             <Link
                                                 href={`/admin/tickets/${ticket.id}`}
                                                 className="text-gray-500 capitalize hover:underline block truncate"
                                             >
-                                                {ticket.subject}
+                                                {ticket.subject} {ticket.subject} {ticket.subject} 
                                             </Link>
                                             <div className="flex gap-2 items-center mt-1">
                                                 <Badge
@@ -130,15 +130,15 @@ export default function RecentTicketsWidget() {
                                                 <span className="text-xs text-gray-200">
                                                     ●
                                                 </span>
-                                                <Text size="xs" c="dimmed" truncate maw={200} className='font-mono text-xs'>
+                                                <Text size="xs" c="dimmed" className='font-mono text-xs'>
                                                     {timeAgo(ticket.created_at)}
                                                 </Text>
                                             </div>
                                         </div>
                                     </Table.Td>
 
-                                    <Table.Td w={120}>
-                                        <Text size="xs" fw={200} truncate maw={120} className='font-mono text-xs'>
+                                    <Table.Td maw={120} style={{ overflow: 'hidden' }}>
+                                        <Text size="xs" fw={200} truncate className='font-mono text-xs'>
                                             {ticket.client}
                                         </Text>
                                     </Table.Td>

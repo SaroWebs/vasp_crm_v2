@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\OrganizationUser;
+use App\Models\User;
+
 return [
 
     /*
@@ -70,11 +73,11 @@ return [
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
-            'model' => env('AUTH_MODEL', App\Models\User::class),
+            'model' => env('AUTH_MODEL', User::class),
         ],
         'organization_users' => [
             'driver' => 'eloquent',
-            'model' => App\Models\OrganizationUser::class,
+            'model' => OrganizationUser::class,
         ],
 
         // 'users' => [
@@ -106,7 +109,7 @@ return [
         'users' => [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
-            'expire' => 60,
+            'expire' => 5,
             'throttle' => 60,
         ],
     ],

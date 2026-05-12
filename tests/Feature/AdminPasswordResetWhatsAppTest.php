@@ -46,6 +46,7 @@ class AdminPasswordResetWhatsAppTest extends TestCase
                     $this->assertSame('9876543210', $phone);
                     $this->assertStringContainsString('/admin/reset-password/', $message);
                     $this->assertStringContainsString(urlencode($user->email), $message);
+                    $this->assertStringContainsString('expires in 5 minutes', $message);
 
                     return true;
                 })
@@ -77,7 +78,7 @@ class AdminPasswordResetWhatsAppTest extends TestCase
                 ->withArgs(function (string $phone, string $message) use ($user): bool {
                     $this->assertSame('9999999999', $phone);
                     $this->assertStringContainsString($user->email, $message);
-                    $this->assertStringContainsString('NewPass123!', $message);
+                    $this->assertStringNotContainsString('NewPass123!', $message);
 
                     return true;
                 })

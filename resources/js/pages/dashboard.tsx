@@ -158,8 +158,8 @@ export default function Dashboard(props: DashboardProps) {
     const renderAdminDashboard = () => (
         <>
             {/* Charts and Recent Activity */}
-            <div className="grid gap-4 md:grid-cols-5">
-                <div className="md:col-span-5">
+            <div className="grid gap-4 md:grid-cols-8">
+                <div className="md:col-span-8">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                         {wizCards.map((wizCard) => (
                             <WizCardDesign1
@@ -174,11 +174,10 @@ export default function Dashboard(props: DashboardProps) {
                         ))}
                     </div>
                 </div>
-                <div className="md:col-span-3 space-y-4">
+                <div className="md:col-span-5 space-y-4">
                     <RecentTicketsWidget />
-
                 </div>
-                <div className="md:col-span-2 space-y-4">
+                <div className="md:col-span-3 space-y-4">
                     <AttendanceList
                         date={new Date()}
                         type="admin"

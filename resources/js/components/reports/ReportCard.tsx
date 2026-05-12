@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ActionIcon } from '@mantine/core';
 import { Eye, Edit, Trash2, Clock, ChevronDown, ChevronUp, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,6 +9,7 @@ import {
     getEntryRangeOnReportDate,
     getSecondsOnReportDate,
 } from '@/utils/reportDate';
+import { type Task as AppTask } from '@/types';
 
 interface ReportAttachment {
     id: number;
@@ -22,23 +22,19 @@ interface ReportAttachment {
 interface TaskTimeEntry {
     id: number;
     start_time: string;
-    end_time: string;
+    end_time: string | null;
     description: string;
+    duration_hours?: number;
     working_duration?: number;
 }
 
-interface Task {
-    id: number;
-    title: string;
-    task_code: string;
-    description: string;
-    state: string;
+type ReportTask = AppTask & {
     time_entries: TaskTimeEntry[];
     total_working_seconds?: number;
     pivot?: {
         remarks?: string;
     };
-}
+};
 
 interface Report {
     id: number;
@@ -50,7 +46,7 @@ interface Report {
     total_hours: number;
     status: string;
     created_at: string;
-    tasks: Task[];
+    tasks: ReportTask[];
     attachments: ReportAttachment[];
 }
 

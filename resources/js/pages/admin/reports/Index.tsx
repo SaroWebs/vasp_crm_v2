@@ -1,79 +1,37 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Employee } from '@/types';
-import { Head } from '@inertiajs/react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Users, Search, Clock, FileText, Tag, Plus, Download } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
-import { toast } from 'sonner';
-import axios from 'axios';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReportForm from '@/components/reports/ReportForm';
-import ReportGroup, { groupReportsByDate, groupReportsByEmployee } from '@/components/reports/ReportGroup';
+import ReportGroup, {
+    groupReportsByDate,
+    groupReportsByEmployee,
+    type Report,
+    type TaskTimeEntry,
+} from '@/components/reports/ReportGroup';
+import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
+import { Head } from '@inertiajs/react';
+import {
+    ActionIcon,
+    Button,
+    Card,
+    Divider,
+    Group,
+    NativeSelect,
+    Pagination,
+    Select,
+    SimpleGrid,
+    Stack,
+    Text,
+    TextInput,
+} from '@mantine/core';
+import { Clock, Download, FileText, Paperclip, Plus, Search, Tag } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Admin',
-        href: '/admin/dashboard',
-    },
-    {
-        title: 'Reports',
-        href: '/admin/reports',
-    },
+    { title: 'Admin', href: '/admin/dashboard' },
+    { title: 'Reports', href: '/admin/reports' },
 ];
-
-interface ReportAttachment {
-    id: number;
-    file_name: string;
-    file_path: string;
-    file_type: string;
-    file_size: number;
-    metadata: unknown;
-}
-
-interface TaskTimeEntry {
-    id: number;
-    start_time: string;
-    end_time: string;
-    duration_hours: number;
-    description: string;
-    working_duration?: number;
-}
-
-interface Task {
-    id: number;
-    title: string;
-    task_code: string;
-    description: string;
-    state: string;
-    time_entries: TaskTimeEntry[];
-    total_time_spent: number;
-    total_working_seconds?: number;
-    estimate_hours?: string;
-    project_id?: number;
-    department_id?: number;
-    pivot?: {
-        remarks?: string;
-    };
-}
-
-interface Report {
-    id: number;
-    user_id: number;
-    user: { id: number; name: string };
-    report_date: string;
-    title: string;
-    description: string;
-    total_hours: number;
-    status: string;
-    created_at: string;
-    metadata?: {
-        time_spent?: string;
-    };
-    tasks: Task[];
-    attachments: ReportAttachment[];
-}
 
 interface ReportsIndexProps {
     employees: Employee[];
@@ -82,13 +40,69 @@ interface ReportsIndexProps {
     authUser: { id: number; name: string };
 }
 
+const statusOptions = [
+    { value: '', label: 'All statuses' },
+    { value: 'draft', label: 'Draft' },
+    { value: 'submitted', label: 'Submitted' },
+    { value: 'approved', label: 'Approved' },
+];
+
+const getEntrySeconds = (entry: Omit<TaskTimeEntry, 'description'> & { description?: string | null }): number => {
+    if (typeof entry.working_duration === 'number') {
+        return entry.working_duration;
+    }
+
+    if (typeof entry.duration_hours === 'number') {
+        return entry.duration_hours * 3600;
+    }
+
+    const start = new Date(entry.start_time);
+    const end = entry.end_time ? new Date(entry.end_time) : null;
+
+    if (Number.isNaN(start.getTime()) || (end && Number.isNaN(end.getTime()))) {
+        return 0;
+    }
+
+    if (!end) {
+        return 0;
+    }
+
+    return Math.max(0, (end.getTime() - start.getTime()) / 1000);
+};
+
+const getReportTotalSeconds = (report: Report): number => {
+    if (report.tasks && report.tasks.length > 0) {
+        return report.tasks.reduce((taskAcc, task) => {
+            if (typeof task.total_working_seconds === 'number') {
+                return taskAcc + task.total_working_seconds;
+            }
+
+            const taskSeconds = task.time_entries?.reduce((entryAcc, entry) => {
+                    return entryAcc + getEntrySeconds(entry);
+                }, 0) || 0;
+
+            return taskAcc + taskSeconds;
+        }, 0);
+    }
+
+    return report.total_hours * 3600;
+};
+
 export default function ReportsIndex(props: ReportsIndexProps) {
-    const {
-        employees: initialEmployees = [],
-        userPermissions = [],
-        isSuperAdmin = false,
-        authUser
-    } = props;
+    const { employees: initialEmployees = [], userPermissions = [], isSuperAdmin = false, authUser } = props;
+
+    const isAdminView =
+        isSuperAdmin ||
+        userPermissions.length === 0 ||
+        userPermissions.includes('report.view') ||
+        userPermissions.includes('report.view_all') ||
+        userPermissions.includes('reports.view') ||
+        userPermissions.includes('reports.view_all');
+
+    const canExportConsolidated =
+        isSuperAdmin ||
+        userPermissions.includes('report.export') ||
+        userPermissions.length === 0;
 
     const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
     const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -101,100 +115,99 @@ export default function ReportsIndex(props: ReportsIndexProps) {
     const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<Employee | null>(null);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string>('');
-    const [activeTab, setActiveTab] = useState<string>('all-reports');
     const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
     const [isExportingConsolidated, setIsExportingConsolidated] = useState(false);
 
     useEffect(() => {
         if (initialEmployees.length === 0) {
             fetch('/admin/api/reports/employees')
-                .then(response => response.json())
-                .then(data => setEmployees(data))
-                .catch(error => console.error('Error fetching employees:', error));
+                .then((response) => response.json())
+                .then((data) => setEmployees(data))
+                .catch((error) => console.error('Error fetching employees:', error));
         }
     }, [initialEmployees]);
 
-    const handlePageChange = (page: number) => {
-        setCurrentPage(page);
-    };
+    const fetchMyReports = useCallback(() => {
+        setLoading(true);
+        axios
+            .get(`/admin/api/reports/employee/${authUser.id}`, {
+                params: {
+                    start_date: startDate,
+                    end_date: endDate,
+                    page: currentPage,
+                    per_page: itemsPerPage,
+                },
+            })
+            .then((response) => {
+                setReports(response.data.data);
+                setTotalItems(response.data.total);
+            })
+            .catch((error) => {
+                console.error('Error fetching my reports:', error);
+            })
+            .finally(() => {
+                setLoading(false);
+            });
+    }, [authUser.id, currentPage, endDate, itemsPerPage, startDate]);
 
-    const handleItemsPerPageChange = (value: number) => {
-        setItemsPerPage(value);
-    };
+    const fetchAllReports = useCallback(() => {
+        setLoading(true);
+        axios
+            .get('/admin/api/reports/all', {
+                params: {
+                    start_date: startDate,
+                    end_date: endDate,
+                    page: currentPage,
+                    per_page: itemsPerPage,
+                    employee_id: selectedEmployeeFilter?.id,
+                    status: statusFilter,
+                    search: searchQuery,
+                },
+            })
+            .then((response) => {
+                setReports(response.data.data);
+                setTotalItems(response.data.total);
+            })
+            .catch((error) => {
+                console.error('Error fetching all reports:', error);
+            })
+            .finally(() => {
+                setLoading(false);
+            });
+    }, [currentPage, endDate, itemsPerPage, searchQuery, selectedEmployeeFilter?.id, startDate, statusFilter]);
 
-    const handleFilterByEmployee = (employee: Employee | null) => {
-        setSelectedEmployeeFilter(employee);
-    };
-
-    const formatDuration = (hours: number): string => {
-        const totalSeconds = Math.floor(hours * 3600);
-        const hoursPart = Math.floor(totalSeconds / 3600);
-        const minutesPart = Math.floor((totalSeconds % 3600) / 60);
-        const secondsPart = totalSeconds % 60;
-        return `${hoursPart}h ${minutesPart}m ${secondsPart}s`;
-    };
-
-    const getEntrySeconds = (entry: TaskTimeEntry): number => {
-        if (typeof entry.working_duration === 'number') {
-            return entry.working_duration;
+    useEffect(() => {
+        if (isAdminView) {
+            fetchAllReports();
+            return;
         }
 
-        if (typeof entry.duration_hours === 'number') {
-            return entry.duration_hours * 3600;
-        }
+        fetchMyReports();
+    }, [fetchAllReports, fetchMyReports, isAdminView]);
 
-        const start = new Date(entry.start_time);
-        const end = new Date(entry.end_time);
-
-        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-            return 0;
-        }
-
-        return Math.max(0, (end.getTime() - start.getTime()) / 1000);
-    };
-
-    const getReportTotalSeconds = (report: Report): number => {
-        if (report.tasks && report.tasks.length > 0) {
-            return report.tasks.reduce((taskAcc, task) => {
-                if (typeof task.total_working_seconds === 'number') {
-                    return taskAcc + task.total_working_seconds;
-                }
-
-                const taskSeconds = task.time_entries?.reduce((entryAcc, entry) => {
-                    return entryAcc + getEntrySeconds(entry);
-                }, 0) || 0;
-
-                return taskAcc + taskSeconds;
-            }, 0);
-        }
-
-        return report.total_hours * 3600;
-    };
-
-    // Computed statistics
     const stats = useMemo(() => {
         const totalReports = reports.length;
-        const totalTimeSpentSeconds = reports.reduce((sum, report) => {
-            return sum + getReportTotalSeconds(report);
-        }, 0);
-        const uniqueTasks = new Set(reports.flatMap(e => e.tasks?.map(t => t.id) || [])).size;
-        const withAttachments = reports.filter(e => e.attachments?.length > 0).length;
+        const totalTimeSpentSeconds = reports.reduce((sum, report) => sum + getReportTotalSeconds(report), 0);
+        const uniqueTasks = new Set(reports.flatMap((e) => e.tasks?.map((t) => t.id) || [])).size;
+        const withAttachments = reports.filter((e) => e.attachments?.length > 0).length;
+        const activeEmployees = new Set(reports.map((r) => r.user_id)).size;
 
         return {
             totalReports,
-            totalTimeSpent: totalTimeSpentSeconds / 3600,
+            totalHoursRounded: Math.round(totalTimeSpentSeconds / 3600),
             uniqueTasks,
             withAttachments,
+            activeEmployees,
         };
     }, [reports]);
 
-    // Filtered reports based on search and status
     const filteredReports = useMemo(() => {
-        return reports.filter(report => {
-            const matchesSearch = searchQuery === '' ||
+        return reports.filter((report) => {
+            const matchesSearch =
+                searchQuery === '' ||
                 report.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 report.user?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                report.tasks?.some(task => task.title.toLowerCase().includes(searchQuery.toLowerCase()));
+                report.tasks?.some((task) => task.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
             const matchesStatus = statusFilter === '' || report.status === statusFilter;
 
@@ -202,73 +215,13 @@ export default function ReportsIndex(props: ReportsIndexProps) {
         });
     }, [reports, searchQuery, statusFilter]);
 
-    useEffect(() => {
-        if (activeTab === 'all-reports') {
-            fetchAllReports();
-        } else {
-            fetchMyReports();
-        }
-    }, [currentPage, activeTab, startDate, endDate, itemsPerPage, selectedEmployeeFilter, statusFilter, searchQuery]);
-
-    // Function to fetch my reports
-    const fetchMyReports = () => {
-        setLoading(true);
-        axios.get(`/admin/api/reports/employee/${authUser.id}`, {
-            params: {
-                start_date: startDate,
-                end_date: endDate,
-                page: currentPage,
-                per_page: itemsPerPage
-            }
-        })
-            .then(response => {
-                setReports(response.data.data);
-                setTotalItems(response.data.total);
-                setLoading(false);
-            })
-            .catch(error => {
-                console.error('Error fetching my reports:', error);
-                setLoading(false);
-            });
-    };
-
-    // Function to fetch all reports
-    const fetchAllReports = () => {
-        setLoading(true);
-        axios.get('/admin/api/reports/all', {
-            params: {
-                start_date: startDate,
-                end_date: endDate,
-                page: currentPage,
-                per_page: itemsPerPage,
-                employee_id: selectedEmployeeFilter?.id,
-                status: statusFilter,
-                search: searchQuery
-            }
-        })
-            .then(response => {
-                setReports(response.data.data);
-                setTotalItems(response.data.total);
-                setLoading(false);
-            })
-            .catch(error => {
-                console.error('Error fetching all reports:', error);
-                setLoading(false);
-            });
-    };
-
-    const canExportConsolidated =
-        isSuperAdmin ||
-        userPermissions.includes('report.export') ||
-        userPermissions.length === 0;
-
-    const shouldGroupByEmployee = !selectedEmployeeFilter;
     const groupedReports = useMemo(() => {
-        if (shouldGroupByEmployee) {
+        if (isAdminView && !selectedEmployeeFilter) {
             return groupReportsByEmployee(filteredReports);
         }
+
         return groupReportsByDate(filteredReports);
-    }, [filteredReports, shouldGroupByEmployee]);
+    }, [filteredReports, isAdminView, selectedEmployeeFilter]);
 
     const handleExportConsolidated = async () => {
         if (!startDate || !endDate) {
@@ -313,404 +266,192 @@ export default function ReportsIndex(props: ReportsIndexProps) {
         }
     };
 
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+    const employeeOptions = employees.map((employee) => ({
+        value: String(employee.id),
+        label: employee.name,
+    }));
+
+    const clearFilters = () => {
+        setSearchQuery('');
+        setStatusFilter('');
+        if (isAdminView) {
+            setSelectedEmployeeFilter(null);
+        }
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Daily Reports" />
 
-            <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
+            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4">
+                <div className="flex items-start justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Daily Reports</h1>
-                        <p className="text-muted-foreground">
-                            View and analyze employee daily work reports
-                        </p>
+                        <Text fw={700} size="lg">
+                            Daily Reports
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                            {isAdminView ? 'Employees reports' : 'My reports'}
+                        </Text>
                     </div>
                 </div>
 
-                {/* Enhanced Stats Cards */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Reports</CardTitle>
-                            <FileText className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalReports}</div>
-                            <p className="text-xs text-muted-foreground">
-                                {stats.withAttachments} with attachments
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Time</CardTitle>
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{formatDuration(stats.totalTimeSpent)}</div>
-                            <p className="text-xs text-muted-foreground">
-                                Across all reports
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Unique Tasks</CardTitle>
-                            <Tag className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.uniqueTasks}</div>
-                            <p className="text-xs text-muted-foreground">
-                                Tasks reported on
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Active Employees</CardTitle>
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{employees.length}</div>
-                            <p className="text-xs text-muted-foreground">
-                                In the system
-                            </p>
-                        </CardContent>
-                    </Card>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                    <WizCardDesign1 title="Total Reports" text="Loaded in view" stats={stats.totalReports} icon={FileText} color="blue" />
+                    <WizCardDesign1 title="Hours" text="Rounded total" stats={stats.totalHoursRounded} icon={Clock} color="purple" />
+                    <WizCardDesign1 title="Tasks" text="Unique tasks" stats={stats.uniqueTasks} icon={Tag} color="green" />
+                    <WizCardDesign1 title="Attachments" text="Reports w/ files" stats={stats.withAttachments} icon={Paperclip} color="orange" />
                 </div>
 
-                {/* Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="all-reports">All Reports</TabsTrigger>
-                        <TabsTrigger value="my-reports">My Reports</TabsTrigger>
-                    </TabsList>
+                <Card withBorder radius="md" p="sm">
+                    <Group justify="space-between" align="flex-start" gap="sm" wrap="wrap">
+                        <div>
+                            <Text fw={600} size="sm">
+                                {isAdminView
+                                    ? selectedEmployeeFilter
+                                        ? `Reports for ${selectedEmployeeFilter.name}`
+                                        : 'Employees reports'
+                                    : 'My reports'}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                                {filteredReports.length} of {reports.length} reports shown
+                            </Text>
+                        </div>
 
-                    <TabsContent value="my-reports" className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Filters</CardTitle>
-                                <CardDescription>Refine your report view</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* Date Range */}
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="flex flex-col gap-4 md:flex-row md:items-end">
-                                        <div className="flex-1">
-                                            <label className="text-sm font-medium">From Date</label>
-                                            <Input
-                                                type="date"
-                                                value={startDate}
-                                                onChange={(e) => setStartDate(e.target.value)}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="text-sm font-medium">To Date</label>
-                                            <Input
-                                                type="date"
-                                                value={endDate}
-                                                onChange={(e) => setEndDate(e.target.value)}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                    </div>
+                        <Group gap="xs">
+                            {isAdminView && canExportConsolidated ? (
+                                <Button
+                                    variant="light"
+                                    leftSection={<Download size={16} />}
+                                    onClick={handleExportConsolidated}
+                                    loading={isExportingConsolidated}
+                                >
+                                    Export
+                                </Button>
+                            ) : null}
 
-                                    {/* Status Filter */}
-                                    <div>
-                                        <label className="text-sm font-medium">Report Status</label>
-                                        <select
-                                            value={statusFilter}
-                                            onChange={(e) => setStatusFilter(e.target.value)}
-                                            className="mt-1 w-full p-2 border rounded-md"
-                                        >
-                                            <option value="">All Statuses</option>
-                                            <option value="draft">Draft</option>
-                                            <option value="submitted">Submitted</option>
-                                            <option value="approved">Approved</option>
-                                        </select>
-                                    </div>
-                                </div>
+                            {!isAdminView ? (
+                                <Button leftSection={<Plus size={16} />} onClick={() => setIsReportDialogOpen(true)}>
+                                    New
+                                </Button>
+                            ) : null}
+                        </Group>
+                    </Group>
 
+                    <Divider my="sm" />
 
-                                {/* Clear Filters */}
-                                {statusFilter && (
-                                    <div className="flex justify-end">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                setStatusFilter('');
-                                            }}
-                                        >
-                                            Clear All Filters
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                    <SimpleGrid cols={{ base: 1, sm: 2, md: isAdminView ? 5 : 4 }} spacing="sm">
+                        {isAdminView ? (
+                            <Select
+                                label="Employee"
+                                placeholder="All employees"
+                                data={[{ value: '', label: 'All employees' }, ...employeeOptions]}
+                                value={selectedEmployeeFilter?.id ? String(selectedEmployeeFilter.id) : ''}
+                                onChange={(value) => {
+                                    if (!value) {
+                                        setSelectedEmployeeFilter(null);
+                                        return;
+                                    }
 
-                        {/* My Reports List */}
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle>My Reports</CardTitle>
-                                        <CardDescription>
-                                            {filteredReports.length} of {reports.length} reports shown
-                                        </CardDescription>
-                                    </div>
-                                    <Button
-                                        onClick={() => setIsReportDialogOpen(true)}
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                        New
-                                    </Button>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {loading ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        Loading reports...
-                                    </div>
-                                ) : filteredReports.length > 0 ? (
-                                    <div className="space-y-6">
-                                        {Array.from(groupReportsByDate(filteredReports).entries()).map(([dateKey, dateReports]) => (
-                                            <ReportGroup
-                                                key={dateKey}
-                                                reports={dateReports}
-                                                authUser={authUser}
-                                                groupBy="date"
-                                                showEmployee={false}
-                                                showDate={true}
-                                                onDelete={() => fetchMyReports()}
-                                                showTimeEntries={true}
-                                            />
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        {searchQuery || statusFilter
-                                            ? 'No reports match your filters.'
-                                            : 'No reports found for this date range.'}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
+                                    const employee = employees.find((emp) => emp.id === Number(value));
+                                    setSelectedEmployeeFilter(employee ?? null);
+                                }}
+                                searchable
+                                clearable
+                            />
+                        ) : null}
 
-                    <TabsContent value="all-reports" className="space-y-6">
-                        <Card>
-                            <CardHeader className="flex flex-row items-start justify-between">
-                                <div>
-                                    <CardTitle className="text-lg">Filters</CardTitle>
-                                    <CardDescription>Refine your report view</CardDescription>
-                                </div>
-                                {canExportConsolidated && (
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleExportConsolidated}
-                                        disabled={isExportingConsolidated}
-                                    >
-                                        <Download className="h-4 w-4 mr-2" />
-                                        {isExportingConsolidated ? 'Exporting...' : 'Export Consolidated'}
-                                    </Button>
-                                )}
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* Employee Selection */}
-                                <div className="grid md:grid-cols-3 gap-2">
-                                    <div>
-                                        <label className="text-sm font-medium">Employee</label>
-                                        <select
-                                            value={selectedEmployeeFilter?.id || ''}
-                                            onChange={(e) => {
-                                                const employeeId = e.target.value;
-                                                if (employeeId === '') {
-                                                    handleFilterByEmployee(null);
-                                                } else {
-                                                    const employee = employees.find(emp => emp.id === parseInt(employeeId));
-                                                    handleFilterByEmployee(employee || null);
-                                                }
-                                            }}
-                                            className="mt-1 w-full p-2 border rounded-md"
-                                        >
-                                            <option value="">Select Employee</option>
-                                            {employees.map((employee) => (
-                                                <option key={employee.id} value={employee.id}>
-                                                    {employee.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-medium">Report Status</label>
-                                        <select
-                                            value={statusFilter}
-                                            onChange={(e) => setStatusFilter(e.target.value)}
-                                            className="mt-1 w-full p-2 border rounded-md"
-                                        >
-                                            <option value="">All Statuses</option>
-                                            <option value="draft">Draft</option>
-                                            <option value="submitted">Submitted</option>
-                                            <option value="approved">Approved</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex flex-col gap-4 md:flex-row md:items-end">
-                                        <div className="flex-1">
-                                            <label className="text-sm font-medium">From Date</label>
-                                            <Input
-                                                type="date"
-                                                value={startDate}
-                                                onChange={(e) => setStartDate(e.target.value)}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="text-sm font-medium">To Date</label>
-                                            <Input
-                                                type="date"
-                                                value={endDate}
-                                                onChange={(e) => setEndDate(e.target.value)}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                {/* Search */}
-                                <div>
-                                    <label className="text-sm font-medium">Search</label>
-                                    <div className="relative mt-1">
-                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                        <Input
-                                            type="text"
-                                            placeholder="Search reports, tasks, or employees..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="pl-10"
-                                        />
-                                    </div>
-                                </div>
+                        <Select
+                            label="Status"
+                            data={statusOptions}
+                            value={statusFilter}
+                            onChange={(value) => setStatusFilter(value ?? '')}
+                        />
 
-                                {/* Clear Filters */}
-                                {(selectedEmployeeFilter || statusFilter || searchQuery) && (
-                                    <div className="flex justify-end">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                handleFilterByEmployee(null);
-                                                setStatusFilter('');
-                                                setSearchQuery('');
-                                            }}
-                                        >
-                                            Clear All Filters
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle>
-                                            {selectedEmployeeFilter ? `Reports for ${selectedEmployeeFilter.name}` : 'All Reports'}
-                                        </CardTitle>
-                                        <CardDescription>
-                                            {filteredReports.length} of {reports.length} reports shown
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {loading ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        Loading reports...
-                                    </div>
-                                ) : filteredReports.length > 0 ? (
-                                    <div className="space-y-6">
-                                        {Array.from(groupedReports.entries()).map(([groupKey, groupReports]) => (
-                                            <ReportGroup
-                                                key={groupKey}
-                                                reports={groupReports}
-                                                authUser={authUser}
-                                                groupBy={shouldGroupByEmployee ? 'employee' : 'date'}
-                                                showEmployee={!selectedEmployeeFilter}
-                                                showDate={true}
-                                                onDelete={() => {
-                                                    if (activeTab === 'all-reports') {
-                                                        fetchAllReports();
-                                                    }
-                                                }}
-                                                showTimeEntries={true}
-                                            />
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        {searchQuery || statusFilter || selectedEmployeeFilter
-                                            ? 'No reports match your filters.'
-                                            : 'No reports found for this date range.'}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                </Tabs>
+                        <TextInput label="From" type="date" value={startDate} onChange={(e) => setStartDate(e.currentTarget.value)} />
+                        <TextInput label="To" type="date" value={endDate} onChange={(e) => setEndDate(e.currentTarget.value)} />
+                        <TextInput
+                            label="Search"
+                            placeholder="Title, employee, task…"
+                            leftSection={<Search size={16} />}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                        />
+                    </SimpleGrid>
 
-                {/* Pagination */}
+                    {(statusFilter || searchQuery || (isAdminView && selectedEmployeeFilter)) && (
+                        <Group justify="flex-end" mt="sm">
+                            <ActionIcon variant="subtle" aria-label="Clear filters" onClick={clearFilters}>
+                                <Tag size={16} />
+                            </ActionIcon>
+                        </Group>
+                    )}
+
+                    <Divider my="sm" />
+
+                    {loading ? (
+                        <Text size="sm" c="dimmed" ta="center" py="xl">
+                            Loading reports…
+                        </Text>
+                    ) : filteredReports.length > 0 ? (
+                        <Stack gap="md">
+                            {Array.from(groupedReports.entries()).map(([groupKey, groupReports]) => (
+                                <ReportGroup
+                                    key={groupKey}
+                                    reports={groupReports}
+                                    authUser={authUser}
+                                    groupBy={isAdminView && !selectedEmployeeFilter ? 'employee' : 'date'}
+                                    showEmployee={isAdminView && !selectedEmployeeFilter}
+                                    showDate={true}
+                                    onDelete={() => {
+                                        if (isAdminView) {
+                                            fetchAllReports();
+                                            return;
+                                        }
+
+                                        fetchMyReports();
+                                    }}
+                                    showTimeEntries={true}
+                                />
+                            ))}
+                        </Stack>
+                    ) : (
+                        <Text size="sm" c="dimmed" ta="center" py="xl">
+                            {searchQuery || statusFilter || (isAdminView && selectedEmployeeFilter)
+                                ? 'No reports match your filters.'
+                                : 'No reports found for this date range.'}
+                        </Text>
+                    )}
+                </Card>
+
                 {reports.length > 0 && (
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Show</span>
-                            <select
-                                value={itemsPerPage}
-                                onChange={(e) => handleItemsPerPageChange(parseInt(e.target.value))}
-                                className="p-2 border rounded-md"
-                            >
-                                <option value="5">5</option>
-                                <option value="10">10</option>
-                                <option value="20">20</option>
-                                <option value="50">50</option>
-                            </select>
-                            <span className="text-sm text-muted-foreground">per page</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
-                            >
-                                Previous
-                            </Button>
-                            <span className="text-sm text-muted-foreground px-4">
-                                Page {currentPage} of {Math.ceil(totalItems / itemsPerPage)}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === Math.ceil(totalItems / itemsPerPage)}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    </div>
+                    <Card withBorder radius="md" p="sm">
+                        <Group justify="space-between" wrap="wrap" gap="sm">
+                            <Group gap="xs">
+                                <Text size="xs" c="dimmed">
+                                    Per page
+                                </Text>
+                                <NativeSelect
+                                    size="xs"
+                                    value={String(itemsPerPage)}
+                                    data={[
+                                        { value: '5', label: '5' },
+                                        { value: '10', label: '10' },
+                                        { value: '20', label: '20' },
+                                        { value: '50', label: '50' },
+                                    ]}
+                                    onChange={(e) => setItemsPerPage(Number(e.currentTarget.value))}
+                                />
+                            </Group>
+
+                            <Pagination total={totalPages} value={currentPage} onChange={setCurrentPage} size="sm" siblings={1} boundaries={1} />
+                        </Group>
+                    </Card>
                 )}
             </div>
 
-            {/* Report Dialog */}
-            <ReportForm
-                open={isReportDialogOpen}
-                onOpenChange={setIsReportDialogOpen}
-                tasks={reports.flatMap(report => report.tasks)}
-            />
+            <ReportForm open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen} tasks={reports.flatMap((report) => report.tasks)} />
         </AppLayout>
     );
 }

@@ -45,7 +45,7 @@ class AdminPasswordResetController extends Controller
 
         $resetUrl = url("/admin/reset-password/{$token}").'?email='.urlencode($user->email);
 
-        $message = "Password Reset Link\n\nReset your password using this link:\n{$resetUrl}";
+        $message = "Password Reset Link\n\nReset your password using this link:\n{$resetUrl}\n\nNote: This link expires in 5 minutes.";
 
         $notificationService->sendWhatsApp($phone, $message);
 
@@ -64,11 +64,9 @@ class AdminPasswordResetController extends Controller
 
     public function update(AdminResetPasswordRequest $request, NotificationService $notificationService): RedirectResponse
     {
-        $plainPassword = $request->string('password')->toString();
-
         $status = $this->broker()->reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user, string $password) use ($plainPassword, $notificationService): void {
+            function (User $user, string $password) use ($notificationService): void {
                 $user->forceFill([
                     'password' => $password,
                     'remember_token' => Str::random(60),
@@ -80,7 +78,7 @@ class AdminPasswordResetController extends Controller
                     return;
                 }
 
-                $message = "Password Reset Successful\n\nUsername: {$user->email}\nPassword: {$plainPassword}";
+                $message = "Password Reset Confirmation\n\nYour password has been updated successfully.";
 
                 $notificationService->sendWhatsApp($phone, $message);
             }

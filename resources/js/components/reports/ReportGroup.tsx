@@ -1,7 +1,8 @@
 import ReportCard from './ReportCard';
 import { getReportDateRange, getSecondsOnReportDate } from '@/utils/reportDate';
+import { type Task as AppTask } from '@/types';
 
-interface ReportAttachment {
+export interface ReportAttachment {
     id: number;
     file_name: string;
     file_path: string;
@@ -9,28 +10,24 @@ interface ReportAttachment {
     file_size: number;
 }
 
-interface TaskTimeEntry {
+export interface TaskTimeEntry {
     id: number;
     start_time: string;
-    end_time: string;
+    end_time: string | null;
     description: string;
+    duration_hours?: number;
     working_duration?: number;
 }
 
-interface Task {
-    id: number;
-    title: string;
-    task_code: string;
-    description: string;
-    state: string;
+export type ReportTask = AppTask & {
     time_entries: TaskTimeEntry[];
     total_working_seconds?: number;
     pivot?: {
         remarks?: string;
     };
-}
+};
 
-interface Report {
+export interface Report {
     id: number;
     user_id: number;
     user: { id: number; name: string };
@@ -40,7 +37,7 @@ interface Report {
     total_hours: number;
     status: string;
     created_at: string;
-    tasks: Task[];
+    tasks: ReportTask[];
     attachments: ReportAttachment[];
 }
 
@@ -94,7 +91,13 @@ const getGroupTotalTime = (reports: Report[]): string => {
     return formatSeconds(totalSeconds);
 };
 
-export default function ReportGroup({ reports, authUser, groupBy, showEmployee = true, showDate = true, onDelete, showTimeEntries = true }: ReportGroupProps) {
+export default function ReportGroup({
+    reports,
+    authUser,
+    groupBy,
+    onDelete,
+    showTimeEntries = true,
+}: ReportGroupProps) {
     if (reports.length === 0) return null;
 
     const getGroupHeader = () => {
