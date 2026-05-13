@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 
 const colorMap = {
+    red: "border-red-500 text-red-500",
     orange: "border-orange-500 text-orange-500",
     blue: "border-blue-500 text-blue-500",
     purple: "border-purple-500 text-purple-500",

@@ -11,13 +11,13 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
-use Inertia\Response;
+use Inertia\Inertia;
 
 class AdminPasswordResetController extends Controller
 {
-    public function create(Request $request): Response
+    public function create(Request $request)
     {
-        return inertia('auth/forgot-password', [
+        return Inertia::render('auth/forgot-password', [
             'status' => $request->session()->get('status'),
             'action' => '/admin/forgot-password',
             'loginHref' => '/admin/login',
@@ -52,9 +52,9 @@ class AdminPasswordResetController extends Controller
         return back()->with('status', __('Password reset link sent on WhatsApp.'));
     }
 
-    public function edit(Request $request, string $token): Response
+    public function edit(Request $request, string $token)
     {
-        return inertia('auth/reset-password', [
+        return Inertia::render('auth/reset-password', [
             'token' => $token,
             'email' => (string) $request->query('email', ''),
             'action' => '/admin/reset-password',

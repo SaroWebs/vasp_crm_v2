@@ -19,6 +19,19 @@ class ReportController extends Controller
         protected NotificationService $notificationService
     ) {}
 
+    protected function currentUserIsAdmin(): bool
+    {
+        $user = Auth::user();
+
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        $user->loadMissing('roles');
+
+        return $user->hasRole(['super-admin', 'admin']);
+    }
+
     public function getDailyReportAll($date)
     {
         $reports = Report::where('report_date', $date)
@@ -202,6 +215,10 @@ class ReportController extends Controller
 
     public function getAllReports(Request $request)
     {
+        if (! $this->currentUserIsAdmin()) {
+            abort(403, 'Unauthorized.');
+        }
+
         $query = Report::with(['user', 'tasks' => function ($query) {
             $query->withPivot('remarks'); // Include remarks from pivot table
         }, 'tasks.timeEntries' => function ($query) {
@@ -282,11 +299,22 @@ class ReportController extends Controller
      */
     public function index()
     {
-        $employees = User::all();
+        $user = User::with('roles')->findOrFail(Auth::id());
+        $isAdminView = $user->hasRole(['super-admin', 'admin']);
 
         return Inertia::render('admin/reports/Index', [
-            'employees' => $employees,
-            'authUser' => Auth::user(),
+            'employees' => $isAdminView
+                ? User::query()
+                    ->select(['id', 'name'])
+                    ->orderBy('name')
+                    ->get()
+                : [],
+            'authUser' => [
+                'id' => $user->id,
+                'name' => $user->name,
+            ],
+            'userPermissions' => $user->getAllPermissions()->pluck('slug')->toArray(),
+            'isAdminView' => $isAdminView,
         ]);
     }
 
@@ -555,7 +583,14 @@ class ReportController extends Controller
      */
     public function getEmployees()
     {
-        $employees = User::all();
+        if (! $this->currentUserIsAdmin()) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $employees = User::query()
+            ->select(['id', 'name'])
+            ->orderBy('name')
+            ->get();
 
         return response()->json($employees);
     }
@@ -565,6 +600,10 @@ class ReportController extends Controller
      */
     public function getConsolidatedReports(Request $request)
     {
+        if (! $this->currentUserIsAdmin()) {
+            abort(403, 'Unauthorized.');
+        }
+
         $request->validate([
             'employee_ids' => 'required|array',
             'start_date' => 'required|date',
@@ -666,6 +705,10 @@ class ReportController extends Controller
      */
     public function exportConsolidatedReports(Request $request)
     {
+        if (! $this->currentUserIsAdmin()) {
+            abort(403, 'Unauthorized.');
+        }
+
         $validated = $request->validate([
             'employee_ids' => 'nullable|array',
             'employee_ids.*' => 'integer|exists:users,id',

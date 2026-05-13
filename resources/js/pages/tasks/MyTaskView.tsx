@@ -229,11 +229,11 @@ export default function MyTaskView({ taskId }: MyTaskViewProps) {
     const getValidStateTransitions = (currentState: string): string[] => {
         switch (currentState) {
             case 'Draft':
-                return ['Assigned', 'Blocked', 'Cancelled', 'Rejected'];
+                return ['Done','Assigned', 'Blocked', 'Cancelled', 'Rejected'];
             case 'Assigned':
-                return ['InProgress', 'Blocked', 'Cancelled', 'Rejected', 'Draft'];
+                return ['Done','InProgress', 'Blocked', 'Cancelled', 'Rejected', 'Draft'];
             case 'InProgress':
-                return ['InReview', 'Blocked', 'Cancelled', 'Rejected', 'Assigned'];
+                return ['Done','InReview', 'Blocked', 'Cancelled', 'Rejected', 'Assigned'];
             case 'InReview':
                 return ['Done', 'Blocked', 'Cancelled', 'Rejected', 'InProgress'];
             case 'Done':

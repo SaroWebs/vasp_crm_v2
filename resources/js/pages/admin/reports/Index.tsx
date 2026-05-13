@@ -37,6 +37,7 @@ interface ReportsIndexProps {
     employees: Employee[];
     userPermissions: string[];
     isSuperAdmin: boolean;
+    isAdminView?: boolean;
     authUser: { id: number; name: string };
 }
 
@@ -71,13 +72,14 @@ const getEntrySeconds = (entry: Omit<TaskTimeEntry, 'description'> & { descripti
 };
 
 const getReportTotalSeconds = (report: Report): number => {
-    if (report.tasks && report.tasks.length > 0) {
+    if (Array.isArray(report.tasks) && report.tasks.length > 0) {
         return report.tasks.reduce((taskAcc, task) => {
             if (typeof task.total_working_seconds === 'number') {
                 return taskAcc + task.total_working_seconds;
             }
 
-            const taskSeconds = task.time_entries?.reduce((entryAcc, entry) => {
+            const taskSeconds =
+                task.time_entries?.reduce((entryAcc, entry) => {
                     return entryAcc + getEntrySeconds(entry);
                 }, 0) || 0;
 
@@ -89,20 +91,28 @@ const getReportTotalSeconds = (report: Report): number => {
 };
 
 export default function ReportsIndex(props: ReportsIndexProps) {
-    const { employees: initialEmployees = [], userPermissions = [], isSuperAdmin = false, authUser } = props;
+    const {
+        employees: initialEmployees = [],
+        userPermissions = [],
+        isSuperAdmin = false,
+        isAdminView: isAdminViewProp,
+        authUser,
+    } = props;
 
     const isAdminView =
-        isSuperAdmin ||
-        userPermissions.length === 0 ||
-        userPermissions.includes('report.view') ||
-        userPermissions.includes('report.view_all') ||
-        userPermissions.includes('reports.view') ||
-        userPermissions.includes('reports.view_all');
+        typeof isAdminViewProp === 'boolean'
+            ? isAdminViewProp
+            : isSuperAdmin ||
+              userPermissions.length === 0 ||
+              userPermissions.includes('report.view') ||
+              userPermissions.includes('report.view_all') ||
+              userPermissions.includes('reports.view') ||
+              userPermissions.includes('reports.view_all');
 
     const canExportConsolidated =
         isSuperAdmin ||
-        userPermissions.includes('report.export') ||
-        userPermissions.length === 0;
+        userPermissions.length === 0 ||
+        userPermissions.includes('report.export');
 
     const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
     const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -119,13 +129,19 @@ export default function ReportsIndex(props: ReportsIndexProps) {
     const [isExportingConsolidated, setIsExportingConsolidated] = useState(false);
 
     useEffect(() => {
-        if (initialEmployees.length === 0) {
-            fetch('/admin/api/reports/employees')
-                .then((response) => response.json())
-                .then((data) => setEmployees(data))
-                .catch((error) => console.error('Error fetching employees:', error));
+        if (!isAdminView) {
+            return;
         }
-    }, [initialEmployees]);
+
+        if (initialEmployees.length > 0) {
+            return;
+        }
+
+        fetch('/admin/api/reports/employees')
+            .then((response) => response.json())
+            .then((data) => setEmployees(data))
+            .catch((error) => console.error('Error fetching employees:', error));
+    }, [initialEmployees.length, isAdminView]);
 
     const fetchMyReports = useCallback(() => {
         setLoading(true);
@@ -188,9 +204,9 @@ export default function ReportsIndex(props: ReportsIndexProps) {
     const stats = useMemo(() => {
         const totalReports = reports.length;
         const totalTimeSpentSeconds = reports.reduce((sum, report) => sum + getReportTotalSeconds(report), 0);
-        const uniqueTasks = new Set(reports.flatMap((e) => e.tasks?.map((t) => t.id) || [])).size;
-        const withAttachments = reports.filter((e) => e.attachments?.length > 0).length;
-        const activeEmployees = new Set(reports.map((r) => r.user_id)).size;
+        const uniqueTasks = new Set(reports.flatMap((report) => report.tasks?.map((task) => task.id) || [])).size;
+        const withAttachments = reports.filter((report) => report.attachments?.length > 0).length;
+        const activeEmployees = new Set(reports.map((report) => report.user_id)).size;
 
         return {
             totalReports,
@@ -222,6 +238,21 @@ export default function ReportsIndex(props: ReportsIndexProps) {
 
         return groupReportsByDate(filteredReports);
     }, [filteredReports, isAdminView, selectedEmployeeFilter]);
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+    const employeeOptions = (employees && employees.length > 0) ? employees.map((employee) => ({
+        value: String(employee.id),
+        label: employee.name,
+    })) : [];
+
+    const clearFilters = () => {
+        setSearchQuery('');
+        setStatusFilter('');
+        if (isAdminView) {
+            setSelectedEmployeeFilter(null);
+        }
+    };
 
     const handleExportConsolidated = async () => {
         if (!startDate || !endDate) {
@@ -266,37 +297,11 @@ export default function ReportsIndex(props: ReportsIndexProps) {
         }
     };
 
-    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
-
-    const employeeOptions = employees.map((employee) => ({
-        value: String(employee.id),
-        label: employee.name,
-    }));
-
-    const clearFilters = () => {
-        setSearchQuery('');
-        setStatusFilter('');
-        if (isAdminView) {
-            setSelectedEmployeeFilter(null);
-        }
-    };
-
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Daily Reports" />
 
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <Text fw={700} size="lg">
-                            Daily Reports
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                            {isAdminView ? 'Employees reports' : 'My reports'}
-                        </Text>
-                    </div>
-                </div>
-
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                     <WizCardDesign1 title="Total Reports" text="Loaded in view" stats={stats.totalReports} icon={FileText} color="blue" />
                     <WizCardDesign1 title="Hours" text="Rounded total" stats={stats.totalHoursRounded} icon={Clock} color="purple" />
@@ -316,6 +321,7 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                             </Text>
                             <Text size="xs" c="dimmed">
                                 {filteredReports.length} of {reports.length} reports shown
+                                {isAdminView && !selectedEmployeeFilter ? ` • ${stats.activeEmployees} employees` : null}
                             </Text>
                         </div>
 
@@ -330,7 +336,6 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                                     Export
                                 </Button>
                             ) : null}
-
                             {!isAdminView ? (
                                 <Button leftSection={<Plus size={16} />} onClick={() => setIsReportDialogOpen(true)}>
                                     New
@@ -341,8 +346,8 @@ export default function ReportsIndex(props: ReportsIndexProps) {
 
                     <Divider my="sm" />
 
-                    <SimpleGrid cols={{ base: 1, sm: 2, md: isAdminView ? 5 : 4 }} spacing="sm">
-                        {isAdminView ? (
+                    {isAdminView ? (
+                        <SimpleGrid cols={{ base: 1, sm: 2, md: 5 }} spacing="sm">
                             <Select
                                 label="Employee"
                                 placeholder="All employees"
@@ -360,25 +365,42 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                                 searchable
                                 clearable
                             />
-                        ) : null}
 
-                        <Select
-                            label="Status"
-                            data={statusOptions}
-                            value={statusFilter}
-                            onChange={(value) => setStatusFilter(value ?? '')}
-                        />
-
-                        <TextInput label="From" type="date" value={startDate} onChange={(e) => setStartDate(e.currentTarget.value)} />
-                        <TextInput label="To" type="date" value={endDate} onChange={(e) => setEndDate(e.currentTarget.value)} />
-                        <TextInput
-                            label="Search"
-                            placeholder="Title, employee, task…"
-                            leftSection={<Search size={16} />}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                        />
-                    </SimpleGrid>
+                            <Select
+                                label="Status"
+                                data={statusOptions}
+                                value={statusFilter}
+                                onChange={(value) => setStatusFilter(value ?? '')}
+                            />
+                            <TextInput label="From" type="date" value={startDate} onChange={(e) => setStartDate(e.currentTarget.value)} />
+                            <TextInput label="To" type="date" value={endDate} onChange={(e) => setEndDate(e.currentTarget.value)} />
+                            <TextInput
+                                label="Search"
+                                placeholder="Title, employee, task…"
+                                leftSection={<Search size={16} />}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                            />
+                        </SimpleGrid>
+                    ) : (
+                        <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="sm">
+                            <Select
+                                label="Status"
+                                data={statusOptions}
+                                value={statusFilter}
+                                onChange={(value) => setStatusFilter(value ?? '')}
+                            />
+                            <TextInput label="From" type="date" value={startDate} onChange={(e) => setStartDate(e.currentTarget.value)} />
+                            <TextInput label="To" type="date" value={endDate} onChange={(e) => setEndDate(e.currentTarget.value)} />
+                            <TextInput
+                                label="Search"
+                                placeholder="Title, task…"
+                                leftSection={<Search size={16} />}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                            />
+                        </SimpleGrid>
+                    )}
 
                     {(statusFilter || searchQuery || (isAdminView && selectedEmployeeFilter)) && (
                         <Group justify="flex-end" mt="sm">

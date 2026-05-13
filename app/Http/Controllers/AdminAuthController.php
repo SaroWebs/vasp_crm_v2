@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
 
 class AdminAuthController extends Controller
 {
@@ -16,7 +17,7 @@ class AdminAuthController extends Controller
             return redirect('/admin/dashboard');
         }
 
-        return inertia('auth/login', [
+        return Inertia::render('auth/login', [
             'isAdmin' => true,
             'canResetPassword' => true,
             'forgotPasswordHref' => '/admin/forgot-password',

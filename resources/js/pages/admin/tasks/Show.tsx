@@ -174,41 +174,17 @@ export default function Show({ task, authUser }: TasksShowProps) {
     ): Task['state'][] => {
         switch (currentState) {
             case 'Draft':
-                return ['Assigned', 'Blocked', 'Cancelled', 'Rejected'];
+                return ['Done','Assigned', 'Blocked', 'Cancelled', 'Rejected'];
             case 'Assigned':
-                return [
-                    'InProgress',
-                    'Blocked',
-                    'Cancelled',
-                    'Rejected',
-                    'Draft',
-                ];
+                return ['Done','InProgress', 'Blocked', 'Cancelled', 'Rejected', 'Draft'];
             case 'InProgress':
-                return [
-                    'InReview',
-                    'Blocked',
-                    'Cancelled',
-                    'Rejected',
-                    'Assigned',
-                ];
+                return ['Done','InReview', 'Blocked', 'Cancelled', 'Rejected', 'Assigned'];
             case 'InReview':
-                return [
-                    'Done',
-                    'Blocked',
-                    'Cancelled',
-                    'Rejected',
-                    'InProgress',
-                ];
+                return ['Done', 'Blocked', 'Cancelled', 'Rejected', 'InProgress'];
             case 'Done':
                 return ['InReview', 'Cancelled', 'Rejected'];
             case 'Blocked':
-                return [
-                    'Assigned',
-                    'InProgress',
-                    'Cancelled',
-                    'Rejected',
-                    'Draft',
-                ];
+                return ['Assigned', 'InProgress', 'Cancelled', 'Rejected', 'Draft'];
             case 'Cancelled':
                 return ['Draft', 'Assigned'];
             case 'Rejected':
