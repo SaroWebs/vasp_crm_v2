@@ -18,6 +18,7 @@ class Employee extends Model
         'phone',
         'department_id',
         'user_id',
+        'category_id',
     ];
 
     public function department(): BelongsTo
@@ -33,5 +34,16 @@ class Employee extends Model
     public function attendances(): HasMany
     {
         return $this->hasMany(Attendance::class, 'employee_id', 'code');
+    }
+
+    public function category()
+    {
+        $cat_id = $this->category_id;
+        $cat = EmployeeCategory::find($cat_id);
+        if (! $cat) {
+            return null;
+        }
+
+        return $cat;
     }
 }

@@ -514,7 +514,7 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     Route::get('/my/tasks/{task}/remaining-time', [UserTaskController::class, 'calculateRemainingTime'])->name('my.tasks.remaining-time');
     Route::get('/my/tasks/{task}/working-time-spent', [TimeTrackingController::class, 'getWorkingTimeSpent'])->name('my.tasks.working-time-spent');
     Route::get('/api/working-hours-config', [TimeTrackingController::class, 'getWorkingHoursConfig'])->name('api.working-hours-config');
-    Route::get('/my/tasks/{task}/time-entries', [UserTaskController::class, 'getTaskTimeEntriesForDate'])->name('my.tasks.time-entries');
+    Route::get('/my/tasks/{task}/time-entries', [UserTaskController::class, 'getTaskTimeEntriesForDate'])->name('my.tasks.single.time-entries');
 
     // Admin task time tracking routes (kept for backward compatibility)
     Route::post('/tasks/{task}/start', [TaskController::class, 'startTask'])->name('tasks.start');

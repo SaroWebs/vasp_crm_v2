@@ -33,6 +33,10 @@ interface Employee {
         name: string;
         description: string | null;
     };
+    category: {
+        id: number;
+        name: string;
+    };
     user: {
         id: number;
         name: string;
@@ -115,6 +119,12 @@ export default function EmployeesShow(props: EmployeesShowProps) {
                                         <Phone className="h-4 w-4" />
                                         {employee.phone}
                                     </p>
+                                </div>
+                            )}
+                            {employee.category && (
+                                <div>
+                                    <label className="text-sm font-medium text-muted-foreground">Category</label>
+                                    <p className="text-lg">{employee.category?.name || '---'}</p>
                                 </div>
                             )}
                         </CardContent>

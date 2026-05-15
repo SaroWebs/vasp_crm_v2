@@ -31,12 +31,18 @@ interface RoleWithPermissions extends Role {
 interface EmployeesCreateProps {
     departments: Department[];
     roles: Role[];
+    categories: Category[];
     roles_with_permissions: RoleWithPermissions[];
     permissions: Permission[];
 }
 
+interface Category {
+    id: number;
+    name: string;
+}
+
 export default function EmployeesCreate(props: EmployeesCreateProps) {
-    const { departments, roles, roles_with_permissions, permissions } = props;
+    const { departments, roles, categories, roles_with_permissions, permissions } = props;
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         email: '',
@@ -48,6 +54,7 @@ export default function EmployeesCreate(props: EmployeesCreateProps) {
         role_id: '',
         permissions: [] as string[],
         denied_permissions: [] as string[],
+        category_id: '',
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -117,6 +124,24 @@ export default function EmployeesCreate(props: EmployeesCreateProps) {
                                 </div>
 
                                 <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="code">Category</Label>
+                                        <Select
+                                            value={data.category_id}
+                                            onValueChange={(value) => setData('category_id', value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a category" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {categories.map((category) => (
+                                                    <SelectItem key={category.id} value={category.id.toString()}>
+                                                        {category.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="code">Employee Code</Label>
                                         <Input

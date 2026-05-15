@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\EmployeeCategoryController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -14,4 +15,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::post('/upload_punch_data', [AttendanceController::class, 'uploadPunchData']);
+Route::post('/upload_punch_data', [AttendanceController::class, 'uploadPunchData'])
+    ->middleware('webhook.password:attendance');
+Route::get('/get_categories', [EmployeeCategoryController::class, 'getData'])
+    ->middleware('webhook.password:categories');
+Route::post('/get_employees', [EmployeeCategoryController::class, 'getEmployees'])
+    ->middleware('webhook.password:employees');

@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureOrganizationUserMatchesClient;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ValidateUserSession;
+use App\Http\Middleware\ValidateWebhookPassword;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => AdminMiddleware::class,
             'organization.client' => EnsureOrganizationUserMatchesClient::class,
             'permission' => CheckPermission::class,
+            'webhook.password' => ValidateWebhookPassword::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

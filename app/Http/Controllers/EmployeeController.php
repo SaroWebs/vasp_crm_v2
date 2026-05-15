@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\EmployeeCategory;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -125,16 +126,17 @@ class EmployeeController extends Controller
             'isSuperAdmin' => $user->isSuperAdmin(),
         ]);
     }
+
     public function getList(Request $request)
     {
         $query = Employee::with([
             'department',
-            'user'
+            'user',
         ]);
 
         $employees = $query->orderBy('name')->get();
 
-        return response()->json($employees,200);
+        return response()->json($employees, 200);
     }
 
     /**
@@ -149,6 +151,7 @@ class EmployeeController extends Controller
         $departments = Department::select('id', 'name')->get();
         $roles = Role::select('id', 'name', 'slug')->get();
         $permissions = Permission::select('id', 'name', 'slug', 'module')->get();
+        $categories = EmployeeCategory::select('id', 'name')->get();
 
         $rolesWithPermissions = $roles->map(function ($role) {
             $rolePermissions = $role->permissions()
@@ -168,6 +171,7 @@ class EmployeeController extends Controller
             'roles' => $roles,
             'roles_with_permissions' => $rolesWithPermissions,
             'permissions' => $permissions,
+            'categories' => $categories,
         ]);
     }
 
@@ -192,6 +196,7 @@ class EmployeeController extends Controller
             'phone' => 'nullable|string|max:20',
             'code' => 'nullable|string|max:50|unique:employees,code',
             'department_id' => 'required|exists:departments,id',
+            'category_id' => 'nullable|exists:employee_categories,id',
         ]);
 
         DB::beginTransaction();
@@ -247,6 +252,7 @@ class EmployeeController extends Controller
                 'phone' => $validated['phone'],
                 'department_id' => $validated['department_id'],
                 'user_id' => $user->id,
+                'category_id' => $validated['category_id'] ?? 1,
             ]);
 
             DB::commit();
@@ -282,6 +288,7 @@ class EmployeeController extends Controller
         }
 
         $employee->load(['department', 'user']);
+        $employee->category = $employee->category();
 
         return Inertia::render('admin/employees/Show', [
             'employee' => $employee,
