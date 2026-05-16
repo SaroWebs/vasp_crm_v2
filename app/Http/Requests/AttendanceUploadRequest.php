@@ -24,13 +24,13 @@ class AttendanceUploadRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'EmployeeId' => ['required', 'integer'],
-            'MachineId' => ['required', 'integer'],
-            'PunchTime' => ['required', 'date'],
-            'Ip' => ['nullable', 'string'],
-            'GroupName' => ['nullable', 'string'],
-            'EmployeeName' => ['nullable', 'string'],
-            'Islive' => ['nullable', 'boolean'],
+            '*.EmployeeId' => ['required', 'integer'],
+            '*.MachineId' => ['nullable', 'integer'],
+            '*.PunchTime' => ['required', 'date'],
+            '*.Ip' => ['nullable', 'string'],
+            '*.GroupName' => ['nullable', 'string'],
+            '*.EmployeeName' => ['nullable', 'string'],
+            '*.Islive' => ['nullable', 'boolean'],
         ];
     }
 }

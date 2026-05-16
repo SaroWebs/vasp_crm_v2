@@ -7,29 +7,35 @@ use App\Http\Resources\EmployeeCategoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class EmployeeCategoryController extends Controller
 {
-    public function getData(): AnonymousResourceCollection
+    public function getData(Request $request): JsonResponse
     {
         $categories = EmployeeCategory::query()->get();
 
-        return EmployeeCategoryResource::collection($categories);
+        return response()->json([
+            'result' => EmployeeCategoryResource::collection($categories)->resolve($request),
+        ]);
     }
 
-    public function getEmployees(GetEmployeesRequest $request): AnonymousResourceCollection|Response
+    public function getEmployees(GetEmployeesRequest $request): JsonResponse
     {
-        $categoryName = $request->input('CategoryName');
+        $categoryName = $request->input('Name');
 
         $category = EmployeeCategory::where('name', $categoryName)->first();
         if (! $category) {
             return response()->json(['error' => 'Category not found'], 404);
         }
 
-        $employees = Employee::where('category_id', $category->id)->get();
+        $employees = Employee::query()
+            ->where('category_id', $category->id)
+            ->get();
 
-        return EmployeeResource::collection($employees);
+        return response()->json([
+            'result' => EmployeeResource::collection($employees)->resolve($request),
+        ]);
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Requests\AttendanceOverrideRequest;
 use App\Http\Requests\AttendanceUploadRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\Punch;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -20,47 +21,30 @@ class AttendanceController extends Controller
     // uploadPunchData is responsible to upload attendance from third party app
     public function uploadPunchData(AttendanceUploadRequest $request): JsonResponse
     {
-        $punchTime = Carbon::parse($request->PunchTime);
-        $date = $punchTime->toDateString();
-        $time = $punchTime->toTimeString();
+        $punches = $request->validated();
+        $stored = 0;
 
-        $employee = Employee::where('code', $request->EmployeeId)->first();
+        foreach ($punches as $punchData) {
+            Punch::updateOrCreate(
+                [
+                    'EmployeeId' => $punchData['EmployeeId'],
+                    'PunchTime' => Carbon::parse($punchData['PunchTime']),
+                ],
+                [
+                    'MachineId' => $punchData['MachineId'] ?? null,
+                    'Ip' => $punchData['Ip'] ?? null,
+                    'GroupName' => $punchData['GroupName'] ?? null,
+                    'EmployeeName' => $punchData['EmployeeName'] ?? null,
+                    'Islive' => $punchData['Islive'] ?? false,
+                ]
+            );
 
-        if ($employee && ! $request->EmployeeName) {
-            $request->EmployeeName = $employee->name;
-        }
-
-        $attendance = Attendance::updateOrCreate(
-            [
-                'employee_id' => $request->EmployeeId,
-                'attendance_date' => $date,
-            ],
-            [
-                'machine_id' => $request->MachineId,
-                'ip' => $request->Ip,
-                'group_name' => $request->GroupName,
-                'employee_name' => $request->EmployeeName,
-                'is_live' => $request->Islive ?? false,
-                'mode' => 'office',
-            ]
-        );
-
-        // If punch_in is not set, this is the first punch of the day
-        if (! $attendance->punch_in) {
-            $attendance->update([
-                'punch_in' => $time,
-            ]);
-        } else {
-            // Update punch_out for every subsequent punch
-            $attendance->update([
-                'punch_out' => $time,
-            ]);
+            $stored++;
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Attendance recorded successfully',
-            'data' => $attendance,
+            'message' => "Attendance recorded successfully. {$stored} punch(es) processed.",
         ]);
     }
 

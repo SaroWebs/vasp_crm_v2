@@ -20,7 +20,7 @@ class GetEmployeesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'CategoryName' => ['required', 'string'],
+            'Name' => ['required', 'string'],
         ];
     }
 
@@ -30,8 +30,8 @@ class GetEmployeesRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'CategoryName.required' => 'CategoryName is required.',
-            'CategoryName.string' => 'CategoryName must be a string.',
+            'Name.required' => 'Category Name is required.',
+            'Name.string' => 'Category Name must be a string.',
         ];
     }
 }

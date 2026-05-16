@@ -15,11 +15,12 @@ class EmployeeCategoryResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'CategoryId' => $this->id,
-            'CategoryName' => $this->name,
-            'ApplicableTo' => $this->applicable_to ?? 'staff',
-            'DisplayNo' => $this->display_no ?? 1,
-            'Status' => $this->status?->toInt() ?? 0,
+            'Id' => $this->id,
+            'Name' => $this->name,
+            'cls' => '',
+            'sec' => '',
+            'stream' => '',
+            'ApplicableTo' => $this->applicable_to ?? 'Staff',
         ];
     }
 }

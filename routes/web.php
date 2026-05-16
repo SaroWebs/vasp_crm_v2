@@ -71,7 +71,6 @@ Route::get('/link', function () {
     return response()->json(['status' => 'Storage linked']);
 });
 
-Route::get('/clients/{clientCode}/sso/test', [AdminClientSsoTestController::class, 'redirectToSso'])->name('clients.sso.test');
 
 Route::get('/s/{code}', [ClientSsoController::class, 'consume'])->name('sso.consume');
 
@@ -577,4 +576,4 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
 });
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
