@@ -28,12 +28,19 @@ interface RoleWithPermissions extends Role {
     permissions: Permission[];
 }
 
+interface Office {
+    id: number;
+    name: string;
+    is_active: boolean;
+}
+
 interface EmployeesCreateProps {
     departments: Department[];
     roles: Role[];
     categories: Category[];
     roles_with_permissions: RoleWithPermissions[];
     permissions: Permission[];
+    offices: Office[];
 }
 
 interface Category {
@@ -42,7 +49,7 @@ interface Category {
 }
 
 export default function EmployeesCreate(props: EmployeesCreateProps) {
-    const { departments, roles, categories, roles_with_permissions, permissions } = props;
+    const { departments, roles, categories, roles_with_permissions, permissions, offices } = props;
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         email: '',
@@ -55,6 +62,8 @@ export default function EmployeesCreate(props: EmployeesCreateProps) {
         permissions: [] as string[],
         denied_permissions: [] as string[],
         category_id: '',
+        office_ids: [] as string[],
+        active_office_id: '',
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -245,6 +254,64 @@ export default function EmployeesCreate(props: EmployeesCreateProps) {
                                         </Select>
                                         {errors.role_id && (
                                             <p className="text-sm text-red-600">{errors.role_id}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2 mt-4">
+                                    <div className="space-y-2">
+                                        <Label>Assigned Offices *</Label>
+                                        <div className="grid grid-cols-2 gap-2 border rounded-md p-3">
+                                            {offices.map((office) => (
+                                                <div key={office.id} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`office-${office.id}`}
+                                                        checked={data.office_ids.includes(office.id.toString())}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setData('office_ids', [...data.office_ids, office.id.toString()]);
+                                                            } else {
+                                                                const newIds = data.office_ids.filter(id => id !== office.id.toString());
+                                                                setData({
+                                                                    ...data,
+                                                                    office_ids: newIds,
+                                                                    active_office_id: data.active_office_id === office.id.toString() ? '' : data.active_office_id
+                                                                });
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`office-${office.id}`} className="text-sm font-normal cursor-pointer">
+                                                        {office.name}
+                                                    </Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {errors.office_ids && (
+                                            <p className="text-sm text-red-600">{errors.office_ids}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="active_office_id">Primary Office *</Label>
+                                        <Select
+                                            value={data.active_office_id}
+                                            onValueChange={(value) => setData('active_office_id', value)}
+                                            disabled={data.office_ids.length === 0}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={data.office_ids.length === 0 ? "Select offices first" : "Select primary office"} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {offices.filter(o => data.office_ids.includes(o.id.toString())).map((office) => (
+                                                    <SelectItem key={office.id} value={office.id.toString()}>
+                                                        {office.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-muted-foreground">This office will receive WhatsApp notifications for biometric punches.</p>
+                                        {errors.active_office_id && (
+                                            <p className="text-sm text-red-600">{errors.active_office_id}</p>
                                         )}
                                     </div>
                                 </div>

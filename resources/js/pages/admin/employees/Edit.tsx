@@ -31,10 +31,20 @@ interface RoleWithPermissions extends Role {
     permissions: Permission[];
 }
 
+interface Office {
+    id: number;
+    name: string;
+    is_active: boolean;
+    pivot?: {
+        is_active: boolean;
+    }
+}
+
 interface EmployeesEditProps {
-    employee: Employee;
+    employee: Employee & { offices: Office[] };
     departments: Department[];
     roles: Role[];
+    offices: Office[];
     roles_with_permissions: RoleWithPermissions[];
     permissions: Permission[];
     employee_permissions: {
@@ -50,6 +60,7 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
         employee, 
         departments, 
         roles, 
+        offices,
         roles_with_permissions, 
         permissions, 
         employee_permissions,
@@ -64,6 +75,8 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
         code: employee.code ?? '',
         phone: employee.phone ?? '',
         department_id: employee.department_id ? employee.department_id.toString() : (employee.department?.id?.toString() || ''),
+        office_ids: employee.offices.map(o => o.id.toString()),
+        active_office_id: employee.offices.find(o => o.pivot?.is_active)?.id.toString() || '',
     });
 
     // User Roles & Permissions Form
@@ -248,6 +261,64 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
                                     </Select>
                                     {employeeForm.errors.department_id && (
                                         <p className="text-sm text-red-600">{employeeForm.errors.department_id}</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>Assigned Offices *</Label>
+                                    <div className="grid grid-cols-2 gap-2 border rounded-md p-3">
+                                        {offices.map((office) => (
+                                            <div key={office.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`office-${office.id}`}
+                                                    checked={employeeForm.data.office_ids.includes(office.id.toString())}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            employeeForm.setData('office_ids', [...employeeForm.data.office_ids, office.id.toString()]);
+                                                        } else {
+                                                            const newIds = employeeForm.data.office_ids.filter(id => id !== office.id.toString());
+                                                            employeeForm.setData({
+                                                                ...employeeForm.data,
+                                                                office_ids: newIds,
+                                                                active_office_id: employeeForm.data.active_office_id === office.id.toString() ? '' : employeeForm.data.active_office_id
+                                                            });
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={`office-${office.id}`} className="text-sm font-normal cursor-pointer">
+                                                    {office.name}
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {employeeForm.errors.office_ids && (
+                                        <p className="text-sm text-red-600">{employeeForm.errors.office_ids}</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="active_office_id">Primary Office *</Label>
+                                    <Select
+                                        value={employeeForm.data.active_office_id}
+                                        onValueChange={(value) => employeeForm.setData('active_office_id', value)}
+                                        disabled={employeeForm.data.office_ids.length === 0}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={employeeForm.data.office_ids.length === 0 ? "Select offices first" : "Select primary office"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {offices.filter(o => employeeForm.data.office_ids.includes(o.id.toString())).map((office) => (
+                                                <SelectItem key={office.id} value={office.id.toString()}>
+                                                    {office.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">This office will receive WhatsApp notifications for biometric punches.</p>
+                                    {employeeForm.errors.active_office_id && (
+                                        <p className="text-sm text-red-600">{employeeForm.errors.active_office_id}</p>
                                     )}
                                 </div>
                             </div>

@@ -7,12 +7,14 @@ use App\Http\Requests\AttendanceUploadRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Punch;
+use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -38,6 +40,10 @@ class AttendanceController extends Controller
                     'Islive' => $punchData['Islive'] ?? false,
                 ]
             );
+
+            if (! empty($punchData['Islive'])) {
+                $this->sendLivePunchNotification($punchData);
+            }
 
             $stored++;
         }
@@ -500,5 +506,42 @@ class AttendanceController extends Controller
             'late_days' => $lateDays,
             'total_hours' => round($totalHours, 2),
         ];
+    }
+
+    /**
+     * Send a WhatsApp notification to the employee's office(s) for a live punch.
+     *
+     * @param  array{EmployeeId: string, PunchTime: string, EmployeeName?: string}  $punchData
+     */
+    private function sendLivePunchNotification(array $punchData): void
+    {
+        try {
+            $employee = Employee::with(['offices' => function ($query) {
+                $query->wherePivot('is_active', true)
+                    ->where('is_active', true);
+            }])->where('code', $punchData['EmployeeId'])->first();
+
+            if (! $employee || $employee->offices->isEmpty()) {
+                return;
+            }
+
+            $employeeName = $employee->name ?? $punchData['EmployeeName'] ?? $punchData['EmployeeId'];
+            $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
+            $message = "{$employeeName} has punched at {$punchTime}.";
+
+            /** @var NotificationService $notificationService */
+            $notificationService = app(NotificationService::class);
+
+            foreach ($employee->offices as $office) {
+                if (! empty($office->whatsapp_number)) {
+                    $notificationService->sendWhatsApp($office->whatsapp_number, $message);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed to send live punch notification', [
+                'employee_id' => $punchData['EmployeeId'],
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

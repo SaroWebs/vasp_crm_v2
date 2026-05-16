@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class Punch extends Model
 {
-    protected $connection = 'tmp_db';
-
     protected $table = 'punches';
 
     public $timestamps = false;

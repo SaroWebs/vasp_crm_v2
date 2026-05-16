@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
+use App\Models\Office;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -172,6 +173,7 @@ class EmployeeController extends Controller
             'roles_with_permissions' => $rolesWithPermissions,
             'permissions' => $permissions,
             'categories' => $categories,
+            'offices' => Office::where('is_active', true)->get(),
         ]);
     }
 
@@ -197,6 +199,9 @@ class EmployeeController extends Controller
             'code' => 'nullable|string|max:50|unique:employees,code',
             'department_id' => 'required|exists:departments,id',
             'category_id' => 'nullable|exists:employee_categories,id',
+            'office_ids' => 'required|array|min:1',
+            'office_ids.*' => 'exists:offices,id',
+            'active_office_id' => 'required|exists:offices,id',
         ]);
 
         DB::beginTransaction();
@@ -255,6 +260,15 @@ class EmployeeController extends Controller
                 'category_id' => $validated['category_id'] ?? 1,
             ]);
 
+            // Sync offices
+            $officeData = [];
+            foreach ($validated['office_ids'] as $officeId) {
+                $officeData[$officeId] = [
+                    'is_active' => $officeId == $validated['active_office_id'],
+                ];
+            }
+            $employee->offices()->sync($officeData);
+
             DB::commit();
 
             return redirect()->route('admin.employees.index')
@@ -304,11 +318,12 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to edit employee.');
         }
 
-        $employee->load(['department', 'user']);
+        $employee->load(['department', 'user', 'offices']);
         $departments = Department::select('id', 'name')->get();
         $users = User::select('id', 'name', 'email')->get();
         $roles = Role::select('id', 'name', 'slug')->get();
         $permissions = Permission::select('id', 'name', 'slug', 'module')->get();
+        $offices = Office::where('is_active', true)->get();
 
         $rolesWithPermissions = $roles->map(function ($role) {
             $rolePermissions = $role->permissions()
@@ -341,6 +356,7 @@ class EmployeeController extends Controller
             'roles' => $roles,
             'roles_with_permissions' => $rolesWithPermissions,
             'permissions' => $permissions,
+            'offices' => $offices,
             'employee_permissions' => [
                 'granted' => $userGrantedPermissions,
                 'denied' => $userDeniedPermissions,
@@ -365,6 +381,9 @@ class EmployeeController extends Controller
             'code' => 'nullable|string|max:50|unique:employees,code,'.$employee->id,
             'phone' => 'nullable|string|max:20',
             'department_id' => 'required|exists:departments,id',
+            'office_ids' => 'required|array|min:1',
+            'office_ids.*' => 'exists:offices,id',
+            'active_office_id' => 'required|exists:offices,id',
         ]);
 
         $employee->update([
@@ -374,6 +393,15 @@ class EmployeeController extends Controller
             'phone' => $validated['phone'],
             'department_id' => $validated['department_id'],
         ]);
+
+        // Sync offices
+        $officeData = [];
+        foreach ($validated['office_ids'] as $officeId) {
+            $officeData[$officeId] = [
+                'is_active' => $officeId == $validated['active_office_id'],
+            ];
+        }
+        $employee->offices()->sync($officeData);
 
         return back()->with('success', 'Employee information updated successfully.');
     }

@@ -5,8 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\DatabaseNotification;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 class Notification extends DatabaseNotification
@@ -36,7 +36,7 @@ class Notification extends DatabaseNotification
             ->with([
                 'users' => function ($q) use ($userId) {
                     $q->where('users.id', $userId);
-                }
+                },
             ]);
     }
 
@@ -47,7 +47,7 @@ class Notification extends DatabaseNotification
     {
         return $this->users()->where('users.id', $userId)->exists();
     }
-    
+
     /**
      * Get the read status for a specific user.
      */
@@ -58,7 +58,7 @@ class Notification extends DatabaseNotification
             ->whereNotNull('users_notifications.read_at')
             ->exists();
     }
-    
+
     /**
      * Mark notification as read for a specific user.
      */
@@ -69,11 +69,11 @@ class Notification extends DatabaseNotification
             'read_at' => now(),
         ]);
 
-        if (!$this->users()->wherePivot('read', false)->exists()) {
+        if (! $this->users()->wherePivot('read', false)->exists()) {
             $this->forceFill(['read_at' => now()])->save();
         }
     }
-    
+
     /**
      * Mark notification as unread for a specific user.
      */
@@ -177,7 +177,7 @@ class Notification extends DatabaseNotification
     public static function createWorkflowNotification($userId, $type, $title, $message, $data = [])
     {
         $notification = self::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'id' => (string) Str::uuid(),
             'type' => $type,
             'notifiable_type' => 'App\Models\User',
             'notifiable_id' => $userId,
@@ -186,13 +186,13 @@ class Notification extends DatabaseNotification
                 'message' => $message,
             ], $data),
         ]);
-        
+
         // Associate the notification with the user through the pivot table
         $notification->users()->attach($userId, [
             'read' => false,
-            'read_at' => null
+            'read_at' => null,
         ]);
-        
+
         return $notification;
     }
 
@@ -205,16 +205,17 @@ class Notification extends DatabaseNotification
         foreach ($userIds as $userId) {
             $notifications[] = self::createWorkflowNotification($userId, $type, $title, $message, $data);
         }
+
         return $notifications;
     }
-    
+
     /**
      * Create a notification for multiple users at once.
      */
     public static function createWorkflowNotificationForUsers($userIds, $type, $title, $message, $data = [])
     {
         $notification = self::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'id' => (string) Str::uuid(),
             'type' => $type,
             'notifiable_type' => 'App\Models\User',
             'notifiable_id' => $userIds[0], // Use first user as notifiable
@@ -223,17 +224,17 @@ class Notification extends DatabaseNotification
                 'message' => $message,
             ], $data),
         ]);
-        
+
         // Associate the notification with all users through the pivot table
         $pivotData = [];
         foreach ($userIds as $userId) {
             $pivotData[$userId] = [
                 'read' => false,
-                'read_at' => null
+                'read_at' => null,
             ];
         }
         $notification->users()->attach($pivotData);
-        
+
         return $notification;
     }
 
@@ -246,19 +247,19 @@ class Notification extends DatabaseNotification
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
     }
-    
+
     /**
      * Get unread count for a specific user.
      */
     public static function getUnreadCountForUser($userId)
     {
         return self::whereHas('users', function ($query) use ($userId) {
-                $query->where('user_id', $userId)
-                      ->where('users_notifications.read', false);
-            })
+            $query->where('user_id', $userId)
+                ->where('users_notifications.read', false);
+        })
             ->count();
     }
-    
+
     /**
      * Get recent notifications for a specific user.
      */
@@ -280,7 +281,7 @@ class Notification extends DatabaseNotification
             : $this->users()->where('users.id', $userId)->first();
 
         $pivotReadAt = $user?->pivot?->read_at;
-        $isRead = !is_null($pivotReadAt);
+        $isRead = ! is_null($pivotReadAt);
         $readAt = $pivotReadAt ? Carbon::parse($pivotReadAt)->toISOString() : null;
         $payload = is_array($this->data) ? $this->data : [];
         $legacyData = is_array($payload['data'] ?? null) ? $payload['data'] : [];
@@ -375,7 +376,7 @@ class Notification extends DatabaseNotification
 
     protected function resolveTargetType(array $data, ?string $targetUrl): ?string
     {
-        if (!$targetUrl) {
+        if (! $targetUrl) {
             return null;
         }
 

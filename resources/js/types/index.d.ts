@@ -74,9 +74,25 @@ export interface User {
     denied_permissions?: string[];
     email_verified_at?: string | null;
     two_factor_enabled?: boolean;
+    employee?: Employee;
     created_at?: string;
     updated_at?: string;
     [key: string]: unknown;
+}
+
+export interface Office {
+    id: number;
+    name: string;
+    whatsapp_number?: string | null;
+    address?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    is_active: boolean;
+    pivot?: {
+        is_active: boolean;
+    };
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface Employee {
@@ -89,6 +105,7 @@ export interface Employee {
     user_id?: number;
     department?: Department;
     user?: User;
+    offices?: Office[];
     created_at?: string;
 }
 

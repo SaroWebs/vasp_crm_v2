@@ -528,7 +528,7 @@ class NotificationService
      * @param  string  $message  Message content
      * @return bool True if WhatsApp message was sent successfully, false otherwise
      */
-    public function sendWhatsApp(string $phone, string $message): bool
+    public function sendWhatsApp(string $phone, string $message, bool $isGroup = false): bool
     {
         $normalizedPhone = $this->normalizeWhatsAppPhoneNumber($phone);
 
@@ -542,9 +542,9 @@ class NotificationService
 
         $apiToken = config('services.whatsapp.api_token');
         $url = config('services.whatsapp.url', 'https://social.ednect.com/api/UWAPGet/send');
-        $isGroup = config('services.whatsapp.is_group', 'false');
+        // $isGroup = config('services.whatsapp.is_group', 'false');
 
-        if (! $apiToken) {
+        if (!$apiToken) {
             Log::warning('WhatsApp API token not configured', [
                 'phone' => $normalizedPhone,
             ]);
@@ -553,7 +553,7 @@ class NotificationService
         }
 
         // Build the URL with query parameters
-        $fullUrl = $url.'?apitoken='.$apiToken.'&phoneno='.urlencode($normalizedPhone).'&sms='.urlencode($message).'&isgroup='.$isGroup;
+        $fullUrl = $url . '?apitoken=' . $apiToken . '&phoneno=' . urlencode($normalizedPhone) . '&sms=' . urlencode($message) . '&isgroup=' . $isGroup;
 
         $ch = curl_init($fullUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -610,15 +610,15 @@ class NotificationService
     {
         $digitsOnly = preg_replace('/\D+/', '', $phone);
 
-        if (! is_string($digitsOnly) || $digitsOnly === '') {
+        if (!is_string($digitsOnly) || $digitsOnly === '') {
             return null;
         }
 
         if (strlen($digitsOnly) === 10) {
-            $digitsOnly = '91'.$digitsOnly;
+            $digitsOnly = '91' . $digitsOnly;
         }
 
-        if (! preg_match('/^\d{10,15}$/', $digitsOnly)) {
+        if (!preg_match('/^\d{10,15}$/', $digitsOnly)) {
             return null;
         }
 
@@ -641,13 +641,13 @@ class NotificationService
         }
 
         $user = User::find($userId);
-        if (! $user) {
+        if (!$user) {
             return;
         }
 
         $phone = $this->resolveWhatsAppPhoneNumber($user);
 
-        if (! $phone) {
+        if (!$phone) {
             $this->logNotificationFailure($userId, $subject, $message, null);
 
             return;
@@ -655,7 +655,7 @@ class NotificationService
 
         if ($this->sendWhatsApp($phone, $message)) {
             // a copy shall be sent to the user(who has manager role) if the user is not a manager
-            if (! $user->hasRole('manager')) {
+            if (!$user->hasRole('manager')) {
                 $this->sendNotificationToManager($userId, $subject, $message);
             }
 
@@ -716,14 +716,14 @@ class NotificationService
         $report->loadMissing('user');
 
         $title = 'Daily Report Submitted';
-        $reportUrl = config('app.url').'/admin/reports/'.$report->id;
+        $reportUrl = config('app.url') . '/admin/reports/' . $report->id;
         $submittedByName = $report->user?->name ?? 'System';
         $message = "Daily report '{$report->title}' was submitted by {$submittedByName} for {$report->report_date->toDateString()}. View: {$reportUrl}";
 
         foreach ($this->getManagerUsers() as $manager) {
             $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
 
-            if (! $managerPhone) {
+            if (!$managerPhone) {
                 $this->logNotificationFailure($manager->id, $title, $message, null);
                 continue;
             }
@@ -777,7 +777,7 @@ class NotificationService
         $assignedByName = $assignedByUser->name ?? 'System';
 
         $title = 'New Task Assigned';
-        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
+        $taskUrl = config('app.url') . '/admin/tasks/' . $taskId;
         $message = "You have been assigned to task: {$taskTitle}. Assigned by: {$assignedByName}. View: {$taskUrl}";
 
         $notifications = $this->sendUnifiedNotification(
@@ -793,7 +793,7 @@ class NotificationService
             ]
         );
 
-        if (! (bool) ($notifications['whatsapp']['success'] ?? false)) {
+        if (!(bool) ($notifications['whatsapp']['success'] ?? false)) {
             Log::warning('Task assignment WhatsApp notification failed', [
                 'task_id' => $taskId,
                 'assigned_user_id' => $assignedUserId,
@@ -808,20 +808,20 @@ class NotificationService
     {
         $changedByUser = User::with('employee')->find($changedByUserId);
 
-        if (! $changedByUser) {
+        if (!$changedByUser) {
             return;
         }
 
         $stateLabel = $this->formatTerminalTaskState($newStatus);
-        $title = 'Task '.$stateLabel;
-        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
+        $title = 'Task ' . $stateLabel;
+        $taskUrl = config('app.url') . '/admin/tasks/' . $taskId;
         $actorName = $changedByUser->employee?->name ?? $changedByUser->name ?? 'System';
         $message = "Task '{$taskTitle}' has been {$stateLabel} by {$actorName}. View: {$taskUrl}";
 
         foreach ($this->getManagerUsers() as $manager) {
             $managerPhone = $this->resolveWhatsAppPhoneNumber($manager);
 
-            if (! $managerPhone) {
+            if (!$managerPhone) {
                 $this->logNotificationFailure($manager->id, $title, $message, null);
 
                 continue;
@@ -832,7 +832,7 @@ class NotificationService
 
         foreach ($this->getSupportUsers() as $support) {
             $supportPhone = $this->resolveWhatsAppPhoneNumber($support);
-            if (! $supportPhone) {
+            if (!$supportPhone) {
                 $this->logNotificationFailure($support->id, $title, $message, null);
 
                 continue;
@@ -848,19 +848,19 @@ class NotificationService
     {
         $changedByUser = User::with('employee')->find($changedByUserId);
 
-        if (! $changedByUser) {
+        if (!$changedByUser) {
             return;
         }
 
         $title = 'Ticket Status Updated';
-        $ticketUrl = config('app.url').'/admin/tickets/'.$ticketId;
+        $ticketUrl = config('app.url') . '/admin/tickets/' . $ticketId;
         $actorName = $changedByUser->employee?->name ?? $changedByUser->name ?? 'System';
         $message = "Ticket '{$ticketTitle}' status changed to: {$newStatus}. Changed by: {$actorName}. View: {$ticketUrl}";
 
         foreach ($this->getSupportUsers() as $support) {
             $supportPhone = $this->resolveWhatsAppPhoneNumber($support);
 
-            if (! $supportPhone) {
+            if (!$supportPhone) {
                 $this->logNotificationFailure($support->id, $title, $message, null);
 
                 continue;
@@ -890,7 +890,7 @@ class NotificationService
         $changedByName = $changedByUser->name ?? 'System';
 
         $title = 'Task Status Updated';
-        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
+        $taskUrl = config('app.url') . '/admin/tasks/' . $taskId;
         $message = "Task '{$taskTitle}' status changed to: {$newStatus}. Changed by: {$changedByName}. View: {$taskUrl}";
 
         $this->sendUnifiedNotification(
@@ -929,7 +929,7 @@ class NotificationService
         $forwardedByName = $forwardedByUser->name ?? 'System';
 
         $title = 'Task Forwarded to Your Department';
-        $taskUrl = config('app.url').'/admin/tasks/'.$taskId;
+        $taskUrl = config('app.url') . '/admin/tasks/' . $taskId;
         $message = "Task '{$taskTitle}' has been forwarded from {$fromDepartmentName} to {$toDepartmentName}. Forwarded by: {$forwardedByName}. View: {$taskUrl}";
 
         $this->sendUnifiedNotification(
@@ -967,7 +967,7 @@ class NotificationService
         $assignedByName = $assignedByUser->name ?? 'System';
 
         $title = 'New Ticket Assigned';
-        $ticketUrl = config('app.url').'/admin/tickets/'.$ticketId;
+        $ticketUrl = config('app.url') . '/admin/tickets/' . $ticketId;
         $message = "You have been assigned to ticket: {$ticketTitle}. Assigned by: {$assignedByName}. View: {$ticketUrl}";
 
         $notifications = $this->sendUnifiedNotification(
@@ -983,7 +983,7 @@ class NotificationService
             ]
         );
 
-        if (! (bool) ($notifications['whatsapp']['success'] ?? false)) {
+        if (!(bool) ($notifications['whatsapp']['success'] ?? false)) {
             Log::warning('Ticket assignment WhatsApp notification failed', [
                 'ticket_id' => $ticketId,
                 'assigned_user_id' => $assignedUserId,
@@ -1011,7 +1011,7 @@ class NotificationService
         $results = [];
         $user = User::find($userId);
 
-        if (! $user) {
+        if (!$user) {
             Log::warning('User not found for unified notification', ['user_id' => $userId]);
 
             return $results;
@@ -1028,7 +1028,7 @@ class NotificationService
             $broadcasted = $this->broadcastNotification($notification, $userId);
             $results['pusher'] = ['success' => $broadcasted, 'notification_id' => $notification->id];
 
-            if (! $broadcasted) {
+            if (!$broadcasted) {
                 Log::warning('Pusher notification was stored but not broadcast', [
                     'user_id' => $userId,
                     'notification_id' => $notification->id,
@@ -1042,7 +1042,7 @@ class NotificationService
         // Always attempt WhatsApp delivery.
         $phone = $this->resolveWhatsAppPhoneNumber($user);
 
-        if (! $phone) {
+        if (!$phone) {
             $results['whatsapp'] = ['success' => false, 'reason' => 'No phone number'];
 
             Log::warning('WhatsApp notification skipped because no phone number was available', [
@@ -1053,13 +1053,13 @@ class NotificationService
             try {
                 $whatsappSent = $this->sendWhatsApp($phone, "{$title}\n\n{$message}");
                 // a copy shall be sent to the user(who has manager role) if the user is not a manager
-                if (! $user->hasRole('manager')) {
+                if (!$user->hasRole('manager')) {
                     $this->sendNotificationToManager($userId, $title, $message);
                 }
 
                 $results['whatsapp'] = ['success' => $whatsappSent, 'message' => $whatsappSent ? 'Sent' : 'Failed'];
 
-                if (! $whatsappSent) {
+                if (!$whatsappSent) {
                     Log::warning('WhatsApp notification failed', [
                         'user_id' => $userId,
                         'notification_type' => $type,

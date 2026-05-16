@@ -89,7 +89,7 @@ class HandleInertiaRequests extends Middleware
             }
         }
         if ($guardType === 'admin' && $user) {
-            $user = $user->load('employee');
+            $user = $user->load(['employee.offices']);
         }
 
         return [
