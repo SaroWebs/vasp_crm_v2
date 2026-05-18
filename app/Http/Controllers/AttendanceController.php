@@ -27,10 +27,16 @@ class AttendanceController extends Controller
         $stored = 0;
 
         foreach ($punches as $punchData) {
+            $punchDateTime = Carbon::parse($punchData['PunchTime']);
+
+            if ($this->hasPunchWithinOneMinute((string) $punchData['EmployeeId'], $punchDateTime, true)) {
+                continue;
+            }
+
             Punch::updateOrCreate(
                 [
                     'EmployeeId' => $punchData['EmployeeId'],
-                    'PunchTime' => Carbon::parse($punchData['PunchTime']),
+                    'PunchTime' => $punchDateTime,
                 ],
                 [
                     'MachineId' => $punchData['MachineId'] ?? null,
@@ -39,6 +45,12 @@ class AttendanceController extends Controller
                     'EmployeeName' => $punchData['EmployeeName'] ?? null,
                     'Islive' => $punchData['Islive'] ?? false,
                 ]
+            );
+
+            $this->syncAttendanceFromPunches(
+                (string) $punchData['EmployeeId'],
+                $punchDateTime,
+                'office'
             );
 
             if (! empty($punchData['Islive'])) {
@@ -87,35 +99,41 @@ class AttendanceController extends Controller
         $attendanceDate = $punchDateTime->toDateString();
         $timeOnly = $punchDateTime->toTimeString();
 
-        $attendance = Attendance::firstOrCreate(
-            [
-                'employee_id' => $employee->code,
-                'attendance_date' => $attendanceDate,
-            ],
-            [
-                'employee_name' => $employee->name,
-                'ip' => $request->ip(),
-                'mode' => $validated['mode'] ?? 'office',
-                'punch_in' => $timeOnly,
-            ]
+        $existingPunchCount = Punch::where('EmployeeId', $employee->code)
+            ->whereDate('PunchTime', $attendanceDate)
+            ->count();
+
+        if ($this->hasPunchWithinOneMinute($employee->code, $punchDateTime)) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Punch ignored because a nearby punch already exists within one minute.',
+            ]);
+        }
+
+        $newPunch = Punch::create([
+            'EmployeeId' => $employee->code,
+            'MachineId' => null,
+            'PunchTime' => $punchDateTime,
+            'Ip' => $request->ip(),
+            'GroupName' => null,
+            'EmployeeName' => $employee->name,
+            'Islive' => false,
+        ]);
+
+        $this->syncAttendanceFromPunches(
+            $employee->code,
+            $punchDateTime,
+            $validated['mode'] ?? 'office'
         );
 
-        if ($attendance->wasRecentlyCreated) {
-            $message = 'Punch-in recorded successfully.';
-        } else {
-            $attendance->update([
-                'punch_out' => $timeOnly,
-                'ip' => $request->ip(),
-                'mode' => $validated['mode'] ?? $attendance->mode,
-            ]);
-
-            $message = 'Punch-out recorded successfully.';
-        }
+        $message = ($existingPunchCount % 2 === 0)
+            ? 'Punch-in recorded successfully.'
+            : 'Punch-out recorded successfully.';
 
         return response()->json([
             'status' => 'success',
             'message' => $message,
-            'data' => $attendance->fresh(),
+            'data' => $newPunch,
         ]);
     }
 
@@ -147,6 +165,8 @@ class AttendanceController extends Controller
         $attendance = Attendance::where('employee_id', $employee->code)
             ->whereMonth('attendance_date', $validated['month'] ?? date('m'))
             ->whereYear('attendance_date', $validated['year'] ?? date('Y'))
+            ->orderBy('attendance_date')
+            ->orderBy('punch_in')
             ->get();
 
         $month = $validated['month'] ?? (int) date('m');
@@ -252,6 +272,7 @@ class AttendanceController extends Controller
             ->whereMonth('attendance_date', $month)
             ->whereYear('attendance_date', $year)
             ->orderBy('attendance_date')
+            ->orderBy('punch_in')
             ->get();
 
         $summary = $this->computeSummary($records, $month, $year);
@@ -291,6 +312,7 @@ class AttendanceController extends Controller
             ->whereMonth('attendance_date', $month)
             ->whereYear('attendance_date', $year)
             ->orderBy('attendance_date')
+            ->orderBy('punch_in')
             ->get();
 
         $summary = $this->computeSummary($records, $month, $year);
@@ -467,12 +489,14 @@ class AttendanceController extends Controller
             $cursor->addDay();
         }
 
-        $presentDays = $records->count();
+        $presentDays = $records->groupBy('attendance_date')->count();
         $absentDays = max(0, $totalWorkingDays - $presentDays);
 
-        // Late = punch_in after configured workday start time
-        $lateDays = $records->filter(function (Attendance $record) use ($workingHoursService) {
-            if (! $record->punch_in || ! $record->attendance_date) {
+        // Late = punch_in after configured workday start time for the first punch of each day
+        $lateDays = $records->groupBy('attendance_date')->filter(function (Collection $group) use ($workingHoursService) {
+            $record = $group->sortBy('punch_in')->first();
+
+            if (! $record || ! $record->punch_in || ! $record->attendance_date) {
                 return false;
             }
 
@@ -508,6 +532,77 @@ class AttendanceController extends Controller
         ];
     }
 
+    private function syncAttendanceFromPunches(string $employeeId, Carbon $punchDate, string $mode = 'office'): void
+    {
+        $attendanceDate = $punchDate->toDateString();
+        $punches = Punch::where('EmployeeId', $employeeId)
+            ->whereDate('PunchTime', $attendanceDate)
+            ->orderBy('PunchTime')
+            ->get();
+
+        Attendance::where('employee_id', $employeeId)
+            ->where('attendance_date', $attendanceDate)
+            ->delete();
+
+        if ($punches->isEmpty()) {
+            return;
+        }
+
+        $now = Carbon::now();
+        $segments = [];
+
+        foreach ($punches as $index => $punch) {
+            if ($index % 2 === 0) {
+                $segments[] = [
+                    'employee_id' => $employeeId,
+                    'machine_id' => $punch->MachineId,
+                    'attendance_date' => $attendanceDate,
+                    'punch_in' => $punch->PunchTime->format('H:i:s'),
+                    'punch_out' => null,
+                    'ip' => $punch->Ip,
+                    'employee_name' => $punch->EmployeeName,
+                    'group_name' => $punch->GroupName,
+                    'is_live' => $punch->Islive ? 1 : 0,
+                    'mode' => $mode,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                continue;
+            }
+
+            $lastIndex = count($segments) - 1;
+            $segments[$lastIndex]['punch_out'] = $punch->PunchTime->format('H:i:s');
+
+            if ($punch->MachineId !== null) {
+                $segments[$lastIndex]['machine_id'] = $punch->MachineId;
+            }
+            if ($punch->Ip) {
+                $segments[$lastIndex]['ip'] = $punch->Ip;
+            }
+            if ($punch->Islive) {
+                $segments[$lastIndex]['is_live'] = 1;
+            }
+        }
+
+        Attendance::insert($segments);
+    }
+
+    private function hasPunchWithinOneMinute(string $employeeId, Carbon $punchDateTime, bool $excludeExact = false): bool
+    {
+        $query = Punch::where('EmployeeId', $employeeId)
+            ->whereBetween('PunchTime', [
+                $punchDateTime->copy()->subMinute(),
+                $punchDateTime->copy()->addMinute(),
+            ]);
+
+        if ($excludeExact) {
+            $query->where('PunchTime', '!=', $punchDateTime);
+        }
+
+        return $query->exists();
+    }
+
     /**
      * Send a WhatsApp notification to the employee's office(s) for a live punch.
      *
@@ -534,7 +629,9 @@ class AttendanceController extends Controller
 
             foreach ($employee->offices as $office) {
                 if (! empty($office->whatsapp_number)) {
-                    $notificationService->sendWhatsApp($office->whatsapp_number, $message);
+                    $notificationService->sendWhatsApp($office->whatsapp_number, $message, true);
+                } else {
+                    $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
                 }
             }
         } catch (\Throwable $e) {

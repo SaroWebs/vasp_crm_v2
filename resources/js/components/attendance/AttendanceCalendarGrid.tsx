@@ -29,7 +29,7 @@ interface AttendanceCalendarGridProps {
     month: number;
     year: number;
     calendar?: AttendanceCalendarMeta;
-    onDayClick?: (date: string, record: AttendanceRecord | null) => void;
+    onDayClick?: (date: string) => void;
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -221,7 +221,7 @@ export function AttendanceCalendarGrid({
                         workingHours={item.workingHours}
                         onClick={
                             item.date && onDayClick
-                                ? () => onDayClick(item.date, recordMap.get(item.date) || null)
+                                ? () => onDayClick(item.date)
                                 : undefined
                         }
                     />

@@ -312,10 +312,10 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
         }).catch(() => { });
         if (isOwnRecord && employee?.id) setSelectedEmployeeId(employee.id);
     }, [canManageAttendance]);
-    const handleDayClick = useCallback((date: string, record: AttendanceRecord | null) => {
+    const handleDayClick = useCallback((date: string) => {
         setSelectedDate(date);
-        setPunchesForDate(record ? [record] : []);
-    }, [canManageAttendance]);
+        setPunchesForDate(records.filter((record) => record.attendance_date === date));
+    }, [records]);
 
 
     return (
