@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AdminAuthController;
-use App\Http\Controllers\AdminClientSsoTestController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminPasswordResetController;
 use App\Http\Controllers\AdminTaskController;
@@ -70,7 +69,6 @@ Route::get('/link', function () {
 
     return response()->json(['status' => 'Storage linked']);
 });
-
 
 Route::get('/s/{code}', [ClientSsoController::class, 'consume'])->name('sso.consume');
 
@@ -568,12 +566,7 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     Route::get('/api/activity-logs/recent', [ActivityLogController::class, 'getRecentActivity'])->name('api.activity-logs.recent');
     Route::delete('/api/activity-logs/clear-old', [ActivityLogController::class, 'clearOldLogs'])->name('api.activity-logs.clear-old');
     Route::get('/api/activity-logs/export', [ActivityLogController::class, 'export'])->name('api.activity-logs.export');
-});
-
-// Authenticated user routes (accessible to all authenticated users, not just admins)
-Route::middleware(['web', 'auth'])->group(function () {
-    // Attendance calendar component endpoint (accessible to authorized users)
     Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
 });
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';

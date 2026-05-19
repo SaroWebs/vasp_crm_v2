@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\ValidateWebhookPassword;
 use App\Http\Middleware\VerifyCsrfToken;
 use App\Models\Employee;
+use App\Models\Office;
 use App\Models\Role;
+use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +22,7 @@ class AttendancePunchEntryTest extends TestCase
         parent::setUp();
 
         $this->withoutMiddleware(VerifyCsrfToken::class);
+        $this->withoutMiddleware(ValidateWebhookPassword::class);
     }
 
     private function signInAsAdmin(): void
@@ -128,6 +132,55 @@ class AttendancePunchEntryTest extends TestCase
             'attendance_date' => '2026-05-16',
             'punch_in' => '09:00:00',
             'punch_out' => null,
+        ]);
+    }
+
+    public function test_live_punch_with_no_active_employee_office_attaches_head_office(): void
+    {
+        Carbon::setTestNow('2026-05-16 09:00:00');
+
+        $office = Office::create([
+            'id' => 1,
+            'name' => 'Head Office',
+            'whatsapp_number' => '+919999999999',
+            'address' => 'Head Office Address',
+            'email' => 'headoffice@example.com',
+            'phone' => '9999999999',
+            'is_active' => true,
+        ]);
+
+        $employee = Employee::factory()->create([
+            'code' => '12345',
+        ]);
+
+        $notificationService = $this->createMock(NotificationService::class);
+        $notificationService->expects($this->once())
+            ->method('sendWhatsApp')
+            ->with($this->equalTo($office->whatsapp_number), $this->stringContains('has punched at'), true)
+            ->willReturn(true);
+
+        $this->app->instance(NotificationService::class, $notificationService);
+
+        $payload = [
+            [
+                'EmployeeId' => $employee->code,
+                'PunchTime' => Carbon::now()->toDateTimeString(),
+                'Islive' => true,
+            ],
+        ];
+
+        $response = $this->postJson('/api/upload_punch_data', $payload);
+
+        $response->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Attendance recorded successfully. 1 punch(es) processed.',
+            ]);
+
+        $this->assertDatabaseHas('employee_offices', [
+            'employee_id' => $employee->id,
+            'office_id' => 1,
+            'is_active' => true,
         ]);
     }
 }

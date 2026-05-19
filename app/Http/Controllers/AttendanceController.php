@@ -20,7 +20,6 @@ use Inertia\Response;
 
 class AttendanceController extends Controller
 {
-    // uploadPunchData is responsible to upload attendance from third party app
     public function uploadPunchData(AttendanceUploadRequest $request): JsonResponse
     {
         $punches = $request->validated();
@@ -53,7 +52,7 @@ class AttendanceController extends Controller
                 'office'
             );
 
-            if (! empty($punchData['Islive'])) {
+            if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
                 $this->sendLivePunchNotification($punchData);
             }
 
@@ -228,24 +227,26 @@ class AttendanceController extends Controller
      */
     public function getAttendance(Request $request, string $employeeId): JsonResponse
     {
+        $validated = $request->validate([
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+        ]);
+
+        /** @var User|null $user */
         $user = Auth::user();
 
         if (! $user) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Unauthorized',
+                'message' => 'Unauthorized.',
             ], 401);
         }
 
-        $validated = $request->validate([
-            'month' => ['nullable', 'integer', 'between:1,12'],
-            'year' => ['nullable', 'integer'],
-        ]);
+        if (! $user->hasRole(['admin', 'manager', 'hr'])) {
+            $user->loadMissing('employee');
+        }
 
-        // Find employee by ID or code
-        $employee = Employee::where('id', $employeeId)
-            ->orWhere('code', $employeeId)
-            ->first();
+        $employee = Employee::where('id', $employeeId)->first();
 
         if (! $employee || ! $employee->code) {
             return response()->json([
@@ -254,19 +255,30 @@ class AttendanceController extends Controller
             ], 404);
         }
 
-        // Permission check: allow if user is admin/manager/hr or viewing their own attendance
-        $canView = $user->hasRole(['admin', 'manager', 'hr']) ||
-            ($user->employee && $user->employee->code === $employee->code);
+        $canView = ! $user->employee
+            || $user->hasRole(['admin', 'manager', 'hr'])
+            || (string) $user->employee->code === (string) $employee->code;
 
         if (! $canView) {
+            Log::warning('Unauthorized attendance access attempt', [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+                'user_roles' => $user->getRoleNames(),
+                'user_employee' => $user->employee->code,
+                'requested_employee' => $employee->code,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toDateTimeString(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'You do not have permission to view this attendance record.',
             ], 403);
         }
 
-        $month = $validated['month'] ?? (int) date('m');
-        $year = $validated['year'] ?? (int) date('Y');
+        $month = $validated['month'] ?? (int) now()->month;
+        $year = $validated['year'] ?? (int) now()->year;
 
         $records = Attendance::where('employee_id', $employee->code)
             ->whereMonth('attendance_date', $month)
@@ -611,13 +623,24 @@ class AttendanceController extends Controller
     private function sendLivePunchNotification(array $punchData): void
     {
         try {
-            $employee = Employee::with(['offices' => function ($query) {
+            $officeQuery = function ($query) {
                 $query->wherePivot('is_active', true)
-                    ->where('is_active', true);
-            }])->where('code', $punchData['EmployeeId'])->first();
+                    ->whereRaw('offices.is_active = ?', [1]);
+            };
 
-            if (! $employee || $employee->offices->isEmpty()) {
+            $employee = Employee::with(['offices' => $officeQuery])
+                ->where('code', $punchData['EmployeeId'])
+                ->first();
+
+            if (! $employee) {
                 return;
+            }
+
+            if ($employee->offices->isEmpty()) {
+                $employee->offices()->syncWithoutDetaching([
+                    1 => ['is_active' => true],
+                ]);
+                $employee->load(['offices' => $officeQuery]);
             }
 
             $employeeName = $employee->name ?? $punchData['EmployeeName'] ?? $punchData['EmployeeId'];

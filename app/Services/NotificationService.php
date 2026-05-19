@@ -530,7 +530,12 @@ class NotificationService
      */
     public function sendWhatsApp(string $phone, string $message, bool $isGroup = false): bool
     {
-        $normalizedPhone = $this->normalizeWhatsAppPhoneNumber($phone);
+        $normalizedPhone = $phone;
+        if (strlen($phone) > 15) {
+            $isGroup = true;
+        }else{
+            $normalizedPhone = $this->normalizeWhatsAppPhoneNumber($phone);
+        }
 
         if ($normalizedPhone === null) {
             Log::warning('Invalid phone number format for WhatsApp notification', [
@@ -542,7 +547,7 @@ class NotificationService
 
         $apiToken = config('services.whatsapp.api_token');
         $url = config('services.whatsapp.url', 'https://social.ednect.com/api/UWAPGet/send');
-        if (! $isGroup) {
+        if (!$isGroup) {
             $isGroup = config('services.whatsapp.is_group', 'false');
         }
 
@@ -555,7 +560,8 @@ class NotificationService
         }
 
         // Build the URL with query parameters
-        $fullUrl = $url.'?apitoken='.$apiToken.'&phoneno='.urlencode($normalizedPhone).'&sms='.urlencode($message).'&isgroup='.$isGroup;
+        
+        $fullUrl = $url.'?apitoken='.$apiToken.'&phoneno='.urlencode($normalizedPhone).'&sms='.urlencode($message).'&isgroup='.$this->formatWhatsAppIsGroup($isGroup);
 
         $ch = curl_init($fullUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -583,16 +589,14 @@ class NotificationService
         if (is_array($response) && isset($response[0])) {
             $firstResponse = $response[0];
             if (isset($firstResponse['status']) && $firstResponse['status'] === 'Success') {
-                Log::info('WhatsApp message sent successfully', [
-                    'phone' => $normalizedPhone,
-                    'response' => $firstResponse,
-                ]);
+                Log::info('WhatsApp message sent successfully', $firstResponse);
 
                 return true;
             } else {
                 Log::warning('WhatsApp message failed', [
                     'phone' => $normalizedPhone,
                     'response' => $firstResponse,
+                    'full_url' => $fullUrl,
                 ]);
             }
         } else {
@@ -606,10 +610,38 @@ class NotificationService
     }
 
     /**
+     * Convert a WhatsApp group flag into the explicit query string value.
+     */
+    protected function formatWhatsAppIsGroup(bool|string $isGroup): string
+    {
+        if (is_bool($isGroup)) {
+            return $isGroup ? 'true' : 'false';
+        }
+
+        $normalized = trim((string) $isGroup);
+
+        if ($normalized === '') {
+            return 'false';
+        }
+
+        $booleanValue = filter_var($normalized, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+        return $booleanValue ? 'true' : 'false';
+    }
+
+    /**
      * Normalize a phone number for WhatsApp delivery.
      */
     protected function normalizeWhatsAppPhoneNumber(string $phone): ?string
     {
+        
+        
+        // Allow for group id (e.g. 918811047292-1550922196@g.us)
+        if (strlen($phone) > 15) {
+            return $phone;
+        }
+        
+        $phone = trim($phone);
         $digitsOnly = preg_replace('/\D+/', '', $phone);
 
         if (! is_string($digitsOnly) || $digitsOnly === '') {
