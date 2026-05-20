@@ -566,6 +566,7 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     Route::get('/api/activity-logs/recent', [ActivityLogController::class, 'getRecentActivity'])->name('api.activity-logs.recent');
     Route::delete('/api/activity-logs/clear-old', [ActivityLogController::class, 'clearOldLogs'])->name('api.activity-logs.clear-old');
     Route::get('/api/activity-logs/export', [ActivityLogController::class, 'export'])->name('api.activity-logs.export');
+    Route::get('/api/daily/attendance', [AttendanceController::class, 'getDailyDetails'])->name('api.attendance.daily');
     Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
 });
 

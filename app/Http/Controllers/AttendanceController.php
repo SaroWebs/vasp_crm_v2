@@ -7,12 +7,12 @@ use App\Http\Requests\AttendanceUploadRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Punch;
+use App\Services\AttendanceService;
 use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -20,6 +20,8 @@ use Inertia\Response;
 
 class AttendanceController extends Controller
 {
+    public function __construct(private AttendanceService $attendanceService) {}
+
     public function uploadPunchData(AttendanceUploadRequest $request): JsonResponse
     {
         $punches = $request->validated();
@@ -27,10 +29,6 @@ class AttendanceController extends Controller
 
         foreach ($punches as $punchData) {
             $punchDateTime = Carbon::parse($punchData['PunchTime']);
-
-            if ($this->hasPunchWithinOneMinute((string) $punchData['EmployeeId'], $punchDateTime, true)) {
-                continue;
-            }
 
             Punch::updateOrCreate(
                 [
@@ -46,14 +44,17 @@ class AttendanceController extends Controller
                 ]
             );
 
-            $this->syncAttendanceFromPunches(
+            $this->attendanceService->syncAttendanceFromPunches(
                 (string) $punchData['EmployeeId'],
                 $punchDateTime,
                 'office'
             );
 
             if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
-                $this->sendLivePunchNotification($punchData);
+                $this->sendLivePunchNotification(
+                    $punchData,
+                    $this->determineLivePunchType($punchData)
+                );
             }
 
             $stored++;
@@ -63,6 +64,93 @@ class AttendanceController extends Controller
             'status' => 'success',
             'message' => "Attendance recorded successfully. {$stored} punch(es) processed.",
         ]);
+    }
+
+    public function getAttendanceSummary(string $employeeId, Carbon $date): array
+    {
+        $punches = Punch::where('EmployeeId', $employeeId)
+            ->whereDate('PunchTime', $date->toDateString())
+            ->orderBy('PunchTime')
+            ->pluck('PunchTime')
+            ->map(fn ($t) => Carbon::parse($t))
+            ->values();
+
+        if ($punches->isEmpty()) {
+            return [
+                'status' => 'success',
+                'employee_id' => $employeeId,
+                'date' => $date->toDateString(),
+                'punch_in' => null,
+                'punch_out' => null,
+                'breaks' => [],
+                'total_break_minutes' => 0,
+                'total_work_minutes' => null,
+            ];
+        }
+
+        $punchIn = $punches->first();
+        $punchOut = null;
+        $breaks = [];
+
+        $remaining = $punches->slice(1)->values(); // everything after punch_in
+
+        $i = 0;
+        while ($i < $remaining->count()) {
+            $breakOut = $remaining->get($i);
+            $breakIn = $remaining->get($i + 1); // may be null
+
+            if ($breakIn === null) {
+                $punchOut = $breakOut;
+                break;
+            }
+
+            $breaks[] = [
+                'break_out' => $breakOut->toDateTimeString(),
+                'break_in' => $breakIn->toDateTimeString(),
+                'duration_minutes' => (int) $breakOut->diffInMinutes($breakIn),
+            ];
+
+            $i += 2;
+        }
+
+        $totalBreakMinutes = collect($breaks)->sum('duration_minutes');
+
+        $totalWorkMinutes = $punchOut
+            ? (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes
+            : null;
+
+        return [
+            'status' => 'success',
+            'employee_id' => $employeeId,
+            'date' => $date->toDateString(),
+            'punch_in' => $punchIn->toDateTimeString(),
+            'punch_out' => $punchOut?->toDateTimeString(),
+            'breaks' => $breaks,
+            'total_break_minutes' => $totalBreakMinutes,
+            'total_work_minutes' => $totalWorkMinutes,
+        ];
+    }
+
+    public function getDailyDetails(Request $request)
+    {
+        $date = Carbon::parse($request->query('date', today()));
+        $employees = Employee::whereHas('user', function ($query) {
+            $query->where('status', 'active');
+        })
+            ->with('user')
+            ->get();
+
+        $records = $employees->map(function ($emp) use ($date) {
+            $summary = $this->getAttendanceSummary($emp->code, $date);
+            if($summary['punch_in'] != null) {
+                return array_merge($summary, [
+                    'employee_name' => $emp->name,
+                    'office' => $emp->offices()->wherePivot('is_active', true)->pluck('name')->first() ?? 'N/A',
+                ]);
+            }
+        });
+
+        return response()->json(['records' => $records, 'date' => $date->toDateString()]);
     }
 
     // store
@@ -102,7 +190,7 @@ class AttendanceController extends Controller
             ->whereDate('PunchTime', $attendanceDate)
             ->count();
 
-        if ($this->hasPunchWithinOneMinute($employee->code, $punchDateTime)) {
+        if ($this->hasPunchWithinTenSeconds($employee->code, $punchDateTime)) {
             return response()->json([
                 'status' => 'success',
                 'message' => 'Punch ignored because a nearby punch already exists within one minute.',
@@ -119,7 +207,7 @@ class AttendanceController extends Controller
             'Islive' => false,
         ]);
 
-        $this->syncAttendanceFromPunches(
+        $this->attendanceService->syncAttendanceFromPunches(
             $employee->code,
             $punchDateTime,
             $validated['mode'] ?? 'office'
@@ -544,68 +632,12 @@ class AttendanceController extends Controller
         ];
     }
 
-    private function syncAttendanceFromPunches(string $employeeId, Carbon $punchDate, string $mode = 'office'): void
-    {
-        $attendanceDate = $punchDate->toDateString();
-        $punches = Punch::where('EmployeeId', $employeeId)
-            ->whereDate('PunchTime', $attendanceDate)
-            ->orderBy('PunchTime')
-            ->get();
-
-        Attendance::where('employee_id', $employeeId)
-            ->where('attendance_date', $attendanceDate)
-            ->delete();
-
-        if ($punches->isEmpty()) {
-            return;
-        }
-
-        $now = Carbon::now();
-        $segments = [];
-
-        foreach ($punches as $index => $punch) {
-            if ($index % 2 === 0) {
-                $segments[] = [
-                    'employee_id' => $employeeId,
-                    'machine_id' => $punch->MachineId,
-                    'attendance_date' => $attendanceDate,
-                    'punch_in' => $punch->PunchTime->format('H:i:s'),
-                    'punch_out' => null,
-                    'ip' => $punch->Ip,
-                    'employee_name' => $punch->EmployeeName,
-                    'group_name' => $punch->GroupName,
-                    'is_live' => $punch->Islive ? 1 : 0,
-                    'mode' => $mode,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-
-                continue;
-            }
-
-            $lastIndex = count($segments) - 1;
-            $segments[$lastIndex]['punch_out'] = $punch->PunchTime->format('H:i:s');
-
-            if ($punch->MachineId !== null) {
-                $segments[$lastIndex]['machine_id'] = $punch->MachineId;
-            }
-            if ($punch->Ip) {
-                $segments[$lastIndex]['ip'] = $punch->Ip;
-            }
-            if ($punch->Islive) {
-                $segments[$lastIndex]['is_live'] = 1;
-            }
-        }
-
-        Attendance::insert($segments);
-    }
-
-    private function hasPunchWithinOneMinute(string $employeeId, Carbon $punchDateTime, bool $excludeExact = false): bool
+    private function hasPunchWithinTenSeconds(string $employeeId, Carbon $punchDateTime, bool $excludeExact = false): bool
     {
         $query = Punch::where('EmployeeId', $employeeId)
             ->whereBetween('PunchTime', [
-                $punchDateTime->copy()->subMinute(),
-                $punchDateTime->copy()->addMinute(),
+                $punchDateTime->copy()->subSeconds(10),
+                $punchDateTime->copy()->addSeconds(10),
             ]);
 
         if ($excludeExact) {
@@ -620,7 +652,7 @@ class AttendanceController extends Controller
      *
      * @param  array{EmployeeId: string, PunchTime: string, EmployeeName?: string}  $punchData
      */
-    private function sendLivePunchNotification(array $punchData): void
+    private function sendLivePunchNotification(array $punchData, string $punchType): void
     {
         try {
             $officeQuery = function ($query) {
@@ -645,7 +677,7 @@ class AttendanceController extends Controller
 
             $employeeName = $employee->name ?? $punchData['EmployeeName'] ?? $punchData['EmployeeId'];
             $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
-            $message = "{$employeeName} has punched at {$punchTime}.";
+            $message = "{$employeeName} has punched at {$punchTime} ({$punchType}).";
 
             /** @var NotificationService $notificationService */
             $notificationService = app(NotificationService::class);

@@ -21,6 +21,16 @@ class ValidateUserSession
         $user = Auth::guard('web')->user();
 
         if ($user) {
+            // If user's status is inactive, log them out and prevent access
+            if (isset($user->status) && $user->status === 'inactive') {
+                Auth::guard('web')->logout();
+
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect('/admin/login')->with('status', 'Your account is inactive. Contact administrator.');
+            }
+
             $currentSessionId = $request->session()->getId();
             $storedSessionId = $user->session_id;
 

@@ -23,7 +23,6 @@ class AdminDashboardController extends Controller
     public function index(Request $request)
     {
         $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
-
         $dashboardType = 'employee';
         if ($user->hasRole(['super-admin', 'admin'])) {
             $dashboardType = 'admin';

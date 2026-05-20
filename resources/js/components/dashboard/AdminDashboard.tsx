@@ -7,6 +7,7 @@ import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
 import { useDashboardStats } from '@/hooks/use-dashboard-stats';
 import { CheckCircle, Clock, TicketIcon } from 'lucide-react';
 import { AttendanceList } from '../attendance/AttendanceList';
+import DailyAttendancePanel from '../admin/employees/DailyAttendancePanel';
 
 interface AdminDashboardProps {
     auth: { user?: { id?: number } } | null;
@@ -70,17 +71,18 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
                         ))}
                     </div>
                 </div>
-                <div className="md:col-span-5 space-y-4">
+                <div className="md:col-span-8 space-y-4">
                     <RecentTicketsWidget />
                 </div>
-                <div className="md:col-span-3 space-y-4">
-                    <AttendanceList
+                <div className="md:col-span-8 space-y-4">
+                    {/* <AttendanceList
                         date={new Date()}
                         type="admin"
                         hasPagination={true}
                         hasFilter={true}
                         showRecentOnly={false}
-                    />
+                    /> */}
+                    <DailyAttendancePanel/>
                     <RecentReportSection />
                 </div>
             </div>

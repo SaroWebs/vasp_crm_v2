@@ -50,10 +50,10 @@ class EmployeeController extends Controller
 
         $query = Employee::with([
             'department',
-            'user',
-            'user.roles.permissions',
-            'user.permissions',
-            'user.deniedPermissions',
+            'user' => function ($q) {
+                $q->withoutGlobalScope('exclude_inactive')
+                    ->with(['roles.permissions', 'permissions', 'deniedPermissions']);
+            },
         ]);
 
         // Apply filters
@@ -132,7 +132,9 @@ class EmployeeController extends Controller
     {
         $query = Employee::with([
             'department',
-            'user',
+            'user' => function ($q) {
+                $q->withoutGlobalScope('exclude_inactive');
+            },
         ]);
 
         $employees = $query->orderBy('name')->get();
@@ -301,7 +303,9 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to view employee.');
         }
 
-        $employee->load(['department', 'user']);
+        $employee->load(['department', 'user' => function ($q) {
+            $q->withoutGlobalScope('exclude_inactive');
+        }]);
         $employee->category = $employee->category();
 
         return Inertia::render('admin/employees/Show', [
@@ -318,7 +322,9 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to edit employee.');
         }
 
-        $employee->load(['department', 'user', 'offices']);
+        $employee->load(['department', 'user' => function ($q) {
+            $q->withoutGlobalScope('exclude_inactive');
+        }, 'offices']);
         $departments = Department::select('id', 'name')->get();
         $users = User::select('id', 'name', 'email')->get();
         $roles = Role::select('id', 'name', 'slug')->get();

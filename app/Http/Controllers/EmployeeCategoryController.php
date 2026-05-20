@@ -31,6 +31,9 @@ class EmployeeCategoryController extends Controller
         }
 
         $employees = Employee::query()
+            ->whereHas('user', function ($query) {
+                $query->where('status', 'active');
+            })
             ->where('category_id', $category->id)
             ->get();
 

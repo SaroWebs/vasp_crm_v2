@@ -17,9 +17,9 @@ import {
     SheetTrigger,
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { FileText, Plus, Save, Upload, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Client {
     id: number;
@@ -43,6 +43,8 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const [sheetPortalTarget, setSheetPortalTarget] =
         useState<HTMLDivElement | null>(null);
 
+    
+
     const [form, setForm] = useState<FormData>({
         client_id: '',
         title: '',
@@ -55,6 +57,19 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const dropRef = useRef<HTMLDivElement>(null);
     const [dragActive, setDragActive] = useState(false);
 
+   const { url } = usePage();
+
+    useEffect(() => {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const clientIdParam = params.get('client_id');
+        if (clientIdParam && form.client_id === '') {
+            setForm((prev) => ({
+                ...prev,
+                client_id: Number(clientIdParam) || '',
+            }));
+            setOpen(true);
+        }
+    }, []);
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     ) => {
