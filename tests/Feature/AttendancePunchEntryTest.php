@@ -9,7 +9,6 @@ use App\Models\Employee;
 use App\Models\Office;
 use App\Models\Punch;
 use App\Models\Role;
-use App\Services\AttendanceService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -159,7 +158,7 @@ class AttendancePunchEntryTest extends TestCase
         $notificationService = $this->createMock(NotificationService::class);
         $notificationService->expects($this->once())
             ->method('sendWhatsApp')
-            ->with($this->equalTo($office->whatsapp_number), $this->stringContains('(punch-in)'), true)
+            ->with($this->equalTo($office->whatsapp_number), $this->stringContains('has punched at'), true)
             ->willReturn(true);
 
         $this->app->instance(NotificationService::class, $notificationService);
@@ -187,59 +186,156 @@ class AttendancePunchEntryTest extends TestCase
         ]);
     }
 
+    public function test_live_punch_machine_2_uses_generic_message(): void
+    {
+        Carbon::setTestNow('2026-05-16 09:00:00');
+
+        $office = Office::create([
+            'id' => 1,
+            'name' => 'Branch Office',
+            'whatsapp_number' => '+919999999999',
+            'address' => 'Branch Office Address',
+            'email' => 'branchoffice@example.com',
+            'phone' => '9999999999',
+            'is_active' => true,
+        ]);
+
+        $employee = Employee::factory()->create([
+            'code' => '12345',
+        ]);
+
+        $notificationService = $this->createMock(NotificationService::class);
+        $notificationService->expects($this->once())
+            ->method('sendWhatsApp')
+            ->with(
+                $this->equalTo($office->whatsapp_number),
+                $this->stringContains('has punched at'),
+                true
+            )
+            ->willReturn(true);
+
+        $this->app->instance(NotificationService::class, $notificationService);
+
+        $payload = [
+            [
+                'EmployeeId' => $employee->code,
+                'MachineId' => 2,
+                'PunchTime' => Carbon::now()->toDateTimeString(),
+                'Islive' => true,
+            ],
+        ];
+
+        $response = $this->postJson('/api/upload_punch_data', $payload);
+
+        $response->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Attendance recorded successfully. 1 punch(es) processed.',
+            ]);
+    }
+
+    public function test_live_punch_machine_3_uses_punched_in_message(): void
+    {
+        Carbon::setTestNow('2026-05-16 09:00:00');
+
+        $office = Office::create([
+            'id' => 1,
+            'name' => 'Head Office',
+            'whatsapp_number' => '+919999999999',
+            'address' => 'Head Office Address',
+            'email' => 'headoffice@example.com',
+            'phone' => '9999999999',
+            'is_active' => true,
+        ]);
+
+        $employee = Employee::factory()->create([
+            'code' => '12345',
+        ]);
+
+        $notificationService = $this->createMock(NotificationService::class);
+        $notificationService->expects($this->once())
+            ->method('sendWhatsApp')
+            ->with(
+                $this->equalTo($office->whatsapp_number),
+                $this->stringContains('has punched in at'),
+                true
+            )
+            ->willReturn(true);
+
+        $this->app->instance(NotificationService::class, $notificationService);
+
+        $payload = [
+            [
+                'EmployeeId' => $employee->code,
+                'MachineId' => 3,
+                'PunchTime' => Carbon::now()->toDateTimeString(),
+                'Islive' => true,
+            ],
+        ];
+
+        $response = $this->postJson('/api/upload_punch_data', $payload);
+
+        $response->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Attendance recorded successfully. 1 punch(es) processed.',
+            ]);
+    }
+
     /** Main office: machine 3 (punch-in) punches twice at start, machine 1 (punch-out) punches once mid-day, then machine 3 punches again at end. */
     public function test_main_office_machines_3_1_create_two_correct_segments(): void
     {
         $employee = Employee::factory()->create(['code' => '1001']);
         $employeeId = $employee->code;
 
-        $service = app(AttendanceService::class);
+        $ref = new \ReflectionMethod(\App\Http\Controllers\AttendanceController::class, 'syncAttendanceFromPunches');
+        $ref->setAccessible(true);
 
         $date = Carbon::parse('2026-05-16');
 
         Punch::create([
-            'EmployeeId' => $employeeId,
-            'MachineId' => 3,
-            'PunchTime' => $date->copy()->setTime(9, 0)->toDateTimeString(),
-            'Ip' => '192.168.1.10',
+            'EmployeeId'   => $employeeId,
+            'MachineId'    => 3,
+            'PunchTime'    => $date->copy()->setTime(9, 0)->toDateTimeString(),
+            'Ip'           => '192.168.1.10',
             'EmployeeName' => $employee->name,
-            'Islive' => false,
+            'Islive'       => false,
         ]);
         Punch::create([
-            'EmployeeId' => $employeeId,
-            'MachineId' => 3,
-            'PunchTime' => $date->copy()->setTime(9, 30)->toDateTimeString(),
-            'Ip' => '192.168.1.10',
+            'EmployeeId'   => $employeeId,
+            'MachineId'    => 3,
+            'PunchTime'    => $date->copy()->setTime(9, 30)->toDateTimeString(),
+            'Ip'           => '192.168.1.10',
             'EmployeeName' => $employee->name,
-            'Islive' => false,
+            'Islive'       => false,
         ]);
         Punch::create([
-            'EmployeeId' => $employeeId,
-            'MachineId' => 3,
-            'PunchTime' => $date->copy()->setTime(17, 0)->toDateTimeString(),
-            'Ip' => '192.168.1.10',
+            'EmployeeId'   => $employeeId,
+            'MachineId'    => 3,
+            'PunchTime'    => $date->copy()->setTime(17, 0)->toDateTimeString(),
+            'Ip'           => '192.168.1.10',
             'EmployeeName' => $employee->name,
-            'Islive' => false,
+            'Islive'       => false,
         ]);
         Punch::create([
-            'EmployeeId' => $employeeId,
-            'MachineId' => 3,
-            'PunchTime' => $date->copy()->setTime(17, 15)->toDateTimeString(),
-            'Ip' => '192.168.1.10',
+            'EmployeeId'   => $employeeId,
+            'MachineId'    => 3,
+            'PunchTime'    => $date->copy()->setTime(17, 15)->toDateTimeString(),
+            'Ip'           => '192.168.1.10',
             'EmployeeName' => $employee->name,
-            'Islive' => false,
+            'Islive'       => false,
         ]);
         // machine 1 once mid-day
         Punch::create([
-            'EmployeeId' => $employeeId,
-            'MachineId' => 1,
-            'PunchTime' => $date->copy()->setTime(12, 0)->toDateTimeString(),
-            'Ip' => '192.168.1.20',
+            'EmployeeId'   => $employeeId,
+            'MachineId'    => 1,
+            'PunchTime'    => $date->copy()->setTime(12, 0)->toDateTimeString(),
+            'Ip'           => '192.168.1.20',
             'EmployeeName' => $employee->name,
-            'Islive' => true,
+            'Islive'       => true,
         ]);
 
-        $service->syncAttendanceFromPunches($employeeId, $date, 'office');
+        $ref->invoke(new \App\Http\Controllers\AttendanceController, $employeeId, $date, 'office');
 
         $records = Attendance::where('employee_id', $employeeId)
             ->where('attendance_date', '2026-05-16')
@@ -265,22 +361,23 @@ class AttendancePunchEntryTest extends TestCase
         $employee = Employee::factory()->create(['code' => '1002']);
         $employeeId = $employee->code;
 
-        $service = app(AttendanceService::class);
+        $ref = new \ReflectionMethod(\App\Http\Controllers\AttendanceController::class, 'syncAttendanceFromPunches');
+        $ref->setAccessible(true);
 
         $date = Carbon::parse('2026-05-16');
 
         foreach ([9, 12, 13, 18] as $h) {
             Punch::create([
-                'EmployeeId' => $employeeId,
-                'MachineId' => 2,
-                'PunchTime' => $date->copy()->setTime($h, 0)->toDateTimeString(),
-                'Ip' => '10.0.0.5',
+                'EmployeeId'   => $employeeId,
+                'MachineId'    => 2,
+                'PunchTime'    => $date->copy()->setTime($h, 0)->toDateTimeString(),
+                'Ip'           => '10.0.0.5',
                 'EmployeeName' => $employee->name,
-                'Islive' => false,
+                'Islive'       => false,
             ]);
         }
 
-        $service->syncAttendanceFromPunches($employeeId, $date, 'office');
+        $ref->invoke(new \App\Http\Controllers\AttendanceController, $employeeId, $date, 'office');
 
         $records = Attendance::where('employee_id', $employeeId)
             ->where('attendance_date', '2026-05-16')
@@ -300,21 +397,22 @@ class AttendancePunchEntryTest extends TestCase
         $employee = Employee::factory()->create(['code' => '1003']);
         $employeeId = $employee->code;
 
-        $service = app(AttendanceService::class);
+        $ref = new \ReflectionMethod(\App\Http\Controllers\AttendanceController::class, 'syncAttendanceFromPunches');
+        $ref->setAccessible(true);
 
         $date = Carbon::parse('2026-05-16');
 
         foreach ([9, 13, 17] as $h) {
             Punch::create([
-                'EmployeeId' => $employeeId,
-                'MachineId' => 3,
-                'PunchTime' => $date->copy()->setTime($h, 0)->toDateTimeString(),
+                'EmployeeId'   => $employeeId,
+                'MachineId'    => 3,
+                'PunchTime'    => $date->copy()->setTime($h, 0)->toDateTimeString(),
                 'EmployeeName' => $employee->name,
-                'Islive' => false,
+                'Islive'       => false,
             ]);
         }
 
-        $service->syncAttendanceFromPunches($employeeId, $date, 'office');
+        $ref->invoke(new \App\Http\Controllers\AttendanceController, $employeeId, $date, 'office');
 
         $records = Attendance::where('employee_id', $employeeId)
             ->where('attendance_date', '2026-05-16')
@@ -331,7 +429,8 @@ class AttendancePunchEntryTest extends TestCase
         $employee = Employee::factory()->create(['code' => '1004']);
         $employeeId = $employee->code;
 
-        $service = app(AttendanceService::class);
+        $ref = new \ReflectionMethod(\App\Http\Controllers\AttendanceController::class, 'syncAttendanceFromPunches');
+        $ref->setAccessible(true);
 
         $date = Carbon::parse('2026-05-16');
 
@@ -339,15 +438,15 @@ class AttendancePunchEntryTest extends TestCase
         // Main office (mach 3) 17:00; branch (mach 2) 18:00
         foreach ([[3, 9], [2, 12], [3, 17], [2, 18]] as [$mid, $h]) {
             Punch::create([
-                'EmployeeId' => $employeeId,
-                'MachineId' => $mid,
-                'PunchTime' => $date->copy()->setTime($h, 0)->toDateTimeString(),
+                'EmployeeId'   => $employeeId,
+                'MachineId'    => $mid,
+                'PunchTime'    => $date->copy()->setTime($h, 0)->toDateTimeString(),
                 'EmployeeName' => $employee->name,
-                'Islive' => false,
+                'Islive'       => false,
             ]);
         }
 
-        $service->syncAttendanceFromPunches($employeeId, $date, 'office');
+        $ref->invoke(new \App\Http\Controllers\AttendanceController, $employeeId, $date, 'office');
 
         $records = Attendance::where('employee_id', $employeeId)
             ->where('attendance_date', '2026-05-16')

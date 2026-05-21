@@ -7,12 +7,12 @@ use App\Http\Requests\AttendanceUploadRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Punch;
-use App\Services\AttendanceService;
 use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -20,7 +20,9 @@ use Inertia\Response;
 
 class AttendanceController extends Controller
 {
-    public function __construct(private AttendanceService $attendanceService) {}
+    private const MACHINE_ID_PUNCH_IN = 3;
+    private const MACHINE_ID_PUNCH_OUT = 1;
+    private const MACHINE_ID_IN_OUT = 2;
 
     public function uploadPunchData(AttendanceUploadRequest $request): JsonResponse
     {
@@ -44,17 +46,14 @@ class AttendanceController extends Controller
                 ]
             );
 
-            $this->attendanceService->syncAttendanceFromPunches(
+            $this->syncAttendanceFromPunches(
                 (string) $punchData['EmployeeId'],
                 $punchDateTime,
                 'office'
             );
 
             if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
-                $this->sendLivePunchNotification(
-                    $punchData,
-                    $this->determineLivePunchType($punchData)
-                );
+                $this->sendLivePunchNotification($punchData);
             }
 
             $stored++;
@@ -137,17 +136,16 @@ class AttendanceController extends Controller
         $employees = Employee::whereHas('user', function ($query) {
             $query->where('status', 'active');
         })
-            ->with('user')
-            ->get();
+        ->with('user')
+        ->get();
 
         $records = $employees->map(function ($emp) use ($date) {
             $summary = $this->getAttendanceSummary($emp->code, $date);
-            if($summary['punch_in'] != null) {
-                return array_merge($summary, [
-                    'employee_name' => $emp->name,
-                    'office' => $emp->offices()->wherePivot('is_active', true)->pluck('name')->first() ?? 'N/A',
-                ]);
-            }
+
+            return array_merge($summary, [
+                'employee_name' => $emp->name,
+                'office' => $emp->offices()->wherePivot('is_active', true)->pluck('name')->first() ?? 'N/A',
+            ]);
         });
 
         return response()->json(['records' => $records, 'date' => $date->toDateString()]);
@@ -207,7 +205,7 @@ class AttendanceController extends Controller
             'Islive' => false,
         ]);
 
-        $this->attendanceService->syncAttendanceFromPunches(
+        $this->syncAttendanceFromPunches(
             $employee->code,
             $punchDateTime,
             $validated['mode'] ?? 'office'
@@ -632,6 +630,166 @@ class AttendanceController extends Controller
         ];
     }
 
+    private function syncAttendanceFromPunches(string $employeeId, Carbon $punchDate, string $mode = 'office'): void
+    {
+        $attendanceDate = $punchDate->toDateString();
+        $punches = Punch::where('EmployeeId', $employeeId)
+            ->whereDate('PunchTime', $attendanceDate)
+            ->orderBy('PunchTime')
+            ->get();
+
+        Attendance::where('employee_id', $employeeId)
+            ->where('attendance_date', $attendanceDate)
+            ->delete();
+
+        if ($punches->isEmpty()) {
+            return;
+        }
+        // Simpler linear algorithm: iterate raw punches chronologically
+        // and build segments using machine role constants.
+        $now = Carbon::now();
+        $segments = [];
+        $open = null; // current open segment (array) or null
+
+        foreach ($punches as $punch) {
+            $mid = $punch->MachineId !== null ? (int) $punch->MachineId : null;
+            $time = $punch->PunchTime->format('H:i:s');
+
+            if ($this->isPunchInMachine($mid)) {
+                // start a new segment; if one is open, close it first
+                if ($open !== null) {
+                    $segments[] = $open;
+                }
+
+                $open = [
+                    'employee_id' => $employeeId,
+                    'machine_id' => $mid,
+                    'attendance_date' => $attendanceDate,
+                    'punch_in' => $time,
+                    'punch_out' => null,
+                    'ip' => $punch->Ip,
+                    'employee_name' => $punch->EmployeeName,
+                    'group_name' => $punch->GroupName,
+                    'is_live' => $punch->Islive ? 1 : 0,
+                    'mode' => $mode,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                continue;
+            }
+
+            if ($this->isPunchOutMachine($mid)) {
+                if ($open === null) {
+                    // no open segment, create a single-segment with only punch_out
+                    $segments[] = [
+                        'employee_id' => $employeeId,
+                        'machine_id' => $mid,
+                        'attendance_date' => $attendanceDate,
+                        'punch_in' => null,
+                        'punch_out' => $time,
+                        'ip' => $punch->Ip,
+                        'employee_name' => $punch->EmployeeName,
+                        'group_name' => $punch->GroupName,
+                        'is_live' => $punch->Islive ? 1 : 0,
+                        'mode' => $mode,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                } else {
+                    // close open segment
+                    $open['punch_out'] = $time;
+                    if ($punch->Ip) {
+                        $open['ip'] = $punch->Ip;
+                    }
+                    if ($punch->Islive) {
+                        $open['is_live'] = 1;
+                    }
+
+                    $segments[] = $open;
+                    $open = null;
+                }
+
+                continue;
+            }
+
+            if ($this->isInOutMachine($mid)) {
+                if ($open === null) {
+                    // start and wait for a later punch to close
+                    $open = [
+                        'employee_id' => $employeeId,
+                        'machine_id' => $mid,
+                        'attendance_date' => $attendanceDate,
+                        'punch_in' => $time,
+                        'punch_out' => null,
+                        'ip' => $punch->Ip,
+                        'employee_name' => $punch->EmployeeName,
+                        'group_name' => $punch->GroupName,
+                        'is_live' => $punch->Islive ? 1 : 0,
+                        'mode' => $mode,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                } else {
+                    // close existing open segment with this punch
+                    $open['punch_out'] = $time;
+                    if ($punch->Ip) {
+                        $open['ip'] = $punch->Ip;
+                    }
+                    if ($punch->Islive) {
+                        $open['is_live'] = 1;
+                    }
+
+                    $segments[] = $open;
+                    $open = null;
+                }
+
+                continue;
+            }
+
+            // default behavior for unknown/null machine: treat as punch_in
+            if ($open !== null) {
+                $segments[] = $open;
+            }
+
+            $open = [
+                'employee_id' => $employeeId,
+                'machine_id' => $mid,
+                'attendance_date' => $attendanceDate,
+                'punch_in' => $time,
+                'punch_out' => null,
+                'ip' => $punch->Ip,
+                'employee_name' => $punch->EmployeeName,
+                'group_name' => $punch->GroupName,
+                'is_live' => $punch->Islive ? 1 : 0,
+                'mode' => $mode,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if ($open !== null) {
+            $segments[] = $open;
+        }
+
+        Attendance::insert($segments);
+    }
+
+    private function isPunchInMachine(?int $machineId): bool
+    {
+        return $machineId === self::MACHINE_ID_PUNCH_IN;
+    }
+
+    private function isPunchOutMachine(?int $machineId): bool
+    {
+        return $machineId === self::MACHINE_ID_PUNCH_OUT;
+    }
+
+    private function isInOutMachine(?int $machineId): bool
+    {
+        return $machineId === self::MACHINE_ID_IN_OUT;
+    }
+
     private function hasPunchWithinTenSeconds(string $employeeId, Carbon $punchDateTime, bool $excludeExact = false): bool
     {
         $query = Punch::where('EmployeeId', $employeeId)
@@ -650,9 +808,9 @@ class AttendanceController extends Controller
     /**
      * Send a WhatsApp notification to the employee's office(s) for a live punch.
      *
-     * @param  array{EmployeeId: string, PunchTime: string, EmployeeName?: string}  $punchData
+     * @param  array{EmployeeId: string, PunchTime: string, EmployeeName?: string, MachineId?: int|null}  $punchData
      */
-    private function sendLivePunchNotification(array $punchData, string $punchType): void
+    private function sendLivePunchNotification(array $punchData): void
     {
         try {
             $officeQuery = function ($query) {
@@ -677,7 +835,15 @@ class AttendanceController extends Controller
 
             $employeeName = $employee->name ?? $punchData['EmployeeName'] ?? $punchData['EmployeeId'];
             $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
-            $message = "{$employeeName} has punched at {$punchTime} ({$punchType}).";
+            $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
+
+            if ($machineId === self::MACHINE_ID_PUNCH_IN) {
+                $message = "{$employeeName} has punched in at {$punchTime}.";
+            } elseif ($machineId === self::MACHINE_ID_PUNCH_OUT) {
+                $message = "{$employeeName} has punched out at {$punchTime}.";
+            } else {
+                $message = "{$employeeName} has punched at {$punchTime}.";
+            }
 
             /** @var NotificationService $notificationService */
             $notificationService = app(NotificationService::class);

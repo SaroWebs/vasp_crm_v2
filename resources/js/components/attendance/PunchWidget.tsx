@@ -61,14 +61,16 @@ export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
                             label="Remote"
                             labelPosition="left"
                         />
-                        <Button
-                            onClick={handlePunch}
-                            loading={loading}
-                            leftSection={<Fingerprint size={16} />}
-                            size="md"
-                        >
-                            Punch
-                        </Button>
+                        {isRemote && (
+                            <Button
+                                onClick={handlePunch}
+                                loading={loading}
+                                leftSection={<Fingerprint size={16} />}
+                                size="md"
+                            >
+                                Punch
+                            </Button>
+                        )}
                     </div>
                 </Tooltip>
             </div>
