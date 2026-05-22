@@ -46,6 +46,7 @@ import {
     User,
     XCircle,
     X,
+    UserIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
@@ -414,6 +415,10 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         { title: "Completed", text: "Closed tickets", stats: stats.completed, icon: CheckCircle, color: "green", link: '/admin/tickets?status=closed' },
     ] as const;
 
+    useEffect(() => {
+        console.log(filteredTickets);
+    }, [filteredTickets]);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Tickets" />
@@ -597,13 +602,21 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center space-x-1">
-                                                        <Calendar className="h-4 w-4" />
-                                                        <span className="text-sm">
-                                                            {new Date(
-                                                                ticket.created_at,
-                                                            ).toLocaleDateString()}
-                                                        </span>
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center space-x-1">
+                                                            <Calendar className="h-4 w-4" />
+                                                            <span className="text-sm">
+                                                                {new Date(
+                                                                    ticket.created_at,
+                                                                ).toLocaleDateString()}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center space-x-1">
+                                                            <UserIcon className="h-4 w-4" />
+                                                            <span className="text-sm text-muted-foreground">
+                                                                {ticket.created_by?.name || 'Unknown'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </TableCell>
 

@@ -1,13 +1,22 @@
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem, type Employee, type Department, type Role, type UserPermission } from '@/types';
+import { type BreadcrumbItem, type Employee, type Department, type Role, type UserPermission, type Visitor } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Plus, Search } from 'lucide-react';
+import { Users, Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import VisitorFormModal from '@/components/admin/employees/VisitorFormModal';
+import axios from 'axios';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -64,7 +73,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     const canEdit = userPermissions.includes('employee.update') || isSuperAdmin;
 
     // Debounced search ref to cancel previous requests
-    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Handle search input change - debounce is handled by useEffect
     const buildQuery = (search: string, department_id: string) => {
@@ -318,7 +327,174 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                         )}
                     </CardContent>
                 </Card>
+
+                <VisitorPanel />
             </div>
         </AppLayout>
+    );
+}
+
+const VisitorPanel = () => {
+    const [visitors, setVisitors] = useState<Visitor[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [showFormModal, setShowFormModal] = useState(false);
+    const [selectedVisitor, setSelectedVisitor] = useState<Visitor | null>(null);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id?: number }>({ show: false });
+
+    const fetchVisitors = async () => {
+        try {
+            setIsLoading(true);
+            const { data } = await axios.get('/admin/visitors?per_page=10');
+            setVisitors(data?.data || []);
+        } catch (error) {
+            console.error('Error fetching visitors:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchVisitors();
+    }, []);
+
+    const handleEdit = (visitor: Visitor) => {
+        setSelectedVisitor(visitor);
+        setShowFormModal(true);
+    };
+
+    const handleDelete = async (id: number) => {
+        try {
+            await axios.delete(`/admin/visitors/${id}`);
+            fetchVisitors();
+        } catch (error) {
+            console.error('Error deleting visitor:', error);
+        }
+        setDeleteConfirm({ show: false });
+    };
+
+    return (
+        <>
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle>Other Cards</CardTitle>
+                            <CardDescription>
+                                {visitors.length} card{visitors.length !== 1 ? 's' : ''} found
+                            </CardDescription>
+                        </div>
+                        <Button onClick={() => {
+                            setSelectedVisitor(null);
+                            setShowFormModal(true);
+                        }} size="sm">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add New Card
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <div className="text-center py-8">
+                            <p className="text-muted-foreground">Loading cards...</p>
+                        </div>
+                    ) : visitors.length === 0 ? (
+                        <div className="text-center py-8">
+                            <p className="text-muted-foreground">No cards found</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr className="border-b">
+                                        <th className="text-left p-4 font-semibold">Code</th>
+                                        <th className="text-left p-4 font-semibold">Name</th>
+                                        <th className="text-left p-4 font-semibold">Card Number</th>
+                                        <th className="text-left p-4 font-semibold">Status</th>
+                                        <th className="text-left p-4 font-semibold">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {visitors.map((visitor) => (
+                                        <tr key={visitor.id} className="border-b hover:bg-gray-50 transition-colors">
+                                            <td className="p-4">
+                                                <div className="text-sm font-mono font-bold">{visitor.code}</div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="text-sm">{visitor.name || '-'}</div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="text-sm text-muted-foreground">{visitor.card_number || '-'}</div>
+                                            </td>
+                                            <td className="p-4">
+                                                <Badge
+                                                    variant={visitor.is_active ? 'default' : 'secondary'}
+                                                    className={visitor.is_active ? 'bg-green-100 text-green-800' : ''}
+                                                >
+                                                    {visitor.is_active ? 'Active' : 'Inactive'}
+                                                </Badge>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleEdit(visitor)}
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => setDeleteConfirm({ show: true, id: visitor.id })}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Form Modal */}
+            <VisitorFormModal
+                open={showFormModal}
+                onOpenChange={setShowFormModal}
+                visitor={selectedVisitor}
+                onSuccess={() => {
+                    setShowFormModal(false);
+                    setSelectedVisitor(null);
+                    fetchVisitors();
+                }}
+            />
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={deleteConfirm.show} onOpenChange={(open: boolean) => setDeleteConfirm({ show: open })}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Card</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete this card? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex gap-4 justify-end">
+                        <Button type="button" variant="outline" onClick={() => setDeleteConfirm({ show: false })}>
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => deleteConfirm.id && handleDelete(deleteConfirm.id)}
+                        >
+                            Delete
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

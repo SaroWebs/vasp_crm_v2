@@ -116,7 +116,7 @@ class AdminTicketController extends Controller
     public function index(Request $request)
     {
         $query = Ticket::withTrashed()
-            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'tasks']);
+            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'createdBy', 'tasks']);
 
         // Apply filters if provided
         if ($request->has('status') && $request->status !== 'all') {
@@ -186,6 +186,7 @@ class AdminTicketController extends Controller
             'organizationUser',
             'assignedTo',
             'approvedBy',
+            'createdBy',
             'attachments',
             'tasks' => function ($query) {
                 $query->with(['assignedUsers', 'assignedDepartment', 'createdBy'])
@@ -330,7 +331,7 @@ class AdminTicketController extends Controller
         // Validate request
         $validated = $request->validate([
             'client_id' => 'required|integer|exists:clients,id',
-            'organization_user_id' => 'required|integer|exists:organization_users,id',
+            'organization_user_id' => 'nullable|integer|exists:organization_users,id',
             'ticket_number' => 'required|string|unique:tickets,ticket_number,'.$ticket_id,
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -341,26 +342,30 @@ class AdminTicketController extends Controller
         ]);
 
         $validated['client_id'] = (int) $validated['client_id'];
-        $validated['organization_user_id'] = (int) $validated['organization_user_id'];
+        $validated['organization_user_id'] = filled($validated['organization_user_id'] ?? null) ? (int) $validated['organization_user_id'] : null;
         $validated['assigned_to'] = filled($validated['assigned_to'] ?? null) ? (int) $validated['assigned_to'] : null;
         $validated['approved_by'] = filled($validated['approved_by'] ?? null) ? (int) $validated['approved_by'] : null;
 
         $previousStatus = $ticket->status;
-        $organizationUser = OrganizationUser::where('id', $validated['organization_user_id'])
-            ->where('client_id', $validated['client_id'])
-            ->first();
+        $organizationUser = null;
 
-        if (! $organizationUser) {
-            $message = 'Organization user does not belong to the specified organization';
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'message' => $message,
-                ], 422);
+        if ($validated['organization_user_id'] !== null) {
+            $organizationUser = OrganizationUser::where('id', $validated['organization_user_id'])
+                ->where('client_id', $validated['client_id'])
+                ->first();
+
+            if (! $organizationUser) {
+                $message = 'Organization user does not belong to the specified organization';
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => $message,
+                    ], 422);
+                }
+
+                return back()
+                    ->withErrors(['organization_user_id' => $message])
+                    ->withInput();
             }
-
-            return back()
-                ->withErrors(['organization_user_id' => $message])
-                ->withInput();
         }
 
         // Validate that assigned users are active and valid for update

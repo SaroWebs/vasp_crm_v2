@@ -17,6 +17,7 @@ use App\Http\Controllers\ClientSsoController;
 use App\Http\Controllers\CommentAttachmentController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\EmployeeProgressController;
 use App\Http\Controllers\MenuManagementController;
 use App\Http\Controllers\NotificationController;
@@ -375,6 +376,16 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::patch('/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
         Route::patch('/employees/{employee}/roles', [EmployeeController::class, 'updateRoles'])->name('employees.update-roles');
         Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
+
+        // Visitor management routes (used in frontend)
+        Route::get('/visitors', [VisitorController::class, 'index'])->name('visitors.index');
+        Route::post('/visitors', [VisitorController::class, 'store'])->name('visitors.store');
+        Route::get('/visitors/{visitor}', [VisitorController::class, 'show'])->name('visitors.show');
+        Route::patch('/visitors/{visitor}', [VisitorController::class, 'update'])->name('visitors.update');
+        Route::delete('/visitors/{visitor}', [VisitorController::class, 'destroy'])->name('visitors.destroy');
+        Route::get('/visitors/{visitor}/punches', [VisitorController::class, 'getPunchHistory'])->name('visitors.punch-history');
+        Route::post('/visitors/bulk-delete', [VisitorController::class, 'bulkDelete'])->name('visitors.bulk-delete');
+        Route::post('/visitors/bulk-toggle-active', [VisitorController::class, 'bulkToggleActive'])->name('visitors.bulk-toggle-active');
 
         // Employee progress routes
         Route::get('/employee-progress', [EmployeeProgressController::class, 'showEmployeeProgressPanel'])->name('employee.progress');

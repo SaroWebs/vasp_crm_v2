@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import {Calendar, Search} from 'lucide-react';
-import { Tooltip } from '@mantine/core';
+import dayjs from 'dayjs';
+import { Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Tooltip, Button, Input, Avatar } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import axios from 'axios';
 
 export interface BreakSlot {
@@ -75,10 +77,14 @@ export default function DailyAttendancePanel() {
     const [data, setData] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const handleDateChange = async (newDate: string) => {
-        setSelectedDate(newDate);
+    const handleDateChange = async (newDate: string | Date, offsetDays = 0) => {
+        const date = dayjs(newDate).add(offsetDays, 'day');
+        const formattedDate = date.format('YYYY-MM-DD');
+
+        setSelectedDate(formattedDate);
         setLoading(true);
-        axios.get(`/api/daily/attendance?date=${newDate}`).then(res => {
+
+        axios.get(`/api/daily/attendance?date=${formattedDate}`).then(res => {
             setData(res.data?.records);
         }).catch(err => {
             console.error("Error fetching attendance data:", err);
@@ -134,31 +140,52 @@ export default function DailyAttendancePanel() {
                 </div>
 
                 {/* Controls */}
-                <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 h-9">
-                        <Search size={13} className="text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Employee, ID, or office..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="bg-transparent border-none outline-none text-sm text-gray-700 dark:text-gray-300 w-36 placeholder:text-gray-400"
-                        />
-                    </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <Input
+                        type="text"
+                        placeholder="Employee, ID, or office..."
+                        leftSection={<Search size={16} />}
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
 
                     {handleDateChange && (
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => handleDateChange(e.target.value)}
-                            className="text-sm h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
-                        />
+                        <div className="flex items-center gap-1">
+                            <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleDateChange(selectedDate, -1)}
+                                title="Previous day"
+                            >
+                                <ChevronLeft size={16} />
+                            </Button>
+                            <DateInput
+                                value={dayjs(selectedDate).toDate()}
+                                onChange={(date) => {
+                                    if (date) {
+                                        handleDateChange(date);
+                                    }
+                                }}
+                                placeholder="Select date"
+                                size="sm"
+                                clearable={false}
+                                className="w-40"
+                            />
+                            <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleDateChange(selectedDate, 1)}
+                                title="Next day"
+                            >
+                                <ChevronRight size={16} />
+                            </Button>
+                        </div>
                     )}
                 </div>
             </div>
 
             {/* Table */}
-            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                 <table className="w-full text-sm border-collapse table-fixed">
                     <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
@@ -172,10 +199,10 @@ export default function DailyAttendancePanel() {
                     </thead>
                     <tbody>
                         {loading ? (
-                            Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
+                            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                         ) : filtered.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="text-center py-10 text-sm text-gray-400">
+                                <td colSpan={6} className="text-center py-10 text-sm text-gray-400">
                                     No records found.
                                 </td>
                             </tr>
@@ -190,11 +217,10 @@ export default function DailyAttendancePanel() {
                                         {/* Employee */}
                                         <td className="px-4 py-2.5">
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0`}>
-                                                    {initials(record.employee_name)}
-                                                </div>
+                                                <Avatar name={record.employee_name} color="initials" />
+                                                
                                                 <div className="min-w-0">
-                                                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate text-xs">
+                                                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm">
                                                         {record.employee_name}
                                                     </p>
                                                     <p className="text-[11px] text-gray-400">
@@ -206,7 +232,7 @@ export default function DailyAttendancePanel() {
 
                                         {/* Office */}
                                         <td className="px-4 py-2.5">
-                                            <span className="text-[11px] font-medium text-gray-700 dark:text-gray-200">
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                                                 {record.office || 'N/A'}
                                             </span>
                                         </td>
@@ -215,22 +241,22 @@ export default function DailyAttendancePanel() {
                                         {/* Punch in */}
                                         <td className="px-4 py-2.5">
                                             {record.punch_in ? (
-                                                <span className="font-mono text-xs text-gray-700 dark:text-gray-300">
+                                                <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
                                                     {fmtTime(record.punch_in)}
                                                 </span>
                                             ) : (
-                                                <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                                                <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
                                             )}
                                         </td>
 
                                         {/* Punch out */}
                                         <td className="px-4 py-2.5">
                                             {record.punch_out ? (
-                                                <span className="font-mono text-xs text-gray-700 dark:text-gray-300">
+                                                <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
                                                     {fmtTime(record.punch_out)}
                                                 </span>
                                             ) : (
-                                                <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                                                <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
                                             )}
                                         </td>
 

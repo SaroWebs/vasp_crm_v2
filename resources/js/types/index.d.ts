@@ -109,6 +109,16 @@ export interface Employee {
     created_at?: string;
 }
 
+export interface Visitor {
+    id: number;
+    code: number;
+    name?: string | null;
+    card_number?: string | null;
+    is_active: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
 
 export interface PaginatedItem<T = any> {
     data: T[];

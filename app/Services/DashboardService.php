@@ -122,19 +122,16 @@ class DashboardService
             'total_tickets' => Ticket::count(),
             'total_tasks' => $taskStats['total'],
             'open_tickets' => Ticket::where('status', 'open')->count(),
-            'closed_tickets' => Ticket::where('status', 'closed')->count(),
-            'pending_tasks' => $taskStats['pending'],
-            'completed_tasks' => $taskStats['completed'],
-            'completed_tasks_this_month' => Task::withTrashed()
-                ->whereIn('state', self::TASK_STATES_COMPLETED)
-                ->whereMonth('updated_at', now()->month)
+            'tickets_closed_today' => Ticket::where('status', 'closed')
+                ->whereDate('updated_at', today())
                 ->count(),
-            'active_users_today' => User::where('last_login_at', '>=', today())->count(),
-            'tickets_created_today' => Ticket::whereDate('created_at', today())->count(),
+            'pending_tasks' => $taskStats['pending'],
             'tasks_completed_today' => Task::withTrashed()
                 ->whereIn('state', self::TASK_STATES_COMPLETED)
                 ->whereDate('updated_at', today())
                 ->count(),
+            'active_users_today' => User::where('last_login_at', '>=', today())->count(),
+            'tickets_created_today' => Ticket::whereDate('created_at', today())->count(),
         ];
     }
 

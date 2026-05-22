@@ -7,6 +7,7 @@ use App\Http\Resources\EmployeeCategoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
+use App\Models\Visitor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,18 +25,19 @@ class EmployeeCategoryController extends Controller
     public function getEmployees(GetEmployeesRequest $request): JsonResponse
     {
         $categoryName = $request->input('Name');
-
         $category = EmployeeCategory::where('name', $categoryName)->first();
         if (! $category) {
             return response()->json(['error' => 'Category not found'], 404);
         }
-
+            
+        $visitors = Visitor::query()->get();
         $employees = Employee::query()
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');
             })
             ->where('category_id', $category->id)
-            ->get();
+            ->get()
+            ->concat($visitors);
 
         return response()->json([
             'result' => EmployeeResource::collection($employees)->resolve($request),

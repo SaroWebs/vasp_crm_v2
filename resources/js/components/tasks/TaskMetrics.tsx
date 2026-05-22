@@ -47,7 +47,7 @@ export const TaskMetrics: React.FC<TaskMetricsProps> = ({ taskId }) => {
 
   // Local timer counting each second
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (timeData.isActive) {
       interval = setInterval(() => {
@@ -64,7 +64,7 @@ export const TaskMetrics: React.FC<TaskMetricsProps> = ({ taskId }) => {
 
   // Sync with backend every minute
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (timeData.isActive) {
       interval = setInterval(async () => {

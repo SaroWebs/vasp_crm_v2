@@ -7,6 +7,8 @@ use App\Http\Requests\AttendanceUploadRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Punch;
+use App\Models\Visitor;
+use App\Models\VisitorPunch;
 use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
@@ -21,7 +23,9 @@ use Inertia\Response;
 class AttendanceController extends Controller
 {
     private const MACHINE_ID_PUNCH_IN = 3;
+
     private const MACHINE_ID_PUNCH_OUT = 1;
+
     private const MACHINE_ID_IN_OUT = 2;
 
     public function uploadPunchData(AttendanceUploadRequest $request): JsonResponse
@@ -31,29 +35,53 @@ class AttendanceController extends Controller
 
         foreach ($punches as $punchData) {
             $punchDateTime = Carbon::parse($punchData['PunchTime']);
+            $employeeId = $punchData['EmployeeId'];
 
-            Punch::updateOrCreate(
-                [
-                    'EmployeeId' => $punchData['EmployeeId'],
-                    'PunchTime' => $punchDateTime,
-                ],
-                [
-                    'MachineId' => $punchData['MachineId'] ?? null,
-                    'Ip' => $punchData['Ip'] ?? null,
-                    'GroupName' => $punchData['GroupName'] ?? null,
-                    'EmployeeName' => $punchData['EmployeeName'] ?? null,
-                    'Islive' => $punchData['Islive'] ?? false,
-                ]
-            );
+            // Check if this is a visitor code
+            $isVisitor = Visitor::where('code', $employeeId)->exists();
 
-            $this->syncAttendanceFromPunches(
-                (string) $punchData['EmployeeId'],
-                $punchDateTime,
-                'office'
-            );
+            if ($isVisitor) {
+                // Store visitor punch in VisitorPunch table
+                VisitorPunch::updateOrCreate(
+                    [
+                        'visitor_code' => $employeeId,
+                        'punch_time' => $punchDateTime,
+                    ],
+                    [
+                        'machine_id' => $punchData['MachineId'] ?? null,
+                        'ip' => $punchData['Ip'] ?? null,
+                        'is_live' => $punchData['Islive'] ?? false,
+                    ]
+                );
 
-            if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
-                $this->sendLivePunchNotification($punchData);
+                if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
+                    $this->sendVisitorPunchNotification($punchData);
+                }
+            } else {
+                // Original employee flow (unchanged)
+                Punch::updateOrCreate(
+                    [
+                        'EmployeeId' => $employeeId,
+                        'PunchTime' => $punchDateTime,
+                    ],
+                    [
+                        'MachineId' => $punchData['MachineId'] ?? null,
+                        'Ip' => $punchData['Ip'] ?? null,
+                        'GroupName' => $punchData['GroupName'] ?? null,
+                        'EmployeeName' => $punchData['EmployeeName'] ?? null,
+                        'Islive' => $punchData['Islive'] ?? false,
+                    ]
+                );
+
+                $this->syncAttendanceFromPunches(
+                    (string) $employeeId,
+                    $punchDateTime,
+                    'office'
+                );
+
+                if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
+                    $this->sendLivePunchNotification($punchData);
+                }
             }
 
             $stored++;
@@ -133,11 +161,17 @@ class AttendanceController extends Controller
     public function getDailyDetails(Request $request)
     {
         $date = Carbon::parse($request->query('date', today()));
-        $employees = Employee::whereHas('user', function ($query) {
-            $query->where('status', 'active');
-        })
-        ->with('user')
-        ->get();
+        $employeeCodesWithPunches = Punch::whereDate('PunchTime', $date->toDateString())
+            ->pluck('EmployeeId')
+            ->unique()
+            ->toArray();
+
+        $employees = Employee::whereIn('code', $employeeCodesWithPunches)
+            ->whereHas('user', function ($query) {
+                $query->where('status', 'active');
+            })
+            ->with('user')
+            ->get();
 
         $records = $employees->map(function ($emp) use ($date) {
             $summary = $this->getAttendanceSummary($emp->code, $date);
@@ -630,6 +664,34 @@ class AttendanceController extends Controller
         ];
     }
 
+    /**
+     * Build a blank segment array for a punch.
+     */
+    private function makeSegment(
+        string $employeeId,
+        string $attendanceDate,
+        ?int $machineId,
+        ?string $punchIn,
+        $punch,
+        string $mode,
+        Carbon $now
+    ): array {
+        return [
+            'employee_id' => $employeeId,
+            'machine_id' => $machineId,
+            'attendance_date' => $attendanceDate,
+            'punch_in' => $punchIn,
+            'punch_out' => null,
+            'ip' => $punch->Ip,
+            'employee_name' => $punch->EmployeeName,
+            'group_name' => $punch->GroupName,
+            'is_live' => $punch->Islive ? 1 : 0,
+            'mode' => $mode,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+    }
+
     private function syncAttendanceFromPunches(string $employeeId, Carbon $punchDate, string $mode = 'office'): void
     {
         $attendanceDate = $punchDate->toDateString();
@@ -645,59 +707,74 @@ class AttendanceController extends Controller
         if ($punches->isEmpty()) {
             return;
         }
-        // Simpler linear algorithm: iterate raw punches chronologically
-        // and build segments using machine role constants.
-        $now = Carbon::now();
-        $segments = [];
-        $open = null; // current open segment (array) or null
+
+        // ---------------------------------------------------------------
+        // PRE-PASS: Collapse consecutive same-role punches.
+        //
+        // For machine-1/3 (dedicated IN/OUT), consecutive punches on the
+        // SAME role are noise (double-taps, missed opposite machine).
+        // Rule:
+        //   - Consecutive IN  punches → keep the FIRST  (earliest entry)
+        //   - Consecutive OUT punches → keep the LAST   (latest exit)
+        //
+        // For machine-2 (in-out toggle), keep all — they alternate by design.
+        // ---------------------------------------------------------------
+        $collapsed = collect();
+        $lastRole = null; // 'in' | 'out' | 'inout' | 'unknown'
 
         foreach ($punches as $punch) {
+            $mid = $punch->MachineId !== null ? (int) $punch->MachineId : null;
+
+            if ($this->isPunchInMachine($mid)) {
+                if ($lastRole === 'in') {
+                    // Consecutive IN: skip — first IN already captured
+                    continue;
+                }
+                $lastRole = 'in';
+                $collapsed->push($punch);
+
+            } elseif ($this->isPunchOutMachine($mid)) {
+                if ($lastRole === 'out') {
+                    // Consecutive OUT: replace previous with this later one
+                    $collapsed->pop();
+                }
+                $lastRole = 'out';
+                $collapsed->push($punch);
+
+            } else {
+                // in-out machine or unknown — always keep
+                $lastRole = $this->isInOutMachine($mid) ? 'inout' : 'unknown';
+                $collapsed->push($punch);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // SEGMENT BUILD (unchanged logic, now on deduplicated punches)
+        // ---------------------------------------------------------------
+        $now = Carbon::now();
+        $segments = [];
+        $open = null;
+
+        foreach ($collapsed as $punch) {
             $mid = $punch->MachineId !== null ? (int) $punch->MachineId : null;
             $time = $punch->PunchTime->format('H:i:s');
 
             if ($this->isPunchInMachine($mid)) {
-                // start a new segment; if one is open, close it first
                 if ($open !== null) {
                     $segments[] = $open;
                 }
-
-                $open = [
-                    'employee_id' => $employeeId,
-                    'machine_id' => $mid,
-                    'attendance_date' => $attendanceDate,
-                    'punch_in' => $time,
-                    'punch_out' => null,
-                    'ip' => $punch->Ip,
-                    'employee_name' => $punch->EmployeeName,
-                    'group_name' => $punch->GroupName,
-                    'is_live' => $punch->Islive ? 1 : 0,
-                    'mode' => $mode,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
+                $open = $this->makeSegment($employeeId, $attendanceDate, $mid, $time, $punch, $mode, $now);
 
                 continue;
             }
 
             if ($this->isPunchOutMachine($mid)) {
                 if ($open === null) {
-                    // no open segment, create a single-segment with only punch_out
-                    $segments[] = [
-                        'employee_id' => $employeeId,
-                        'machine_id' => $mid,
-                        'attendance_date' => $attendanceDate,
-                        'punch_in' => null,
-                        'punch_out' => $time,
-                        'ip' => $punch->Ip,
-                        'employee_name' => $punch->EmployeeName,
-                        'group_name' => $punch->GroupName,
-                        'is_live' => $punch->Islive ? 1 : 0,
-                        'mode' => $mode,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ];
+                    $seg = $this->makeSegment($employeeId, $attendanceDate, $mid, null, $punch, $mode, $now);
+                    $seg['punch_out'] = $time;
+                    $seg['punch_in'] = null;
+                    $segments[] = $seg;
                 } else {
-                    // close open segment
                     $open['punch_out'] = $time;
                     if ($punch->Ip) {
                         $open['ip'] = $punch->Ip;
@@ -705,7 +782,6 @@ class AttendanceController extends Controller
                     if ($punch->Islive) {
                         $open['is_live'] = 1;
                     }
-
                     $segments[] = $open;
                     $open = null;
                 }
@@ -715,23 +791,8 @@ class AttendanceController extends Controller
 
             if ($this->isInOutMachine($mid)) {
                 if ($open === null) {
-                    // start and wait for a later punch to close
-                    $open = [
-                        'employee_id' => $employeeId,
-                        'machine_id' => $mid,
-                        'attendance_date' => $attendanceDate,
-                        'punch_in' => $time,
-                        'punch_out' => null,
-                        'ip' => $punch->Ip,
-                        'employee_name' => $punch->EmployeeName,
-                        'group_name' => $punch->GroupName,
-                        'is_live' => $punch->Islive ? 1 : 0,
-                        'mode' => $mode,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ];
+                    $open = $this->makeSegment($employeeId, $attendanceDate, $mid, $time, $punch, $mode, $now);
                 } else {
-                    // close existing open segment with this punch
                     $open['punch_out'] = $time;
                     if ($punch->Ip) {
                         $open['ip'] = $punch->Ip;
@@ -739,7 +800,6 @@ class AttendanceController extends Controller
                     if ($punch->Islive) {
                         $open['is_live'] = 1;
                     }
-
                     $segments[] = $open;
                     $open = null;
                 }
@@ -747,25 +807,11 @@ class AttendanceController extends Controller
                 continue;
             }
 
-            // default behavior for unknown/null machine: treat as punch_in
+            // unknown/null machine
             if ($open !== null) {
                 $segments[] = $open;
             }
-
-            $open = [
-                'employee_id' => $employeeId,
-                'machine_id' => $mid,
-                'attendance_date' => $attendanceDate,
-                'punch_in' => $time,
-                'punch_out' => null,
-                'ip' => $punch->Ip,
-                'employee_name' => $punch->EmployeeName,
-                'group_name' => $punch->GroupName,
-                'is_live' => $punch->Islive ? 1 : 0,
-                'mode' => $mode,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
+            $open = $this->makeSegment($employeeId, $attendanceDate, $mid, $time, $punch, $mode, $now);
         }
 
         if ($open !== null) {
@@ -838,11 +884,11 @@ class AttendanceController extends Controller
             $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
 
             if ($machineId === self::MACHINE_ID_PUNCH_IN) {
-                $message = "{$employeeName} has punched in at {$punchTime}.";
+                $message = "*{$employeeName}* has *PUNCHED IN* at {$punchTime}.";
             } elseif ($machineId === self::MACHINE_ID_PUNCH_OUT) {
-                $message = "{$employeeName} has punched out at {$punchTime}.";
+                $message = "*{$employeeName}* has *PUNCHED OUT* at {$punchTime}.";
             } else {
-                $message = "{$employeeName} has punched at {$punchTime}.";
+                $message = "*{$employeeName}* has *PUNCHED* at {$punchTime}.";
             }
 
             /** @var NotificationService $notificationService */
@@ -855,9 +901,51 @@ class AttendanceController extends Controller
                     $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
                 }
             }
+            Punch::where('EmployeeId', $punchData['EmployeeId'])
+                ->where('PunchTime', $punchData['PunchTime'])
+                ->update(['Islive' => false]);
+
         } catch (\Throwable $e) {
             Log::error('Failed to send live punch notification', [
                 'employee_id' => $punchData['EmployeeId'],
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function sendVisitorPunchNotification(array $punchData): void
+    {
+        try {
+            $visitor = Visitor::where('code', $punchData['EmployeeId'])->first();
+
+            if (! $visitor) {
+                return;
+            }
+
+            $visitorName = $visitor->name ?? $punchData['EmployeeName'] ?? 'Visitor #'.$punchData['EmployeeId'];
+            $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
+            $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
+
+            if ($machineId === self::MACHINE_ID_PUNCH_IN) {
+                $message = "*{$visitorName}* (Visitor) has *PUNCHED IN* at {$punchTime}.";
+            } elseif ($machineId === self::MACHINE_ID_PUNCH_OUT) {
+                $message = "*{$visitorName}* (Visitor) has *PUNCHED OUT* at {$punchTime}.";
+            } else {
+                $message = "*{$visitorName}* (Visitor) has *PUNCHED* at {$punchTime}.";
+            }
+
+            /** @var NotificationService $notificationService */
+            $notificationService = app(NotificationService::class);
+
+            // Send to default office notification number
+            $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
+
+            VisitorPunch::where('visitor_code', $punchData['EmployeeId'])
+                ->where('punch_time', $punchData['PunchTime'])
+                ->update(['is_live' => false]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to send visitor punch notification', [
+                'visitor_code' => $punchData['EmployeeId'],
                 'error' => $e->getMessage(),
             ]);
         }
