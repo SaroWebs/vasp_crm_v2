@@ -14,6 +14,11 @@ interface AttendanceRecord {
     employee_name?: string;
     mode: string;
     ip?: string;
+    shift_id?: number | null;
+    late_minutes?: number;
+    early_out_minutes?: number;
+    is_late?: boolean;
+    is_early_out?: boolean;
 }
 
 interface AttendanceListProps {
@@ -185,6 +190,11 @@ export function AttendanceList({
                 record.attendance_date,
                 record.mode,
                 record.ip,
+                record.shift_id?.toString(),
+                record.late_minutes?.toString(),
+                record.early_out_minutes?.toString(),
+                record.is_late ? 'late' : '',
+                record.is_early_out ? 'early out' : '',
             ]
                 .filter(Boolean)
                 .join(' ')
@@ -322,6 +332,23 @@ export function AttendanceList({
                                                 {record.mode === 'remote' ? 'Remote' : 'Office'}
                                             </span>
                                         </div>
+                                    </div>
+                                    <div className="mb-1 mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                                        {record.shift_id ? (
+                                            <span className="rounded border px-1 text-gray-500">
+                                                Shift #{record.shift_id}
+                                            </span>
+                                        ) : (
+                                            <span className="rounded border px-1 text-gray-400">
+                                                No Shift
+                                            </span>
+                                        )}
+                                        <span className={`rounded border px-1 ${record.is_late ? 'border-yellow-500 text-yellow-700' : 'text-gray-400'}`}>
+                                            Late: {record.late_minutes ?? 0}m
+                                        </span>
+                                        <span className={`rounded border px-1 ${record.is_early_out ? 'border-orange-500 text-orange-700' : 'text-gray-400'}`}>
+                                            Early-out: {record.early_out_minutes ?? 0}m
+                                        </span>
                                     </div>
                                 </div>
                             );

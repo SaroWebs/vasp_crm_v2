@@ -49,6 +49,11 @@ class Employee extends Model
         return $this->hasMany(Attendance::class, 'employee_id', 'code');
     }
 
+    public function shiftAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeShiftAssignment::class);
+    }
+
     public function category()
     {
         $cat_id = $this->category_id;

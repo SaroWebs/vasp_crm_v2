@@ -10,6 +10,7 @@ import { MonthYearPicker } from './MonthYearPicker';
 import { AttendanceCalendarGrid } from './AttendanceCalendarGrid';
 import { PunchWidget } from './PunchWidget';
 import { EmployeeSelector } from './EmployeeSelector';
+import { AttendanceSummaryCards } from './AttendanceSummaryCards';
 import { type SharedData } from '@/types';
 
 interface AttendanceRecord {
@@ -55,6 +56,9 @@ interface AttendanceSummary {
     present_days: number;
     absent_days: number;
     late_days: number;
+    early_out_days: number;
+    total_late_minutes: number;
+    total_early_out_minutes: number;
     total_hours: number;
 }
 
@@ -63,11 +67,14 @@ const defaultSummary: AttendanceSummary = {
     present_days: 0,
     absent_days: 0,
     late_days: 0,
+    early_out_days: 0,
+    total_late_minutes: 0,
+    total_early_out_minutes: 0,
     total_hours: 0,
 };
 
 interface AttendanceCalendarProps {
-    auth?: any;
+    auth?: SharedData['auth'];
     employeeId?: number | null;
 }
 
@@ -218,10 +225,14 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
             return [];
         }
         return roles
-            .map((role: any) => {
+            .map((role: unknown) => {
                 if (!role) return '';
                 if (typeof role === 'string') return role.toLowerCase();
-                return (role.slug || role.name || '').toString().toLowerCase();
+                if (typeof role === 'object' && role !== null) {
+                    const roleObj = role as { slug?: string; name?: string };
+                    return (roleObj.slug || roleObj.name || '').toString().toLowerCase();
+                }
+                return '';
             })
             .filter(Boolean);
     }, [currentAuth?.user?.roles]);
@@ -245,11 +256,12 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
 
         // For regular employees, if no employeeId is specified, it's their own record
         return true;
-    }, [employeeId, employee?.id, canManageAttendance]);
+    }, [employeeId, employee, canManageAttendance]);
 
     const [month, setMonth] = useState(today.getMonth() + 1);
     const [year, setYear] = useState(today.getFullYear());
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
+    const [summary, setSummary] = useState<AttendanceSummary>(defaultSummary);
     const [calendarMeta, setCalendarMeta] = useState<AttendanceCalendarMeta | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -263,6 +275,7 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
     const fetchAttendance = useCallback(async () => {
         if (!selectedEmployeeId) {
             setRecords([]);
+            setSummary(defaultSummary);
             setCalendarMeta(null);
             setLoading(false);
             return;
@@ -285,6 +298,7 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
             });
             if (response.data.status === 'success') {
                 setRecords(response.data.data || []);
+                setSummary(response.data.summary || defaultSummary);
                 setCalendarMeta(response.data.calendar || null);
             } else {
                 setError(response.data.message || 'Failed to fetch attendance data.');
@@ -297,11 +311,12 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
                         e.response?.data?.message || 'Failed to fetch attendance data.'
             );
             setRecords([]);
+            setSummary(defaultSummary);
             setCalendarMeta(null);
         } finally {
             setLoading(false);
         }
-    }, [selectedEmployeeId, month, year]);
+    }, [selectedEmployeeId, month, year, canManageAttendance, isOwnRecord, employee?.id]);
 
     useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
 
@@ -311,7 +326,7 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
             if (res.data.length > 0) setEmployees(res.data || []);
         }).catch(() => { });
         if (isOwnRecord && employee?.id) setSelectedEmployeeId(employee.id);
-    }, [canManageAttendance]);
+    }, [canManageAttendance, isOwnRecord, employee?.id]);
     const handleDayClick = useCallback((date: string) => {
         setSelectedDate(date);
         setPunchesForDate(records.filter((record) => record.attendance_date === date));
@@ -371,6 +386,8 @@ export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalend
                     )}
                 </CardContent>
             </Card>
+
+            <AttendanceSummaryCards summary={summary} />
 
             {selectedDate && (
                 <DayDetailPanel date={selectedDate} records={punchesForDate} close={() => setSelectedDate(null)} />

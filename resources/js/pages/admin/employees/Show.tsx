@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Edit, User, Mail, Phone, Building } from 'lucide-react';
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
+import EmployeeShiftSummary from '@/components/admin/employees/EmployeeShiftSummary';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -46,8 +47,27 @@ interface Employee {
     updated_at: string;
 }
 
+interface ShiftAssignment {
+    id: number;
+    employee_id: number;
+    shift_id: number;
+    effective_from: string;
+    effective_to: string | null;
+    is_active: boolean;
+    shift?: {
+        id: number;
+        name: string;
+        start_time: string;
+        end_time: string;
+        grace_minutes: number;
+        is_active: boolean;
+    };
+}
+
 interface EmployeesShowProps {
     employee: Employee;
+    currentShiftAssignment?: ShiftAssignment | null;
+    shiftAssignmentHistory?: ShiftAssignment[];
     userPermissions: string[];
 }
 
@@ -159,6 +179,11 @@ export default function EmployeesShow(props: EmployeesShowProps) {
                         </CardContent>
                     </Card>
                 </div>
+
+                <EmployeeShiftSummary
+                    currentShiftAssignment={props.currentShiftAssignment}
+                    shiftAssignmentHistory={props.shiftAssignmentHistory}
+                />
 
                 {/* Employee Progress */}
                 <EmployeeTaskProgress employeeId={employee.id} />

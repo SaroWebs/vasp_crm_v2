@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Punch;
 use App\Models\Visitor;
 use App\Models\VisitorPunch;
+use App\Services\AttendanceCalculationService;
 use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
@@ -107,11 +108,20 @@ class AttendanceController extends Controller
                 'status' => 'success',
                 'employee_id' => $employeeId,
                 'date' => $date->toDateString(),
+                'shift_id' => null,
+                'shift_start' => null,
+                'shift_end' => null,
+                'shift_grace_minutes' => 0,
                 'punch_in' => null,
                 'punch_out' => null,
                 'breaks' => [],
                 'total_break_minutes' => 0,
                 'total_work_minutes' => null,
+                'late_in_minutes' => 0,
+                'early_out_minutes' => 0,
+                'is_late_in' => false,
+                'is_early_out' => false,
+                'overtime_minutes' => 0,
             ];
         }
 
@@ -145,16 +155,41 @@ class AttendanceController extends Controller
         $totalWorkMinutes = $punchOut
             ? (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes
             : null;
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
+        $shiftMetrics = $this->buildShiftMetrics(
+            $date->toDateString(),
+            $punchIn->format('H:i:s'),
+            $punchOut?->format('H:i:s'),
+            $shiftMeta
+        );
+        $overtimeMinutes = $punchOut
+            ? $this->calculateOvertimeMinutes($employeeId, $date->toDateString(), $punchOut->format('H:i:s'), $totalWorkMinutes)
+            : 0;
 
         return [
             'status' => 'success',
             'employee_id' => $employeeId,
             'date' => $date->toDateString(),
+            'shift_id' => $shiftMeta['shift_id'],
+            'shift_start' => $shiftMeta['start_time'],
+            'shift_end' => $shiftMeta['end_time'],
+            'shift_grace_minutes' => $shiftMeta['grace_minutes'],
             'punch_in' => $punchIn->toDateTimeString(),
             'punch_out' => $punchOut?->toDateTimeString(),
             'breaks' => $breaks,
             'total_break_minutes' => $totalBreakMinutes,
             'total_work_minutes' => $totalWorkMinutes,
+            'early_in_minutes' => $shiftMetrics['early_in_minutes'],
+            'late_in_minutes' => $shiftMetrics['late_in_minutes'],
+            'early_out_minutes' => $shiftMetrics['early_out_minutes'],
+            'late_out_minutes' => $shiftMetrics['late_out_minutes'],
+            'is_early_in' => $shiftMetrics['is_early_in'],
+            'is_late_in' => $shiftMetrics['is_late_in'],
+            'is_early_out' => $shiftMetrics['is_early_out'],
+            'is_late_out' => $shiftMetrics['is_late_out'],
+            'late_minutes' => $shiftMetrics['late_in_minutes'],
+            'is_late' => $shiftMetrics['is_late_in'],
+            'overtime_minutes' => $overtimeMinutes,
         ];
     }
 
@@ -287,6 +322,7 @@ class AttendanceController extends Controller
             ->orderBy('attendance_date')
             ->orderBy('punch_in')
             ->get();
+        $attendanceData = $attendance->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
         $month = $validated['month'] ?? (int) date('m');
         $year = $validated['year'] ?? (int) date('Y');
@@ -298,7 +334,7 @@ class AttendanceController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Employee attendance fetched successfully.',
-            'data' => $attendance,
+            'data' => $attendanceData,
             'summary' => $summary,
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
@@ -406,6 +442,7 @@ class AttendanceController extends Controller
             ->orderBy('attendance_date')
             ->orderBy('punch_in')
             ->get();
+        $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
         $summary = $this->computeSummary($records, $month, $year);
 
@@ -415,7 +452,7 @@ class AttendanceController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Attendance fetched successfully.',
-            'data' => $records,
+            'data' => $recordsData,
             'summary' => $summary,
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
@@ -446,6 +483,7 @@ class AttendanceController extends Controller
             ->orderBy('attendance_date')
             ->orderBy('punch_in')
             ->get();
+        $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
         $summary = $this->computeSummary($records, $month, $year);
 
@@ -455,7 +493,7 @@ class AttendanceController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Attendance fetched successfully.',
-            'data' => $records,
+            'data' => $recordsData,
             'summary' => $summary,
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
@@ -524,18 +562,21 @@ class AttendanceController extends Controller
             ], 422);
         }
 
+        $attendanceDate = Carbon::parse($request->attendance_date)->toDateString();
+        $punchIn = Carbon::createFromFormat('H:i', $request->punch_in)->format('H:i:s');
+        $punchOut = $request->punch_out
+            ? Carbon::createFromFormat('H:i', $request->punch_out)->format('H:i:s')
+            : null;
         $attendance = Attendance::updateOrCreate(
             [
                 'employee_id' => $employee->code,
-                'attendance_date' => Carbon::parse($request->attendance_date)->toDateString(),
+                'attendance_date' => $attendanceDate,
             ],
             [
                 'employee_name' => $employee->name,
                 'mode' => $request->mode ?? 'office',
-                'punch_in' => Carbon::createFromFormat('H:i', $request->punch_in)->format('H:i:s'),
-                'punch_out' => $request->punch_out
-                    ? Carbon::createFromFormat('H:i', $request->punch_out)->format('H:i:s')
-                    : null,
+                'punch_in' => $punchIn,
+                'punch_out' => $punchOut,
             ]
         );
 
@@ -584,7 +625,7 @@ class AttendanceController extends Controller
                 }
             }
 
-            return $attendance;
+            return $this->decorateAttendanceWithShiftMetrics($attendance);
         });
 
         return response()->json([
@@ -598,7 +639,7 @@ class AttendanceController extends Controller
      * Compute summary stats for a collection of attendance records for a given month.
      *
      * @param  Collection<int, Attendance>  $records
-     * @return array{total_working_days: int, present_days: int, absent_days: int, late_days: int, total_hours: float}
+     * @return array{total_working_days: int, present_days: int, absent_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_hours: float}
      */
     private function computeSummary(Collection $records, int $month, int $year): array
     {
@@ -624,23 +665,33 @@ class AttendanceController extends Controller
         $presentDays = $records->groupBy('attendance_date')->count();
         $absentDays = max(0, $totalWorkingDays - $presentDays);
 
-        // Late = punch_in after configured workday start time for the first punch of each day
-        $lateDays = $records->groupBy('attendance_date')->filter(function (Collection $group) use ($workingHoursService) {
+        $dailyShiftMetrics = $records->groupBy('attendance_date')->map(function (Collection $group) {
             $record = $group->sortBy('punch_in')->first();
 
             if (! $record || ! $record->punch_in || ! $record->attendance_date) {
-                return false;
+                return [
+                    'is_late_in' => false,
+                    'is_early_in' => false,
+                    'is_early_out' => false,
+                    'is_late_out' => false,
+                    'late_in_minutes' => 0,
+                    'early_in_minutes' => 0,
+                    'early_out_minutes' => 0,
+                    'late_out_minutes' => 0,
+                ];
             }
 
             $date = Carbon::parse($record->attendance_date);
-            $workingHours = $workingHoursService->getWorkingHoursForDate($date);
+            $attendanceDate = $date->toDateString();
+            $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $record->employee_id, $attendanceDate);
 
-            if (! $workingHours['start']) {
-                return false;
-            }
+            return $this->buildShiftMetrics($attendanceDate, $record->punch_in, $record->punch_out, $shiftMeta);
+        });
 
-            return $record->punch_in > $workingHours['start']->format('H:i:s');
-        })->count();
+        $lateDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_late_in'])->count();
+        $earlyOutDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_early_out'])->count();
+        $totalLateMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_in_minutes']);
+        $totalEarlyOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_out_minutes']);
 
         // Total hours = sum of (punch_out - punch_in) in hours
         $totalHours = $records->sum(function (Attendance $record) {
@@ -660,6 +711,9 @@ class AttendanceController extends Controller
             'present_days' => $presentDays,
             'absent_days' => $absentDays,
             'late_days' => $lateDays,
+            'early_out_days' => $earlyOutDays,
+            'total_late_minutes' => $totalLateMinutes,
+            'total_early_out_minutes' => $totalEarlyOutMinutes,
             'total_hours' => round($totalHours, 2),
         ];
     }
@@ -849,6 +903,57 @@ class AttendanceController extends Controller
         }
 
         return $query->exists();
+    }
+
+    /**
+     * Resolve the effective attendance schedule for an employee and date.
+     * Uses shift assignment if available, otherwise falls back to configured working hours.
+     * Holidays and non-working days return a null schedule.
+     *
+     * @return array{shift_id: ?int, start_time: ?string, end_time: ?string, grace_minutes: int, is_half_day: bool}
+     */
+    private function resolveEffectiveShiftForEmployeeDate(string $employeeCode, string $attendanceDate): array
+    {
+        return app(AttendanceCalculationService::class)->resolveEffectiveShiftForEmployeeDate($employeeCode, $attendanceDate);
+    }
+
+    /**
+     * @param  array{shift_id: ?int, start_time: ?string, end_time: ?string, grace_minutes: int, is_half_day: bool}  $shiftMeta
+     * @return array{shift_id: ?int, start_time: ?string, end_time: ?string, is_half_day: bool, scheduled_hours: float, punch_in: ?string, punch_out: ?string, early_in_minutes: int, late_in_minutes: int, early_out_minutes: int, late_out_minutes: int, is_early_in: bool, is_late_in: bool, is_early_out: bool, is_late_out: bool, overtime_minutes: int, total_work_minutes: ?int}
+     */
+    private function buildShiftMetrics(string $attendanceDate, ?string $punchIn, ?string $punchOut, array $shiftMeta): array
+    {
+        return app(AttendanceCalculationService::class)->buildShiftMetrics($attendanceDate, $punchIn, $punchOut, $shiftMeta);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decorateAttendanceWithShiftMetrics(Attendance $attendance): array
+    {
+        $attendanceDate = Carbon::parse($attendance->attendance_date)->toDateString();
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $attendance->employee_id, $attendanceDate);
+        $metrics = $this->buildShiftMetrics($attendanceDate, $attendance->punch_in, $attendance->punch_out, $shiftMeta);
+
+        return array_merge($attendance->toArray(), $metrics);
+    }
+
+    private function calculateOvertimeMinutes(string $employeeId, string $attendanceDate, string $punchOut, ?int $totalWorkMinutes = null): int
+    {
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $attendanceDate);
+
+        if (! $shiftMeta['end_time']) {
+            return 0;
+        }
+
+        $scheduledOut = Carbon::parse($attendanceDate.' '.$shiftMeta['end_time']);
+        $actualOut = Carbon::parse($attendanceDate.' '.$punchOut);
+
+        if ($actualOut->lte($scheduledOut)) {
+            return 0;
+        }
+
+        return $scheduledOut->diffInMinutes($actualOut);
     }
 
     /**

@@ -308,8 +308,24 @@ class EmployeeController extends Controller
         }]);
         $employee->category = $employee->category();
 
+        $activeShiftAssignment = EmployeeShiftAssignment::query()
+            ->with('shift')
+            ->where('employee_id', $employee->id)
+            ->where('is_active', true)
+            ->latest('effective_from')
+            ->first();
+
+        $recentShiftAssignments = EmployeeShiftAssignment::query()
+            ->with('shift')
+            ->where('employee_id', $employee->id)
+            ->orderByDesc('effective_from')
+            ->limit(5)
+            ->get();
+
         return Inertia::render('admin/employees/Show', [
             'employee' => $employee,
+            'currentShiftAssignment' => $activeShiftAssignment,
+            'shiftAssignmentHistory' => $recentShiftAssignments,
         ]);
     }
 

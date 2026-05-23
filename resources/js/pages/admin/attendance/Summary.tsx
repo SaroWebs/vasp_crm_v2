@@ -27,6 +27,9 @@ interface EmployeeSummary {
         present_days: number;
         absent_days: number;
         late_days: number;
+        early_out_days: number;
+        total_late_minutes: number;
+        total_early_out_minutes: number;
         total_hours: number;
     };
 }
@@ -62,7 +65,7 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
     const fetchSummaries = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await axios.get('/api/attendance/summary', {
+            const response = await axios.get('/admin/api/attendance/summary', {
                 params: { month, year },
             });
 
@@ -87,13 +90,16 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
     };
 
     const handleExportCSV = () => {
-        const headers = ['Employee', 'Department', 'Present', 'Absent', 'Late', 'Total Hours'];
+        const headers = ['Employee', 'Department', 'Present', 'Absent', 'Late', 'Early Out', 'Late Minutes', 'Early-Out Minutes', 'Total Hours'];
         const rows = summaries.map((emp) => [
             emp.name,
             emp.department || 'N/A',
             emp.summary.present_days,
             emp.summary.absent_days,
             emp.summary.late_days,
+            emp.summary.early_out_days,
+            emp.summary.total_late_minutes,
+            emp.summary.total_early_out_minutes,
             emp.summary.total_hours.toFixed(1),
         ]);
 
@@ -112,13 +118,16 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
     const totalPresent = summaries.reduce((sum, emp) => sum + emp.summary.present_days, 0);
     const totalAbsent = summaries.reduce((sum, emp) => sum + emp.summary.absent_days, 0);
     const totalLate = summaries.reduce((sum, emp) => sum + emp.summary.late_days, 0);
+    const totalEarlyOut = summaries.reduce((sum, emp) => sum + emp.summary.early_out_days, 0);
+    const totalLateMinutes = summaries.reduce((sum, emp) => sum + emp.summary.total_late_minutes, 0);
+    const totalEarlyOutMinutes = summaries.reduce((sum, emp) => sum + emp.summary.total_early_out_minutes, 0);
     const totalHours = summaries.reduce((sum, emp) => sum + emp.summary.total_hours, 0);
 
     return (
         <>
             <Head title="Attendance Summary" />
             <AppLayout breadcrumbs={breadcrumbs}>
-                <div className="space-y-6">
+                <div className="space-y-6 p-4">
                     <div className="flex items-center justify-between">
                         <h1 className="text-2xl font-semibold">Attendance Summary</h1>
                         <div className="flex items-center gap-4">
@@ -138,7 +147,7 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
                         <Card className="border-none shadow-sm">
                             <CardContent className="p-4">
                                 <p className="text-sm text-muted-foreground">Total Employees</p>
@@ -159,8 +168,32 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
                         </Card>
                         <Card className="border-none shadow-sm">
                             <CardContent className="p-4">
+                                <p className="text-sm text-muted-foreground">Total Late</p>
+                                <p className="text-2xl font-semibold text-yellow-600">{totalLate}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-none shadow-sm">
+                            <CardContent className="p-4">
                                 <p className="text-sm text-muted-foreground">Total Hours</p>
                                 <p className="text-2xl font-semibold text-blue-600">{totalHours.toFixed(1)}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-none shadow-sm">
+                            <CardContent className="p-4">
+                                <p className="text-sm text-muted-foreground">Total Early Out</p>
+                                <p className="text-2xl font-semibold text-orange-600">{totalEarlyOut}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-none shadow-sm">
+                            <CardContent className="p-4">
+                                <p className="text-sm text-muted-foreground">Late Minutes</p>
+                                <p className="text-2xl font-semibold text-yellow-700">{totalLateMinutes}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-none shadow-sm">
+                            <CardContent className="p-4">
+                                <p className="text-sm text-muted-foreground">Early-Out Minutes</p>
+                                <p className="text-2xl font-semibold text-amber-700">{totalEarlyOutMinutes}</p>
                             </CardContent>
                         </Card>
                     </div>
@@ -183,6 +216,9 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
                                             <TableHead className="text-center">Present</TableHead>
                                             <TableHead className="text-center">Absent</TableHead>
                                             <TableHead className="text-center">Late</TableHead>
+                                            <TableHead className="text-center">Early Out</TableHead>
+                                            <TableHead className="text-center">Late Min</TableHead>
+                                            <TableHead className="text-center">Early-Out Min</TableHead>
                                             <TableHead className="text-center">Total Hours</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
@@ -191,7 +227,7 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
                                         {summaries.length === 0 ? (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={7}
+                                                    colSpan={10}
                                                     className="text-center text-muted-foreground"
                                                 >
                                                     No attendance data for this period
@@ -217,6 +253,21 @@ export default function AdminAttendanceSummaryPage(_props: AdminAttendanceSummar
                                                     <TableCell className="text-center">
                                                         <span className="text-yellow-600 font-medium">
                                                             {emp.summary.late_days}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className="text-orange-600 font-medium">
+                                                            {emp.summary.early_out_days}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className="text-yellow-700 font-medium">
+                                                            {emp.summary.total_late_minutes}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className="text-amber-700 font-medium">
+                                                            {emp.summary.total_early_out_minutes}
                                                         </span>
                                                     </TableCell>
                                                     <TableCell className="text-center">

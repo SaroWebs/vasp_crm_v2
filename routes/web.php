@@ -17,7 +17,6 @@ use App\Http\Controllers\ClientSsoController;
 use App\Http\Controllers\CommentAttachmentController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
-use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\EmployeeProgressController;
 use App\Http\Controllers\MenuManagementController;
 use App\Http\Controllers\NotificationController;
@@ -31,6 +30,7 @@ use App\Http\Controllers\ProjectPhaseController;
 use App\Http\Controllers\ProjectTimelineController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\TaskAssignmentController;
 use App\Http\Controllers\TaskAttachmentController;
 use App\Http\Controllers\TaskCommentController;
@@ -42,6 +42,7 @@ use App\Http\Controllers\TimelineEventController;
 use App\Http\Controllers\TimeTrackingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserTaskController;
+use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\WorkloadMatrixController;
 use App\Models\Client;
 use Illuminate\Http\Request;
@@ -400,6 +401,17 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::get('/api/attendance/date', [AttendanceController::class, 'getAttendanceByDate'])->name('api.attendance.byDate');
         Route::post('/api/attendance/{employee}/override', [AttendanceController::class, 'adminOverrideAttendance'])->name('api.attendance.override');
         Route::delete('/api/attendance/{attendance}', [AttendanceController::class, 'adminDeleteAttendance'])->name('api.attendance.delete');
+
+        Route::get('/shifts', [ShiftController::class, 'index'])->name('shifts.index');
+        Route::get('/api/shifts', [ShiftController::class, 'shifts'])->name('api.shifts.list');
+        Route::post('/api/shifts', [ShiftController::class, 'storeShift'])->name('api.shifts.store');
+        Route::patch('/api/shifts/{shift}', [ShiftController::class, 'updateShift'])->name('api.shifts.update');
+        Route::delete('/api/shifts/{shift}', [ShiftController::class, 'destroyShift'])->name('api.shifts.destroy');
+        Route::get('/api/shift-assignments', [ShiftController::class, 'assignments'])->name('api.shift-assignments.list');
+        Route::post('/api/shift-assignments', [ShiftController::class, 'storeAssignment'])->name('api.shift-assignments.store');
+        Route::patch('/api/shift-assignments/{assignment}', [ShiftController::class, 'updateAssignment'])->name('api.shift-assignments.update');
+        Route::delete('/api/shift-assignments/{assignment}', [ShiftController::class, 'destroyAssignment'])->name('api.shift-assignments.destroy');
+        Route::get('/api/shifts/employees', [ShiftController::class, 'employees'])->name('api.shifts.employees');
 
         // Workload matrix routes
         Route::get('/workload-matrix', [WorkloadMatrixController::class, 'index'])->name('workload-matrix.index');

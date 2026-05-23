@@ -6,7 +6,6 @@ import RecentTicketsWidget from '@/components/dashboard/widgets/RecentTicketsWid
 import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
 import { useDashboardStats } from '@/hooks/use-dashboard-stats';
 import { CheckCircle, Clock, TicketIcon } from 'lucide-react';
-import { AttendanceList } from '../attendance/AttendanceList';
 import DailyAttendancePanel from '../admin/employees/DailyAttendancePanel';
 
 interface AdminDashboardProps {

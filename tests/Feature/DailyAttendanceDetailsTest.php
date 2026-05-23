@@ -23,7 +23,7 @@ class DailyAttendanceDetailsTest extends TestCase
         Punch::create([
             'EmployeeId' => $employee->code,
             'MachineId' => 1,
-            'PunchTime' => '2026-05-01 09:00:00',
+            'PunchTime' => '2026-05-04 09:00:00',
             'Ip' => '127.0.0.1',
             'GroupName' => 'Engineering',
             'EmployeeName' => $employee->name,
@@ -33,7 +33,7 @@ class DailyAttendanceDetailsTest extends TestCase
         Punch::create([
             'EmployeeId' => $employee->code,
             'MachineId' => 1,
-            'PunchTime' => '2026-05-01 17:00:00',
+            'PunchTime' => '2026-05-04 23:00:00',
             'Ip' => '127.0.0.1',
             'GroupName' => 'Engineering',
             'EmployeeName' => $employee->name,
@@ -41,7 +41,7 @@ class DailyAttendanceDetailsTest extends TestCase
         ]);
 
         $controller = new AttendanceController;
-        $request = Request::create('/api/daily/attendance', 'GET', ['date' => '2026-05-01']);
+        $request = Request::create('/api/daily/attendance', 'GET', ['date' => '2026-05-04']);
 
         $response = $controller->getDailyDetails($request);
 
@@ -49,16 +49,17 @@ class DailyAttendanceDetailsTest extends TestCase
 
         $payload = json_decode($response->getContent(), true);
 
-        $this->assertSame('2026-05-01', $payload['date']);
+        $this->assertSame('2026-05-04', $payload['date']);
         $this->assertCount(1, $payload['records']);
 
         $record = $payload['records'][0];
 
         $this->assertSame('Alice Example', $record['employee_name']);
         $this->assertSame('1001', $record['employee_id']);
-        $this->assertSame('2026-05-01 09:00:00', $record['punch_in']);
-        $this->assertSame('2026-05-01 17:00:00', $record['punch_out']);
+        $this->assertSame('2026-05-04 09:00:00', $record['punch_in']);
+        $this->assertSame('2026-05-04 23:00:00', $record['punch_out']);
         $this->assertSame(0, $record['total_break_minutes']);
-        $this->assertSame(480, $record['total_work_minutes']);
+        $this->assertSame(840, $record['total_work_minutes']);
+        $this->assertGreaterThan(0, $record['overtime_minutes']);
     }
 }

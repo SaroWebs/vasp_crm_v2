@@ -15,11 +15,24 @@ export interface AttendanceRecord {
     employee_id: string | number;
     employee_name: string;
     status?: string;
+    shift_id: number | null;
+    shift_start: string | null;
+    shift_end: string | null;
+    shift_grace_minutes: number;
     punch_in: string | null;
     punch_out: string | null;
     breaks: BreakSlot[];
     total_break_minutes: number;
     total_work_minutes: number | null;
+    early_in_minutes: number;
+    late_in_minutes: number;
+    early_out_minutes: number;
+    late_out_minutes: number;
+    is_early_in: boolean;
+    is_late_in: boolean;
+    is_early_out: boolean;
+    is_late_out: boolean;
+    overtime_minutes: number;
     office: string;
 }
 
@@ -45,22 +58,13 @@ function fmtTime(datetimeStr: string): string {
     return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function initials(name: string): string {
-    return name
-        .split(' ')
-        .map((w) => w[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
-}
-
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SkeletonRow() {
     return (
         <tr className="border-b border-gray-100 dark:border-gray-800">
-            {Array.from({ length: 7 }).map((_, i) => (
+            {Array.from({ length: 9 }).map((_, i) => (
                 <td key={i} className="px-4 py-3">
                     <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
                 </td>
@@ -75,27 +79,24 @@ export default function DailyAttendancePanel() {
 
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [data, setData] = useState<AttendanceRecord[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
-    const handleDateChange = async (newDate: string | Date, offsetDays = 0) => {
+    const handleDateChange = (newDate: string | Date, offsetDays = 0) => {
         const date = dayjs(newDate).add(offsetDays, 'day');
         const formattedDate = date.format('YYYY-MM-DD');
-
-        setSelectedDate(formattedDate);
         setLoading(true);
+        setSelectedDate(formattedDate);
+    };
 
-        axios.get(`/api/daily/attendance?date=${formattedDate}`).then(res => {
+    useEffect(() => {
+        axios.get(`/api/daily/attendance?date=${selectedDate}`).then(res => {
             setData(res.data?.records);
         }).catch(err => {
             console.error("Error fetching attendance data:", err);
         }).finally(() => {
             setLoading(false);
         });
-    };
-
-    useEffect(() => {
-        handleDateChange(selectedDate);
-    }, []);
+    }, [selectedDate]);
 
 
     const [search, setSearch] = useState('');
@@ -191,10 +192,12 @@ export default function DailyAttendancePanel() {
                         <tr>
                             <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 min-w-[200px]">Employee</th>
                             <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 w-[110px]">Office</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 w-[170px]">Shift / Late-Early</th>
                             <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 w-[100px]">Punch in</th>
                             <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 w-[100px]">Punch out</th>
                             <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 min-w-[200px]">Breaks</th>
                             <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 w-[100px]">Work hrs</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 w-[110px]">Overtime</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -202,7 +205,7 @@ export default function DailyAttendancePanel() {
                             Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                         ) : filtered.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="text-center py-10 text-sm text-gray-400">
+                                <td colSpan={8} className="text-center py-10 text-sm text-gray-400">
                                     No records found.
                                 </td>
                             </tr>
@@ -237,6 +240,48 @@ export default function DailyAttendancePanel() {
                                             </span>
                                         </td>
 
+                                        {/* Shift + Late/Early */}
+                                        <td className="px-4 py-2.5">
+                                            <div className="space-y-1 text-[11px]">
+                                                <div className="text-gray-700 dark:text-gray-300">
+                                                    {record.shift_start && record.shift_end ? (
+                                                        <>
+                                                            {record.shift_start.slice(0, 5)}-{record.shift_end.slice(0, 5)}
+                                                            {' '}
+                                                            {record.shift_grace_minutes > 0 && (
+                                                                <span className="text-gray-400">(±:{record.shift_grace_minutes}m)</span>
+                                                            )}
+                                                            
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-gray-400">No shift</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {record.is_early_in && record.early_in_minutes > 0 && (
+                                                        <span className="rounded border border-blue-500 px-1 text-blue-700">
+                                                            Early in {record.early_in_minutes.toFixed(1)}m
+                                                        </span>
+                                                    )}
+                                                    {record.is_late_in && record.late_in_minutes > 0 && (
+                                                        <span className="rounded border border-yellow-500 px-1 text-yellow-700">
+                                                            Late in {record.late_in_minutes.toFixed(1)}m
+                                                        </span>
+                                                    )}
+                                                    {record.is_early_out && record.early_out_minutes > 0 && (
+                                                        <span className="rounded border border-orange-500 px-1 text-orange-700">
+                                                            Early out {record.early_out_minutes.toFixed(1)}m
+                                                        </span>
+                                                    )}
+                                                    {record.is_late_out && record.late_out_minutes > 0 && (
+                                                        <span className="rounded border border-green-500 px-1 text-green-700">
+                                                            Late out {record.late_out_minutes.toFixed(1)}m
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+
 
                                         {/* Punch in */}
                                         <td className="px-4 py-2.5">
@@ -266,7 +311,7 @@ export default function DailyAttendancePanel() {
                                                 <div className="flex flex-wrap gap-1">
                                                     {record.breaks.map((b, i) => {
                                                         if (b.duration_minutes < 1) return null;
-                                                        let label = `${fmtTime(b.break_out)} - ${fmtTime(b.break_in)}`;
+                                                        const label = `${fmtTime(b.break_out)} - ${fmtTime(b.break_in)}`;
                                                         return (
                                                             <Tooltip key={i} className={`text-[8px] font-mono p-1/2`} label={label} color="red">
                                                                 <span className="text-[11px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded border border-gray-200 dark:border-gray-600">
@@ -284,6 +329,13 @@ export default function DailyAttendancePanel() {
                                         {/* Work hours bar */}
                                         <td className="px-4 py-2.5">
                                             <span>{toHours(record.total_work_minutes)}</span>
+                                        </td>
+
+                                        {/* Overtime */}
+                                        <td className="px-4 py-2.5">
+                                            <span className={record.overtime_minutes > 0 ? 'font-medium text-green-700 dark:text-green-400' : 'text-gray-400'}>
+                                                {toHours(record.overtime_minutes)}
+                                            </span>
                                         </td>
                                     </tr>
                                 );
