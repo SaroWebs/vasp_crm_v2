@@ -29,7 +29,7 @@ class ReportController extends Controller
 
         $user->loadMissing('roles');
 
-        return $user->hasRole(['super-admin', 'admin']);
+        return $user->hasRole(['super-admin', 'admin', 'manager']);
     }
 
     public function getDailyReportAll($date)
@@ -300,7 +300,7 @@ class ReportController extends Controller
     public function index()
     {
         $user = User::with('roles')->findOrFail(Auth::id());
-        $isAdminView = $user->hasRole(['super-admin', 'admin']);
+        $isAdminView = $user->hasRole(['super-admin', 'admin', 'manager']);
 
         return Inertia::render('admin/reports/Index', [
             'employees' => $isAdminView

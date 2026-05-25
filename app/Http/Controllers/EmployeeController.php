@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
+use App\Models\EmployeeShiftAssignment;
 use App\Models\Office;
 use App\Models\Permission;
 use App\Models\Role;
@@ -119,8 +120,12 @@ class EmployeeController extends Controller
 
         $departments = Department::select('id', 'name')->get();
 
+        // if json expected
+        if ($request->expectsJson()) {
+            return response()->json($employees, 200);
+        }
+
         return Inertia::render('admin/employees/Index', [
-            'employees' => $employees,
             'departments' => $departments,
             'filters' => $request->only(['department_id', 'search']),
             'userPermissions' => $user->getAllPermissions()->pluck('slug'),
@@ -303,10 +308,13 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to view employee.');
         }
 
-        $employee->load(['department', 'user' => function ($q) {
-            $q->withoutGlobalScope('exclude_inactive');
-        }]);
-        $employee->category = $employee->category();
+        $employee->load([
+            'department',
+            'category',
+            'user' => function ($q) {
+                $q->withoutGlobalScope('exclude_inactive');
+            },
+        ]);
 
         $activeShiftAssignment = EmployeeShiftAssignment::query()
             ->with('shift')
@@ -321,6 +329,14 @@ class EmployeeController extends Controller
             ->orderByDesc('effective_from')
             ->limit(5)
             ->get();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'employee' => $employee,
+                'currentShiftAssignment' => $activeShiftAssignment,
+                'shiftAssignmentHistory' => $recentShiftAssignments,
+            ], 200);
+        }
 
         return Inertia::render('admin/employees/Show', [
             'employee' => $employee,

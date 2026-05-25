@@ -54,6 +54,36 @@ class Employee extends Model
         return $this->hasMany(EmployeeShiftAssignment::class);
     }
 
+    public function leaveRequests(): HasMany
+    {
+        return $this->hasMany(LeaveRequest::class);
+    }
+
+    public function leaveBalances(): HasMany
+    {
+        return $this->hasMany(LeaveBalance::class);
+    }
+
+    public function remoteWorkRequests(): HasMany
+    {
+        return $this->hasMany(RemoteWorkRequest::class);
+    }
+
+    public function fieldWorkAssignments(): HasMany
+    {
+        return $this->hasMany(FieldWorkAssignment::class);
+    }
+
+    public function holidayWorkRecords(): HasMany
+    {
+        return $this->hasMany(HolidayWorkRecord::class);
+    }
+
+    public function compensatoryOffs(): HasMany
+    {
+        return $this->hasMany(CompensatoryOff::class);
+    }
+
     public function category()
     {
         $cat_id = $this->category_id;

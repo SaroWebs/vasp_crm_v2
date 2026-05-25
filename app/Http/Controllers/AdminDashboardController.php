@@ -24,10 +24,8 @@ class AdminDashboardController extends Controller
     {
         $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
         $dashboardType = 'employee';
-        if ($user->hasRole(['super-admin', 'admin'])) {
+        if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
             $dashboardType = 'admin';
-        } elseif ($user->hasRole(['manager', 'team-lead'])) {
-            $dashboardType = 'manager';
         }
 
         $dashboardData = [
@@ -42,7 +40,7 @@ class AdminDashboardController extends Controller
     {
         $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
 
-        if ($user->hasRole(['super-admin', 'admin'])) {
+        if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
             $stats = $this->dashboardService->getAdminStats();
         } elseif ($user->hasRole(['manager', 'team-lead', 'hr'])) {
             $stats = $this->dashboardService->getManagerStats($user, $this->dashboardService->getUserDepartmentIds($user));
@@ -62,7 +60,7 @@ class AdminDashboardController extends Controller
     {
         $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
 
-        if ($user->hasRole(['super-admin', 'admin'])) {
+        if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
             $tasks = $this->dashboardService->getRecentTasks();
         } elseif ($user->hasRole(['manager', 'team-lead', 'hr'])) {
             $tasks = $this->dashboardService->getDepartmentTasks($this->dashboardService->getUserDepartmentIds($user));

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Edit, User, Mail, Phone, Building } from 'lucide-react';
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
 import EmployeeShiftSummary from '@/components/admin/employees/EmployeeShiftSummary';
+import { Tabs } from '@mantine/core';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -69,10 +70,16 @@ interface EmployeesShowProps {
     currentShiftAssignment?: ShiftAssignment | null;
     shiftAssignmentHistory?: ShiftAssignment[];
     userPermissions: string[];
+    auth?: {
+        user?: {
+            roles: any[];
+        };
+    };
 }
 
 export default function EmployeesShow(props: EmployeesShowProps) {
-    const { employee, userPermissions = [] } = props;
+    const { employee, userPermissions = [], auth } = props;
+    const isAdmin = auth?.user?.roles.some(role => role.slug === 'super-admin');
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -96,7 +103,7 @@ export default function EmployeesShow(props: EmployeesShowProps) {
                         </div>
                     </div>
 
-                    {userPermissions.includes('employee.update') && (
+                    {(userPermissions.includes('employee.update') || isAdmin) && (
                         <Button asChild>
                             <Link href={`/admin/employees/${employee.id}/edit`}>
                                 <Edit className="mr-2 h-4 w-4" />
@@ -106,125 +113,155 @@ export default function EmployeesShow(props: EmployeesShowProps) {
                     )}
                 </div>
 
-                {/* Employee Information */}
-                <div className="grid gap-6 md:grid-cols-2">
-                    {/* Basic Information */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <User className="h-5 w-5" />
-                                Basic Information
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Name</label>
-                                <p className="text-lg">{employee.name}</p>
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Email</label>
-                                <p className="text-lg flex items-center gap-2">
-                                    <Mail className="h-4 w-4" />
-                                    {employee.email}
-                                </p>
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Employee Code</label>
-                                <p className="text-lg font-mono">{employee.code || '---'}</p>
-                            </div>
-                            {employee.phone && (
-                                <div>
-                                    <label className="text-sm font-medium text-muted-foreground">Phone</label>
-                                    <p className="text-lg flex items-center gap-2">
-                                        <Phone className="h-4 w-4" />
-                                        {employee.phone}
-                                    </p>
-                                </div>
-                            )}
-                            {employee.category && (
-                                <div>
-                                    <label className="text-sm font-medium text-muted-foreground">Category</label>
-                                    <p className="text-lg">{employee.category?.name || '---'}</p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                {/* Mantine tabs */}
+                {/* details, attendance, leaves, shift */}
+                <div className="p-4 rounded-lg border shadow-md">
+                    <Tabs defaultValue="details" className="flex-1">
+                        <Tabs.List className="bg-transparent border-b-2 mb-4">
+                            <Tabs.Tab value="details">Details</Tabs.Tab>
+                            <Tabs.Tab value="attendance">Attendance</Tabs.Tab>
+                            <Tabs.Tab value="leaves">Leaves</Tabs.Tab>
+                            <Tabs.Tab value="shifts">Shifts</Tabs.Tab>
+                            <Tabs.Tab value="progress">Works</Tabs.Tab>
+                        </Tabs.List>
 
-                    {/* Department Information */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Building className="h-5 w-5" />
-                                Department Information
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Department</label>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <Badge variant="outline">{employee.department.name}</Badge>
-                                </div>
+                        <Tabs.Panel value="details" className="pt-4">
+                            {/* Employee details content */}
+                            <div className="grid gap-6 md:grid-cols-2">
+                                {/* Basic Information */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <User className="h-5 w-5" />
+                                            Basic Information
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div>
+                                            <label className="text-sm font-medium text-muted-foreground">Name</label>
+                                            <p className="text-lg">{employee.name}</p>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-muted-foreground">Email</label>
+                                            <p className="text-lg flex items-center gap-2">
+                                                <Mail className="h-4 w-4" />
+                                                {employee.email}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-muted-foreground">Employee Code</label>
+                                            <p className="text-lg font-mono">{employee.code || '---'}</p>
+                                        </div>
+                                        {employee.phone && (
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Phone</label>
+                                                <p className="text-lg flex items-center gap-2">
+                                                    <Phone className="h-4 w-4" />
+                                                    {employee.phone}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {employee.category && (
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Category</label>
+                                                <p className="text-lg">{employee.category?.name || '---'}</p>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                {/* Department Information */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <Building className="h-5 w-5" />
+                                            Department Information
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div>
+                                            <label className="text-sm font-medium text-muted-foreground">Department</label>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Badge variant="outline">{employee.department.name}</Badge>
+                                            </div>
+                                        </div>
+                                        {employee.department.description && (
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Description</label>
+                                                <p className="text-sm mt-1">{employee.department.description}</p>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="text-sm font-medium text-muted-foreground">Associated User</label>
+                                            <p className="text-lg mt-1">{employee.user.name}</p>
+                                            <p className="text-sm text-muted-foreground">{employee.user.email}</p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                                {/* Timestamps */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Timestamps</CardTitle>
+                                        <CardDescription>
+                                            Creation and modification dates
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Created At</label>
+                                                <p className="text-lg">
+                                                    {new Date(employee.created_at).toLocaleDateString('en-US', {
+                                                        year: 'numeric',
+                                                        month: 'long',
+                                                        day: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Updated At</label>
+                                                <p className="text-lg">
+                                                    {new Date(employee.updated_at).toLocaleDateString('en-US', {
+                                                        year: 'numeric',
+                                                        month: 'long',
+                                                        day: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             </div>
-                            {employee.department.description && (
-                                <div>
-                                    <label className="text-sm font-medium text-muted-foreground">Description</label>
-                                    <p className="text-sm mt-1">{employee.department.description}</p>
-                                </div>
-                            )}
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Associated User</label>
-                                <p className="text-lg mt-1">{employee.user.name}</p>
-                                <p className="text-sm text-muted-foreground">{employee.user.email}</p>
+                        </Tabs.Panel>
+
+                        <Tabs.Panel value="attendance" className="pt-4">
+                            <div className="min-h-[300px] w-full">
+                                <span>Coming soon...</span>
                             </div>
-                        </CardContent>
-                    </Card>
+                        </Tabs.Panel>
+
+                        <Tabs.Panel value="leaves" className="pt-4">
+                            <div className="min-h-[300px] w-full">
+                                <span>Coming soon...</span>
+                            </div>
+                        </Tabs.Panel>
+
+                        <Tabs.Panel value="shifts" className="pt-4">
+                            <EmployeeShiftSummary
+                                currentShiftAssignment={props.currentShiftAssignment}
+                                shiftAssignmentHistory={props.shiftAssignmentHistory}
+                            />
+                        </Tabs.Panel>
+                        <Tabs.Panel value="progress" className="pt-4">
+                            {/* Employee Progress */}
+                            <EmployeeTaskProgress employeeId={employee.id} />
+                        </Tabs.Panel>
+                    </Tabs>
                 </div>
-
-                <EmployeeShiftSummary
-                    currentShiftAssignment={props.currentShiftAssignment}
-                    shiftAssignmentHistory={props.shiftAssignmentHistory}
-                />
-
-                {/* Employee Progress */}
-                <EmployeeTaskProgress employeeId={employee.id} />
-
-                {/* Timestamps */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Timestamps</CardTitle>
-                        <CardDescription>
-                            Creation and modification dates
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Created At</label>
-                                <p className="text-lg">
-                                    {new Date(employee.created_at).toLocaleDateString('en-US', {
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    })}
-                                </p>
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Updated At</label>
-                                <p className="text-lg">
-                                    {new Date(employee.updated_at).toLocaleDateString('en-US', {
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    })}
-                                </p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
         </AppLayout>
     );
