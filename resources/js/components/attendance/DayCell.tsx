@@ -7,7 +7,15 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-export type DayStatus = 'present' | 'absent' | 'late' | 'weekend' | 'holiday' | 'empty' | 'today';
+export type DayStatus =
+    | 'present'
+    | 'absent'
+    | 'late'
+    | 'half_day'
+    | 'weekend'
+    | 'holiday'
+    | 'empty'
+    | 'today';
 
 export interface WorkingHoursForDay {
     start: string | null;
@@ -30,6 +38,7 @@ interface DayCellProps {
         punch_in: string | null;
         punch_out: string | null;
         mode: string;
+        is_half_day?: boolean;
     } | null;
     holiday?: Holiday;
     workingHours?: WorkingHoursForDay;
@@ -37,30 +46,41 @@ interface DayCellProps {
 }
 
 const statusStyles: Record<DayStatus, string> = {
-    present: 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-900',
-    absent: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900',
-    late: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900',
+    present:
+        'bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-900',
+    absent:
+        'bg-red-50 text-red-900 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900',
+    late: 'bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900',
+    half_day:
+        'bg-sky-50 text-sky-900 border-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-900',
     weekend: 'bg-muted/40 text-muted-foreground border-border/60',
-    holiday: 'bg-purple-50 text-purple-800 border-purple-200 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-900',
-    empty: 'bg-transparent',
+    holiday:
+        'bg-purple-50 text-purple-900 border-purple-200 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-900',
+    empty: 'bg-transparent border-transparent',
     today: '',
 };
 
 const dotStyles: Record<DayStatus, string> = {
-    present: 'bg-emerald-600',
-    absent: 'bg-red-600',
-    late: 'bg-amber-600',
+    present: 'bg-emerald-500',
+    absent: 'bg-red-500',
+    late: 'bg-amber-500',
+    half_day: 'bg-sky-500',
     weekend: 'bg-muted-foreground/40',
-    holiday: 'bg-purple-600',
+    holiday: 'bg-purple-500',
     empty: 'bg-transparent',
     today: 'bg-primary',
 };
 
-function formatTime(time: string | null): string | null {
-    if (!time) {
-        return null;
-    }
+const statusBadge: Partial<Record<DayStatus, string>> = {
+    present: 'P',
+    absent: 'A',
+    late: 'L',
+    half_day: '½',
+    holiday: 'H',
+};
 
+function formatTime(time: string | null): string | null {
+    if (!time) return null;
     return time.slice(0, 5);
 }
 
@@ -72,6 +92,8 @@ function getStatusLabel(status: DayStatus): string {
             return 'Absent';
         case 'late':
             return 'Late';
+        case 'half_day':
+            return 'Half Day';
         case 'weekend':
             return 'Non-working day';
         case 'holiday':
@@ -95,18 +117,13 @@ export function DayCell({
     workingHours,
     onClick,
 }: DayCellProps) {
-    if (day === null) {
-        return <div className="aspect-square w-full" />;
-    }
-
+    // ✅ FIX: All hooks must be called unconditionally before any early returns
     const buttonRef = useRef<HTMLButtonElement | null>(null);
     const [isCompact, setIsCompact] = useState(false);
 
     useEffect(() => {
         const element = buttonRef.current;
-        if (!element) {
-            return;
-        }
+        if (!element) return;
 
         const COMPACT_THRESHOLD_PX = 56;
 
@@ -116,22 +133,23 @@ export function DayCell({
         };
 
         update();
-
         const observer = new ResizeObserver(() => update());
         observer.observe(element);
-
-        return () => {
-            observer.disconnect();
-        };
+        return () => observer.disconnect();
     }, []);
+
+    if (day === null) {
+        return <div className="aspect-square w-full" />;
+    }
 
     const punchIn = formatTime(record?.punch_in ?? null);
     const punchOut = formatTime(record?.punch_out ?? null);
     const workingHoursLabel =
-        workingHours?.start && workingHours?.end ? `${workingHours.start}-${workingHours.end}` : null;
-    const metaLabel =
-        holiday?.name ??
-        (status === 'weekend' ? 'Off' : null);
+        workingHours?.start && workingHours?.end
+            ? `${workingHours.start.slice(0, 5)}–${workingHours.end.slice(0, 5)}`
+            : null;
+    const metaLabel = holiday?.name ?? (status === 'weekend' ? 'Off' : null);
+    const badge = statusBadge[status];
 
     const cell = (
         <button
@@ -141,58 +159,108 @@ export function DayCell({
             disabled={!onClick}
             className={cn(
                 '[container-type:inline-size]',
-                'relative aspect-square w-full rounded-md border text-left transition-colors',
-                'p-[clamp(4px,1.2cqw,10px)]',
+                'relative aspect-square w-full rounded-lg border text-left transition-all duration-150',
+                'p-[clamp(3px,1.2cqw,10px)]',
                 statusStyles[status],
                 !isCurrentMonth && 'opacity-30',
-                onClick && 'cursor-pointer hover:opacity-90',
+                onClick && 'cursor-pointer hover:brightness-95 hover:shadow-sm',
                 !onClick && 'cursor-default',
-                isToday && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                isToday &&
+                    'ring-2 ring-primary ring-offset-1 ring-offset-background shadow-sm',
+                status === 'empty' && 'pointer-events-none',
             )}
         >
-            <div className="flex items-start justify-between gap-2">
-                <div className="text-[clamp(10px,45cqw,72px)] font-semibold leading-none">
+            {/* Day number + badge row */}
+            <div className="flex items-start justify-between">
+                <span className="text-[clamp(10px,40cqw,60px)] font-bold leading-none tabular-nums">
                     {day}
-                </div>
+                </span>
+                {badge && !isCompact && (
+                    <span
+                        className={cn(
+                            'flex h-[clamp(10px,14cqw,18px)] w-[clamp(10px,14cqw,18px)] items-center justify-center rounded-full text-[clamp(7px,8cqw,10px)] font-semibold text-white leading-none',
+                            dotStyles[status],
+                        )}
+                    >
+                        {badge}
+                    </span>
+                )}
             </div>
 
+            {/* Meta info — only when not compact */}
             {!isCompact && (
-                <div className="mt-[clamp(2px,0.8cqw,6px)] space-y-0.5 text-[clamp(9px,10cqw,48px)] leading-tight text-muted-foreground">
-                    <div className="truncate">{metaLabel}</div>
-
+                <div className="mt-[clamp(2px,0.8cqw,6px)] space-y-0.5">
+                    {metaLabel && (
+                        <div className="truncate text-[clamp(8px,9cqw,11px)] leading-tight opacity-70">
+                            {metaLabel}
+                        </div>
+                    )}
                     {(punchIn || punchOut) && (
-                        <div className="truncate">
-                            {punchIn ?? '--:--'} - {punchOut ?? '--:--'}
+                        <div className="truncate text-[clamp(8px,8cqw,10px)] leading-tight tabular-nums opacity-60">
+                            {punchIn ?? '--:--'}–{punchOut ?? '--:--'}
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* Today dot indicator */}
+            {isToday && (
+                <span className="absolute bottom-[clamp(2px,0.6cqw,4px)] right-[clamp(2px,0.6cqw,4px)] h-[clamp(4px,1cqw,6px)] w-[clamp(4px,1cqw,6px)] rounded-full bg-primary" />
             )}
         </button>
     );
 
-    if (!date) {
-        return cell;
-    }
+    if (!date) return cell;
 
     return (
-        <TooltipProvider delayDuration={0}>
+        <TooltipProvider delayDuration={100}>
             <Tooltip>
                 <TooltipTrigger asChild>{cell}</TooltipTrigger>
-                <TooltipContent className="max-w-[240px] space-y-1">
-                    <div className="text-xs font-semibold">{date}</div>
-                    <div className="text-xs text-muted-foreground">{getStatusLabel(status)}</div>
-                    {holiday?.name && <div className="text-xs">Holiday: {holiday.name}</div>}
-                    {workingHoursLabel && (
-                        <div className="text-xs text-muted-foreground">
-                            Working hours: {workingHoursLabel}
+                <TooltipContent
+                    side="top"
+                    className="max-w-[220px] rounded-lg border bg-popover p-3 shadow-md space-y-1.5"
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold">{date}</span>
+                        <span
+                            className={cn(
+                                'rounded px-1.5 py-0.5 text-[10px] font-medium text-white',
+                                dotStyles[status],
+                            )}
+                        >
+                            {getStatusLabel(status)}
+                        </span>
+                    </div>
+
+                    {holiday?.name && (
+                        <div className="text-xs text-purple-600 dark:text-purple-400">
+                            🎉 {holiday.name}
+                            {holiday.type && (
+                                <span className="ml-1 opacity-60">({holiday.type})</span>
+                            )}
                         </div>
                     )}
+
+                    {workingHoursLabel && (
+                        <div className="text-xs text-muted-foreground">
+                            Schedule: {workingHoursLabel}
+                        </div>
+                    )}
+
                     {(punchIn || punchOut) && (
-                        <div className="text-xs">
-                            {punchIn ?? '--:--'} - {punchOut ?? '--:--'}
-                            {record?.mode ? (
-                                <span className="text-muted-foreground"> ({record.mode})</span>
-                            ) : null}
+                        <div className="text-xs font-medium tabular-nums">
+                            {punchIn ?? '--:--'} → {punchOut ?? '--:--'}
+                            {record?.mode && (
+                                <span className="ml-1 text-muted-foreground capitalize">
+                                    · {record.mode}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {record?.is_half_day && (
+                        <div className="text-xs text-sky-600 dark:text-sky-400">
+                            Half day
                         </div>
                     )}
                 </TooltipContent>

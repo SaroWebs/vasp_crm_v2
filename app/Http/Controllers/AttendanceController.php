@@ -693,16 +693,16 @@ class AttendanceController extends Controller
         $totalLateMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_in_minutes']);
         $totalEarlyOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_out_minutes']);
 
-        // Total hours = sum of (punch_out - punch_in) in hours
-        $totalHours = $records->sum(function (Attendance $record) {
-            if (! $record->punch_in || ! $record->punch_out) {
+        // Total hours = sum of actual work minutes from shift metrics converted to hours
+        // This uses the calculated total_work_minutes which properly handles punch times
+        // accounting for early_in, late_out, and other variations
+        $totalHours = $dailyShiftMetrics->sum(function (array $metrics) {
+            $workMinutes = $metrics['total_work_minutes'] ?? null;
+            if ($workMinutes === null) {
                 return 0;
             }
 
-            $in = Carbon::parse($record->punch_in);
-            $out = Carbon::parse($record->punch_out);
-
-            return $out->diffInMinutes($in) / 60;
+            return abs($workMinutes) / 60;
         });
 
         return [

@@ -24,7 +24,9 @@ export default function AdminAttendancePage({ auth }: AdminAttendancePageProps) 
         <>
             <Head title="Attendance Management" />
             <AppLayout breadcrumbs={breadcrumbs}>
-                <DailyAttendancePanel/>
+                <div className="p-4">
+                    <DailyAttendancePanel />
+                </div>
             </AppLayout>
         </>
     );

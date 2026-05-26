@@ -1,38 +1,19 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { usePage } from '@inertiajs/react';
-import axios from 'axios';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Paper, Text, Badge, Group, Stack, Divider, SimpleGrid, Skeleton, Button } from '@mantine/core';
-import { Clock, MapPin, Monitor, Wifi, User, Calendar } from 'lucide-react';
-import { MonthYearPicker } from './MonthYearPicker';
+import { useState, useEffect, useCallback } from 'react';
+import axios, { AxiosInstance } from 'axios';
+import { ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle } from 'lucide-react';
 import { AttendanceCalendarGrid } from './AttendanceCalendarGrid';
-import { PunchWidget } from './PunchWidget';
-import { EmployeeSelector } from './EmployeeSelector';
 import { AttendanceSummaryCards } from './AttendanceSummaryCards';
-import { type SharedData } from '@/types';
+import { Auth } from '@/types';
 
 interface AttendanceRecord {
-    id?: number;
-    employee_id?: number;
-    machine_id?: number;
+    id: number;
     attendance_date: string;
     punch_in: string | null;
     punch_out: string | null;
-    ip?: string;
-    employee_name?: string;
-    group_name?: string | null;
-    is_live?: number;
     mode: string;
-    created_at?: string;
-    updated_at?: string;
-}
-
-interface Holiday {
-    date: string;
-    name: string;
-    type?: string;
+    is_half_day?: boolean;
+    employee_name?: string | null;
+    group_name?: string;
 }
 
 interface WorkingHoursConfig {
@@ -46,352 +27,300 @@ interface WorkingHoursConfig {
     timezone: string;
 }
 
-interface AttendanceCalendarMeta {
-    holidays: Holiday[];
-    working_hours: WorkingHoursConfig;
-}
-
 interface AttendanceSummary {
-    total_days: number;
+    total_days?: number;
+    total_working_days?: number;
     present_days: number;
     absent_days: number;
     late_days: number;
-    early_out_days: number;
-    total_late_minutes: number;
-    total_early_out_minutes: number;
+    early_out_days?: number;
+    total_late_minutes?: number;
+    total_early_out_minutes?: number;
     total_hours: number;
 }
 
-const defaultSummary: AttendanceSummary = {
-    total_days: 0,
-    present_days: 0,
-    absent_days: 0,
-    late_days: 0,
-    early_out_days: 0,
-    total_late_minutes: 0,
-    total_early_out_minutes: 0,
-    total_hours: 0,
-};
+interface AttendanceApiResponse {
+    status: string;
+    message?: string;
+    data: AttendanceRecord[];
+    summary: AttendanceSummary;
+    calendar?: {
+        holidays: Array<{ date: string; name: string; type?: string }>;
+        working_hours: WorkingHoursConfig;
+    };
+    month: string;
+    year: string;
+}
 
 interface AttendanceCalendarProps {
-    auth?: SharedData['auth'];
-    employeeId?: number | null;
+    auth: Auth;
+    /** Override the API base URL. Defaults to /api/attendance */
+    employeeId?: number;
+    axiosInstance?: AxiosInstance;
+    /** Initial month (1–12). Defaults to current month. */
+    defaultMonth?: number;
+    /** Initial year. Defaults to current year. */
+    defaultYear?: number;
+    onDayClick?: (date: string) => void;
 }
 
-function formatTime(time: string | null) {
-    if (!time) return '—';
-    const [h, m] = time.split(':');
-    const date = new Date();
-    date.setHours(Number(h), Number(m));
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const LEGEND_ITEMS = [
+    { label: 'Present', className: 'bg-emerald-100 border border-emerald-300' },
+    { label: 'Late', className: 'bg-amber-100  border border-amber-300' },
+    { label: 'Half Day', className: 'bg-sky-100    border border-sky-300' },
+    { label: 'Absent', className: 'bg-red-100    border border-red-300' },
+    { label: 'Holiday', className: 'bg-purple-100 border border-purple-300' },
+    { label: 'Weekend', className: 'bg-muted/60   border border-border' },
+];
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function SummarySkeleton() {
+    return (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                    key={i}
+                    className="h-[72px] animate-pulse rounded-xl border border-l-4 border-l-muted bg-muted/30"
+                />
+            ))}
+        </div>
+    );
 }
 
-function calcDuration(punchIn: string | null, punchOut: string | null) {
-    if (!punchIn || !punchOut) return null;
-    const [ih, im, is_] = punchIn.split(':').map(Number);
-    const [oh, om, os] = punchOut.split(':').map(Number);
-    const inSec = ih * 3600 + im * 60 + (is_ || 0);
-    const outSec = oh * 3600 + om * 60 + (os || 0);
-    const diff = outSec - inSec;
-    if (diff <= 0) return null;
-    const hours = Math.floor(diff / 3600);
-    const mins = Math.floor((diff % 3600) / 60);
-    return `${hours}h ${mins}m`;
+function CalendarSkeleton() {
+    return (
+        <div className="rounded-xl border bg-background/60 p-3 sm:p-4">
+            {/* Weekday headers */}
+            <div className="mb-2 grid grid-cols-7 gap-1">
+                {Array.from({ length: 7 }).map((_, i) => (
+                    <div key={i} className="mx-auto h-5 w-8 animate-pulse rounded bg-muted/50" />
+                ))}
+            </div>
+            {/* Day cells */}
+            <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 35 }).map((_, i) => (
+                    <div
+                        key={i}
+                        className="aspect-square animate-pulse rounded-lg bg-muted/30"
+                        style={{ animationDelay: `${(i % 7) * 40}ms` }}
+                    />
+                ))}
+            </div>
+        </div>
+    );
 }
 
-function DayDetailPanel({ date, records, close }: { date: string; records: AttendanceRecord[], close?: () => void }) {
-    const formatted = new Date(date).toLocaleDateString('en-IN', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    });
+// ─── Main component ───────────────────────────────────────────────────────────
 
-    if (records.length === 0) {
-        return (
-            <Paper withBorder p="lg" radius="md">
-                <Group gap="sm" mb="md">
-                    <Calendar size={16} />
-                    <Text fw={600} size="sm">{formatted}</Text>
-                </Group>
-                <Text size="sm" c="dimmed">No attendance record for this day.</Text>
-            </Paper>
-        );
+export function AttendanceCalendar({
+    auth,
+    employeeId = 0,
+    axiosInstance,
+    defaultMonth,
+    defaultYear,
+    onDayClick,
+}: AttendanceCalendarProps) {
+    const now = new Date();
+
+    const [currentMonth, setCurrentMonth] = useState(defaultMonth ?? now.getMonth() + 1);
+    const [currentYear, setCurrentYear] = useState(defaultYear ?? now.getFullYear());
+
+    const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
+    const [summary, setSummary] = useState<AttendanceSummary | null>(null);
+    const [calendarMeta, setCalendarMeta] = useState<AttendanceApiResponse['calendar']>();
+
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const empId = employeeId ? employeeId : auth.user?.employee?.id ?? auth.user.id;
+    const employeeName = auth.user.name;
+    let url = `/my-attendance`;
+    if(employeeId){
+        url = `/admin/employee-attendance/${employeeId}`;
+    }else{
+        url = `/api/my/attendance`;
     }
 
+    // ── Fetch ────────────────────────────────────────────────────────────────
+
+    const fetchAttendance = useCallback(
+        async (month: number, year: number) => {
+            setLoading(true);
+            setError(null);
+
+            try {
+                const http = axiosInstance ?? axios;
+
+                // Resolve the bearer token from auth
+                const token = auth.token ?? auth.user.token;
+
+                const { data } = await http.get<AttendanceApiResponse>(url, {
+                    params: { employee_id: empId, month, year },
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                });
+
+                if (data.status !== 'success') {
+                    throw new Error(data.message ?? 'Failed to fetch attendance.');
+                }
+
+                setAttendanceData(data.data ?? []);
+                setSummary(data.summary);
+                setCalendarMeta(data.calendar);
+            } catch (err: unknown) {
+                if (axios.isAxiosError(err)) {
+                    setError(
+                        err.response?.data?.message
+                        ?? err.message
+                        ?? 'Network error. Please try again.',
+                    );
+                } else {
+                    setError('An unexpected error occurred.');
+                }
+                // Keep previous data visible on error so the UI isn't blank
+            } finally {
+                setLoading(false);
+            }
+        },
+        [axiosInstance, auth, empId],
+    );
+
+    useEffect(() => {
+        fetchAttendance(currentMonth, currentYear);
+    }, [currentMonth, currentYear, fetchAttendance]);
+
+    // ── Navigation ───────────────────────────────────────────────────────────
+
+    function goToPreviousMonth() {
+        setCurrentMonth((m) => {
+            const newMonth = m === 1 ? 12 : m - 1;
+            const newYear = m === 1 ? currentYear - 1 : currentYear;
+            if (m === 1) setCurrentYear(newYear);
+            return newMonth;
+        });
+    }
+
+    function goToNextMonth() {
+        setCurrentMonth((m) => {
+            const newMonth = m === 12 ? 1 : m + 1;
+            const newYear = m === 12 ? currentYear + 1 : currentYear;
+            if (m === 12) setCurrentYear(newYear);
+            return newMonth;
+        });
+    }
+
+    const isCurrentMonth =
+        currentMonth === now.getMonth() + 1 && currentYear === now.getFullYear();
+
+    // ── Render ───────────────────────────────────────────────────────────────
+
     return (
-        <Card className='p-4'>
-            <div className="flex justify-between items-center">
-                <Group gap="sm" mb="md">
-                    <Calendar size={16} />
-                    <Text fw={600} size="sm">{formatted}</Text>
-                    {records[0].is_live === 1 && (
-                        <Badge color="green" size="xs" variant="dot">Live</Badge>
-                    )}
-                </Group>
-                <div className="flex">
-                    <Button variant="subtle" size="xs" onClick={close}>
-                        Close
-                    </Button>
+        <div className="flex flex-col gap-5 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
+
+            {/* ── Header ── */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Calendar className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                        <h2 className="text-base font-semibold leading-tight">
+                            Attendance Calendar
+                        </h2>
+                        {employeeName && (
+                            <p className="text-xs text-muted-foreground">{employeeName}</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Month navigation */}
+                <div className="flex items-center gap-1 self-start rounded-lg border bg-muted/40 p-1 sm:self-auto">
+                    <button
+                        type="button"
+                        onClick={goToPreviousMonth}
+                        disabled={loading}
+                        className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-background hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Previous month"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </button>
+
+                    <span className="min-w-[130px] text-center text-sm font-medium">
+                        {loading ? (
+                            <span className="inline-block h-4 w-24 animate-pulse rounded bg-muted/60 align-middle" />
+                        ) : (
+                            `${MONTH_NAMES[currentMonth - 1]} ${currentYear}`
+                        )}
+                    </span>
+
+                    <button
+                        type="button"
+                        onClick={goToNextMonth}
+                        disabled={isCurrentMonth || loading}
+                        className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-background hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Next month"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
                 </div>
             </div>
 
-            <Stack gap="md">
-                {records.map((record, i) => {
-                    const duration = calcDuration(record.punch_in, record.punch_out);
-                    return (
-                        <div key={record.id ?? i}>
-                            {i > 0 && <Divider />}
-                            <SimpleGrid cols={2} spacing="sm">
-                                <Group gap="xs">
-                                    <Clock size={14} style={{ color: 'var(--mantine-color-green-6)' }} />
-                                    <div>
-                                        <Text size="xs" c="dimmed">Punch In</Text>
-                                        <Text size="sm" fw={500}>{formatTime(record.punch_in)}</Text>
-                                    </div>
-                                </Group>
-
-                                <Group gap="xs">
-                                    <Clock size={14} style={{ color: 'var(--mantine-color-red-6)' }} />
-                                    <div>
-                                        <Text size="xs" c="dimmed">Punch Out</Text>
-                                        <Text size="sm" fw={500}>
-                                            {record.punch_out ? formatTime(record.punch_out) : (
-                                                <Badge color="yellow" size="xs">Not yet</Badge>
-                                            )}
-                                        </Text>
-                                    </div>
-                                </Group>
-
-                                {duration && (
-                                    <Group gap="xs">
-                                        <Monitor size={14} style={{ color: 'var(--mantine-color-blue-6)' }} />
-                                        <div>
-                                            <Text size="xs" c="dimmed">Duration</Text>
-                                            <Text size="sm" fw={500}>{duration}</Text>
-                                        </div>
-                                    </Group>
-                                )}
-
-                                <Group gap="xs">
-                                    <MapPin size={14} style={{ color: 'var(--mantine-color-violet-6)' }} />
-                                    <div>
-                                        <Text size="xs" c="dimmed">Mode</Text>
-                                        <Badge
-                                            size="sm"
-                                            color={record.mode === 'remote' ? 'blue' : 'gray'}
-                                            variant="light"
-                                            leftSection={record.mode === 'remote' ? <Wifi size={10} /> : <Monitor size={10} />}
-                                        >
-                                            {record.mode === 'remote' ? 'Remote' : 'Office'}
-                                        </Badge>
-                                    </div>
-                                </Group>
-
-                                {record.employee_name && (
-                                    <Group gap="xs">
-                                        <User size={14} style={{ color: 'var(--mantine-color-orange-6)' }} />
-                                        <div>
-                                            <Text size="xs" c="dimmed">Employee</Text>
-                                            <Text size="sm" fw={500}>{record.employee_name}</Text>
-                                        </div>
-                                    </Group>
-                                )}
-
-                                {record.ip && (
-                                    <Group gap="xs">
-                                        <Wifi size={14} style={{ color: 'var(--mantine-color-teal-6)' }} />
-                                        <div>
-                                            <Text size="xs" c="dimmed">IP Address</Text>
-                                            <Text size="sm" fw={500} ff="monospace">{record.ip}</Text>
-                                        </div>
-                                    </Group>
-                                )}
-                            </SimpleGrid>
-                        </div>
-                    );
-                })}
-            </Stack>
-        </Card>
-    );
-}
-
-export function AttendanceCalendar({ auth, employeeId = null }: AttendanceCalendarProps) {
-    const pageAuth = usePage<SharedData>().props.auth;
-    const currentAuth = auth ?? pageAuth;
-    const employee = currentAuth?.user?.employee ?? null;
-    const today = new Date();
-
-    const userRoles = useMemo(() => {
-        const roles = currentAuth?.user?.roles ?? [];
-        if (!Array.isArray(roles)) {
-            return [];
-        }
-        return roles
-            .map((role: unknown) => {
-                if (!role) return '';
-                if (typeof role === 'string') return role.toLowerCase();
-                if (typeof role === 'object' && role !== null) {
-                    const roleObj = role as { slug?: string; name?: string };
-                    return (roleObj.slug || roleObj.name || '').toString().toLowerCase();
-                }
-                return '';
-            })
-            .filter(Boolean);
-    }, [currentAuth?.user?.roles]);
-
-    const canManageAttendance = useMemo(
-        () => userRoles.some((r: string) => ['super-admin', 'admin', 'manager', 'hr'].includes(r)),
-        [userRoles]
-    );
-
-    const isOwnRecord = useMemo(() => {
-        if (!employee) return false;
-        // If an employeeId was passed as prop, check if it matches our employee id
-        if (employeeId) {
-            return employeeId === employee?.id;
-        }
-
-        // If we're a manager/admin viewing without an explicit employeeId, it's not "our own"
-        if (canManageAttendance) {
-            return false;
-        }
-
-        // For regular employees, if no employeeId is specified, it's their own record
-        return true;
-    }, [employeeId, employee, canManageAttendance]);
-
-    const [month, setMonth] = useState(today.getMonth() + 1);
-    const [year, setYear] = useState(today.getFullYear());
-    const [records, setRecords] = useState<AttendanceRecord[]>([]);
-    const [summary, setSummary] = useState<AttendanceSummary>(defaultSummary);
-    const [calendarMeta, setCalendarMeta] = useState<AttendanceCalendarMeta | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(
-        employeeId || (canManageAttendance ? null : employee?.id)
-    );
-    const [employees, setEmployees] = useState<Array<{ id: number; name: string }>>([]);
-    const [selectedDate, setSelectedDate] = useState<string | null>(null);
-    const [punchesForDate, setPunchesForDate] = useState<AttendanceRecord[]>([]);
-
-    const fetchAttendance = useCallback(async () => {
-        if (!selectedEmployeeId) {
-            setRecords([]);
-            setSummary(defaultSummary);
-            setCalendarMeta(null);
-            setLoading(false);
-            return;
-        }
-        setLoading(true);
-        setError(null);
-        const endpoint = (canManageAttendance && !isOwnRecord) ?
-            `/admin/employee-attendance/${selectedEmployeeId}` :
-            isOwnRecord ? `/api/attendance/${employee?.id}` : null;
-
-        if (!endpoint) {
-            setError('You do not have permission to access this record.');
-            setLoading(false);
-            return;
-        }
-
-        try {
-            const response = await axios.get(endpoint, {
-                params: { month, year },
-            });
-            if (response.data.status === 'success') {
-                setRecords(response.data.data || []);
-                setSummary(response.data.summary || defaultSummary);
-                setCalendarMeta(response.data.calendar || null);
-            } else {
-                setError(response.data.message || 'Failed to fetch attendance data.');
-            }
-        } catch (err: unknown) {
-            const e = err as { response?: { data?: { message?: string }; status?: number } };
-            setError(
-                e.response?.status === 403 ? 'You do not have permission to access this record.' :
-                    e.response?.status === 404 ? 'No attendance records found.' :
-                        e.response?.data?.message || 'Failed to fetch attendance data.'
-            );
-            setRecords([]);
-            setSummary(defaultSummary);
-            setCalendarMeta(null);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedEmployeeId, month, year, canManageAttendance, isOwnRecord, employee?.id]);
-
-    useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
-
-    useEffect(() => {
-        if (!canManageAttendance) return;
-        axios.get('/admin/api/employees').then(res => {
-            if (res.data.length > 0) setEmployees(res.data || []);
-        }).catch(() => { });
-        if (isOwnRecord && employee?.id) setSelectedEmployeeId(employee.id);
-    }, [canManageAttendance, isOwnRecord, employee?.id]);
-    const handleDayClick = useCallback((date: string) => {
-        setSelectedDate(date);
-        setPunchesForDate(records.filter((record) => record.attendance_date === date));
-    }, [records]);
-
-
-    return (
-        <div className="space-y-4">
+            {/* ── Error banner ── */}
             {error && (
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            )}
-
-            <Card className="border-none shadow-sm">
-                <CardHeader className="pb-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <MonthYearPicker
-                            month={month}
-                            year={year}
-                            onChange={(m, y) => { setMonth(m); setYear(y); setSelectedDate(null); setPunchesForDate([]); }}
-                        />
-                        <div className="flex flex-col gap-2">
-                            {canManageAttendance ? (
-                                <EmployeeSelector
-                                    employees={employees}
-                                    selectedEmployeeId={selectedEmployeeId}
-                                    onEmployeeChange={setSelectedEmployeeId}
-                                />
-                            ) : null}
-                            {isOwnRecord ? (
-                                <PunchWidget onPunchSuccess={fetchAttendance} />
-                            ) : null}
-                        </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/30">
+                    <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{error}</span>
                     </div>
-                </CardHeader>
-
-                <CardContent className="space-y-6">
-                    {loading ? (
-                        <Stack gap="sm">
-                            <Skeleton height={32} radius="sm" />
-                            <SimpleGrid cols={7} spacing="xs">
-                                {Array.from({ length: 35 }).map((_, i) => (
-                                    <Skeleton key={i} height={64} radius="sm" />
-                                ))}
-                            </SimpleGrid>
-                        </Stack>
-                    ) : (
-                        <AttendanceCalendarGrid
-                            records={records}
-                            month={month}
-                            year={year}
-                            calendar={calendarMeta || undefined}
-                            onDayClick={handleDayClick}
-                        />
-                    )}
-                </CardContent>
-            </Card>
-
-            <AttendanceSummaryCards summary={summary} />
-
-            {selectedDate && (
-                <DayDetailPanel date={selectedDate} records={punchesForDate} close={() => setSelectedDate(null)} />
+                    <button
+                        type="button"
+                        onClick={() => fetchAttendance(currentMonth, currentYear)}
+                        className="flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/50"
+                    >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                    </button>
+                </div>
             )}
+
+            {/* ── Summary cards ── */}
+            {loading || !summary ? (
+                <SummarySkeleton />
+            ) : (
+                <AttendanceSummaryCards summary={summary} />
+            )}
+
+            {/* ── Calendar grid ── */}
+            {loading ? (
+                <CalendarSkeleton />
+            ) : (
+                <div className="rounded-xl border bg-background/60 p-3 sm:p-4">
+                    <AttendanceCalendarGrid
+                        records={attendanceData}
+                        month={currentMonth}
+                        year={currentYear}
+                        calendar={calendarMeta}
+                        onDayClick={onDayClick}
+                    />
+                </div>
+            )}
+
+            {/* ── Legend ── */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {LEGEND_ITEMS.map((item) => (
+                    <div key={item.label} className="flex items-center gap-1.5">
+                        <span className={`h-3 w-3 rounded-sm ${item.className}`} />
+                        <span className="text-xs text-muted-foreground">{item.label}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

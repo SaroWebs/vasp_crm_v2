@@ -6,6 +6,7 @@ export interface Auth {
     guard?: 'admin' | 'organization' | null;
     menu_access?: Record<string, boolean>;
     menu_access_configured?: boolean;
+    token?: string;
 }
 
 export interface BreadcrumbItem {
@@ -77,6 +78,7 @@ export interface User {
     employee?: Employee;
     created_at?: string;
     updated_at?: string;
+    token?: string;
     [key: string]: unknown;
 }
 
@@ -187,6 +189,8 @@ export interface OrganizationUser {
     created_at?: string;
     updated_at?: string;
     client?: Client;
+    employee?: Employee;
+    token?: string;
 }
 
 export interface Ticket {

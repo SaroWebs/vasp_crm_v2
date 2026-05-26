@@ -1,11 +1,18 @@
 import { useMemo } from 'react';
-import { DayCell, type DayStatus, type Holiday, type WorkingHoursForDay } from './DayCell';
+import {
+    DayCell,
+    type DayStatus,
+    type Holiday,
+    type WorkingHoursForDay,
+} from './DayCell';
 
 interface AttendanceRecord {
     attendance_date: string;
     punch_in: string | null;
     punch_out: string | null;
     mode: string;
+    is_half_day?: boolean;
+    employee_name?: string | null;
 }
 
 interface WorkingHoursConfig {
@@ -40,7 +47,7 @@ function getDaysInMonth(month: number, year: number): number {
 
 function getFirstDayOfMonth(month: number, year: number): number {
     const day = new Date(year, month - 1, 1).getDay();
-    return day === 0 ? 6 : day - 1; // Convert Sunday=0 to Monday=0
+    return day === 0 ? 6 : day - 1; // Convert Sunday=0 to Monday-first
 }
 
 function formatDate(day: number, month: number, year: number): string {
@@ -57,32 +64,43 @@ function isToday(day: number, month: number, year: number): boolean {
 }
 
 function getDayName(day: number, month: number, year: number): string {
-    return new Date(year, month - 1, day).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    return new Date(year, month - 1, day)
+        .toLocaleDateString('en-US', { weekday: 'long' })
+        .toLowerCase();
 }
 
 function normalizeTime(time: string | null | undefined): string | null {
-    if (!time) {
-        return null;
-    }
-
+    if (!time) return null;
     return time.length === 5 ? `${time}:00` : time;
+}
+
+/**
+ * ✅ FIX: Normalize attendance_date from ISO string to YYYY-MM-DD in the
+ * correct timezone. The API stores dates as UTC midnight in IST
+ * (e.g. "2026-04-19T18:30:00.000000Z" = "2026-04-20" in IST).
+ * Using Intl.DateTimeFormat with the configured timezone ensures the
+ * date matches the calendar day the employee actually worked.
+ */
+function normalizeAttendanceDate(isoDate: string, timezone = 'Asia/Calcutta'): string {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(new Date(isoDate));
 }
 
 function getWorkingHoursForDate(
     day: number,
     month: number,
     year: number,
-    workingHoursConfig: WorkingHoursConfig | undefined
+    workingHoursConfig: WorkingHoursConfig | undefined,
 ): WorkingHoursForDay {
     const dayName = getDayName(day, month, year);
     const workdayConfig = workingHoursConfig?.workdays?.find((w) => w.day === dayName);
-
-    const start = normalizeTime(workdayConfig?.start);
-    const end = normalizeTime(workdayConfig?.end);
-
     return {
-        start,
-        end,
+        start: normalizeTime(workdayConfig?.start) ?? null,
+        end: normalizeTime(workdayConfig?.end) ?? null,
     };
 }
 
@@ -93,41 +111,37 @@ function getDayStatus(
     record: AttendanceRecord | undefined,
     isCurrentMonth: boolean,
     holiday: Holiday | undefined,
-    workingHours: WorkingHoursForDay
+    workingHours: WorkingHoursForDay,
 ): DayStatus {
-    if (!isCurrentMonth) {
-        return 'empty';
-    }
+    if (!isCurrentMonth) return 'empty';
 
     const date = new Date(year, month - 1, day);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    if (date > today) {
-        return 'empty';
+    if (date > today) return 'empty';
+
+    if (record) {
+        // ✅ FIX: Check half_day before late check
+        if (record.is_half_day) {
+            return 'half_day';
+        }
+        if (
+            record.punch_in &&
+            workingHours.start &&
+            record.punch_in > workingHours.start
+        ) {
+            return 'late';
+        }
+        return 'present';
     }
 
-    if (holiday && !record) {
-        return 'holiday';
-    }
+    if (holiday) return 'holiday';
 
     const isWorkingDay = Boolean(workingHours.start && workingHours.end);
-    if (!isWorkingDay) {
-        return 'weekend';
-    }
+    if (!isWorkingDay) return 'weekend';
 
-    if (!record) {
-        return 'absent';
-    }
-
-    // if (record.punch_in) {
-    //     const threshold = workingHours.start ?? '09:00:00';
-    //     if (record.punch_in > threshold) {
-    //         return 'late';
-    //     }
-    // }
-
-    return 'present';
+    return 'absent';
 }
 
 export function AttendanceCalendarGrid({
@@ -137,13 +151,45 @@ export function AttendanceCalendarGrid({
     calendar,
     onDayClick,
 }: AttendanceCalendarGridProps) {
+    const timezone = calendar?.working_hours?.timezone ?? 'Asia/Calcutta';
+
     const recordMap = useMemo(() => {
         const map = new Map<string, AttendanceRecord>();
+
         records.forEach((record) => {
-            map.set(record.attendance_date, record);
+            // ✅ FIX: Normalize ISO date string → YYYY-MM-DD in the correct timezone
+            // Previously used the raw ISO string as the map key, which never matched
+            // the "YYYY-MM-DD" keys produced by formatDate().
+            const normalizedDate = normalizeAttendanceDate(record.attendance_date, timezone);
+
+            const existing = map.get(normalizedDate);
+            if (!existing) {
+                map.set(normalizedDate, { ...record, attendance_date: normalizedDate });
+                return;
+            }
+
+            const earliestIn = [existing.punch_in, record.punch_in]
+                .filter(Boolean)
+                .sort() as string[];
+            const latestOut = [existing.punch_out, record.punch_out]
+                .filter(Boolean)
+                .sort()
+                .reverse() as string[];
+
+            map.set(normalizedDate, {
+                ...existing,
+                attendance_date: normalizedDate,
+                punch_in: earliestIn.length > 0 ? earliestIn[0] : existing.punch_in,
+                punch_out: latestOut.length > 0 ? latestOut[0] : existing.punch_out,
+                mode: existing.mode || record.mode,
+                employee_name: existing.employee_name || record.employee_name,
+                // Preserve half_day flag if either record is a half day
+                is_half_day: existing.is_half_day || record.is_half_day,
+            });
         });
+
         return map;
-    }, [records]);
+    }, [records, timezone]);
 
     const holidayMap = useMemo(() => {
         const map = new Map<string, Holiday>();
@@ -167,17 +213,20 @@ export function AttendanceCalendarGrid({
             workingHours?: WorkingHoursForDay;
         }> = [];
 
-        // Add empty cells for days before the first day of the month
         for (let i = 0; i < firstDay; i++) {
             days.push({ day: null, date: '', status: 'empty' });
         }
 
-        // Add days of the month
         for (let day = 1; day <= daysInMonth; day++) {
             const date = formatDate(day, month, year);
             const record = recordMap.get(date);
             const holiday = holidayMap.get(date);
-            const workingHours = getWorkingHoursForDate(day, month, year, calendar?.working_hours);
+            const workingHours = getWorkingHoursForDate(
+                day,
+                month,
+                year,
+                calendar?.working_hours,
+            );
             const status = getDayStatus(day, month, year, record, true, holiday, workingHours);
             const isTodayDate = isToday(day, month, year);
 
@@ -197,16 +246,19 @@ export function AttendanceCalendarGrid({
 
     return (
         <div className="w-full">
-            <div className="grid grid-cols-7 gap-[clamp(2px,0.6cqw,6px)] mb-2">
+            {/* Weekday headers */}
+            <div className="mb-2 grid grid-cols-7 gap-[clamp(2px,0.6cqw,6px)]">
                 {WEEKDAYS.map((day) => (
                     <div
                         key={day}
-                        className="h-[clamp(24px,2.2cqw,32px)] flex items-center justify-center text-[clamp(10px,1.1cqw,12px)] font-medium text-muted-foreground"
+                        className="flex h-8 items-center justify-center text-[clamp(10px,1.1cqw,12px)] font-semibold uppercase tracking-wide text-muted-foreground"
                     >
                         {day}
                     </div>
                 ))}
             </div>
+
+            {/* Calendar grid */}
             <div className="grid grid-cols-7 gap-[clamp(2px,0.6cqw,6px)]">
                 {calendarDays.map((item, index) => (
                     <DayCell

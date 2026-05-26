@@ -1,12 +1,13 @@
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem, type Employee, type Department, type Visitor, type PaginatedItem } from '@/types';
+import { type BreadcrumbItem, type Employee, type Department, type Visitor, type PaginatedItem, Auth } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Edit, Trash2, X, ExternalLink, User, Mail, Phone, Building, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, ExternalLink, User, Mail, Phone, Building, ChevronRight, Calendar } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -18,6 +19,8 @@ import {
 import VisitorFormModal from '@/components/admin/employees/VisitorFormModal';
 import axios from 'axios';
 import { Tabs } from '@mantine/core';
+import { AttendanceCalendar } from '@/components/attendance';
+import { LeavePanel } from '@/components/admin/employees/LeavePanel';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -31,6 +34,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 interface EmployeesIndexProps {
+    auth: Auth;
     departments: Department[];
     filters?: {
         department_id?: string;
@@ -68,6 +72,7 @@ type EmployeeDetail = Employee & {
 
 export default function EmployeesIndex(props: EmployeesIndexProps) {
     const {
+        auth,
         departments,
         filters = {},
         userPermissions = [],
@@ -88,7 +93,6 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const canCreate = userPermissions.includes('employee.create') || isSuperAdmin;
-    const canRead = userPermissions.includes('employee.read') || isSuperAdmin;
     const canEdit = userPermissions.includes('employee.update') || isSuperAdmin;
     const isPanelOpen = selectedEmployee !== null;
 
@@ -235,6 +239,15 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     const detailEmployee = selectedEmployeeDetails ?? selectedEmployee;
     const hasActiveFilters = localFilters.search.trim() || localFilters.department_id !== 'all';
 
+    const getInitials = (name: string) => {
+        return name
+            .split(' ')
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase())
+            .join('');
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Employees" />
@@ -271,7 +284,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                 </div>
 
                                 <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                                    <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-start">
                                         <div>
                                             <label className="text-sm font-medium">Search</label>
                                             <div className="relative">
@@ -284,23 +297,24 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                                 />
                                             </div>
                                         </div>
-
-                                        <div>
-                                            <label className="text-sm font-medium">Department</label>
-                                            <Select value={localFilters.department_id} onValueChange={handleDepartmentChange}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="All Departments" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Departments</SelectItem>
-                                                    {departments.map((department) => (
-                                                        <SelectItem key={department.id} value={department.id.toString()}>
-                                                            {department.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        {isPanelOpen ? null :
+                                            <div>
+                                                <label className="text-sm font-medium">Department</label>
+                                                <Select value={localFilters.department_id} onValueChange={handleDepartmentChange}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="All Departments" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">All Departments</SelectItem>
+                                                        {departments.map((department) => (
+                                                            <SelectItem key={department.id} value={department.id.toString()}>
+                                                                {department.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        }
                                     </div>
 
                                     {hasActiveFilters && (
@@ -317,62 +331,69 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                 {employeesLoading ? (
                                     <div className="text-center py-8 text-sm text-muted-foreground">Loading employees…</div>
                                 ) : employees?.data.length ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse">
-                                            <thead>
-                                                <tr className="border-b">
-                                                    <th className="text-left p-4 font-semibold">Name</th>
-                                                    <th className="text-left p-4 font-semibold">Code</th>
-                                                    <th className="text-left p-4 font-semibold">Email</th>
-                                                    <th className="text-left p-4 font-semibold">Department</th>
-                                                    <th className="text-left p-4 font-semibold">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
+                                    <>
+                                        {isPanelOpen ? (
+                                            <div className="space-y-2 p-2 max-h-[350px] overflow-y-auto">
                                                 {employees.data.map((employee) => (
-                                                    <tr
+                                                    <div
                                                         key={employee.id}
-                                                        className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                                                        className={`rounded-2xl border-b p-1 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer ${selectedEmployee?.id === employee.id ? 'border-blue-300 bg-slate-50' : 'border-slate-200 bg-white'}`}
                                                         onClick={() => handleSelectEmployee(employee)}
                                                     >
-                                                        <td className="p-4">
-                                                            <div>
-                                                                <div className="font-semibold">{employee.name}</div>
-                                                                {employee.phone && (
-                                                                    <div className="text-sm text-muted-foreground">{employee.phone}</div>
-                                                                )}
+                                                        <div className="flex items-center gap-3">
+                                                            <Avatar className="h-10 w-10">
+                                                                <AvatarFallback className="text-sm font-semibold text-slate-700">
+                                                                    {getInitials(employee.name)}
+                                                                </AvatarFallback>
+                                                            </Avatar>
+                                                            <div className="min-w-0">
+                                                                <div className="text-sm font-semibold text-slate-950 truncate">{employee.name}</div>
+                                                                <div className="text-xs text-muted-foreground truncate">{employee.code || '—'}</div>
                                                             </div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <div className="text-sm font-mono">{employee.code || '—'}</div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <div className="text-sm">{employee.email}</div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                                                {(employee as any).department?.name || 'No Department'}
-                                                            </Badge>
-                                                        </td>
-                                                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                {canRead && (
-                                                                    <Button variant="outline" size="sm" asChild>
-                                                                        <Link href={`/admin/employees/${employee.id}`}>View</Link>
-                                                                    </Button>
-                                                                )}
-                                                                {canEdit && (
-                                                                    <Button variant="outline" size="sm" asChild>
-                                                                        <Link href={`/admin/employees/${employee.id}/edit`}>Edit</Link>
-                                                                    </Button>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
+                                                        </div>
+                                                    </div>
                                                 ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full border-collapse">
+                                                    <thead>
+                                                        <tr className="border-b">
+                                                            <th className="text-left p-4 font-semibold">Name</th>
+                                                            <th className="text-left p-4 font-semibold">Code</th>
+                                                            <th className="text-left p-4 font-semibold">Email</th>
+                                                            <th className="text-left p-4 font-semibold">Department</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {employees.data.map((employee) => (
+                                                            <tr
+                                                                key={employee.id}
+                                                                className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                                                                onClick={() => handleSelectEmployee(employee)}
+                                                            >
+                                                                <td className="p-4">
+                                                                    <div className="font-semibold">{employee.name}</div>
+                                                                    <div className="text-sm text-muted-foreground">{employee.email}</div>
+                                                                </td>
+                                                                <td className="p-4">
+                                                                    <div className="text-sm font-mono">{employee.code || '—'}</div>
+                                                                </td>
+                                                                <td className="p-4">
+                                                                    <div className="text-sm">{employee.email}</div>
+                                                                </td>
+                                                                <td className="p-4">
+                                                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                                                        {(employee as any).department?.name || 'No Department'}
+                                                                    </Badge>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </>
                                 ) : (
                                     <div className="text-center py-8 text-sm text-muted-foreground">No employees match the current filters.</div>
                                 )}
@@ -400,9 +421,10 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                     {isPanelOpen && detailEmployee && (
                         <div className="flex-1 min-w-0">
                             <EmployeeDetailPanel
+                                auth={auth}
                                 employee={detailEmployee}
                                 detailLoading={detailLoading}
-                                activeTab={activeTab }
+                                activeTab={activeTab}
                                 setActiveTab={setActiveTab}
                                 onClose={() => {
                                     setSelectedEmployee(null);
@@ -421,6 +443,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
 }
 
 interface EmployeeDetailPanelProps {
+    auth: Auth;
     employee: EmployeeDetail;
     detailLoading: boolean;
     activeTab: string | null;
@@ -429,7 +452,8 @@ interface EmployeeDetailPanelProps {
     canEdit: boolean;
 }
 
-function EmployeeDetailPanel({ employee, detailLoading, activeTab, setActiveTab, onClose, canEdit }: EmployeeDetailPanelProps) {
+function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
+    const { auth, employee, detailLoading, activeTab, setActiveTab, onClose, canEdit } = props;
     return (
         <Card className="h-full flex flex-col overflow-hidden">
             <CardHeader className="border-b pb-4 flex-shrink-0">
@@ -463,13 +487,15 @@ function EmployeeDetailPanel({ employee, detailLoading, activeTab, setActiveTab,
                     <div className="py-16 text-center text-sm text-muted-foreground">Loading employee details…</div>
                 ) : (
                     <Tabs
-                        value={activeTab} 
+                        value={activeTab}
                         onChange={setActiveTab}
                     >
                         <Tabs.List className="grid grid-cols-3 gap-2 mb-6">
                             <Tabs.Tab value="details">Details</Tabs.Tab>
-                            <Tabs.Tab value="department">Department</Tabs.Tab>
+                            <Tabs.Tab value="attendance">Attendance</Tabs.Tab>
+                            <Tabs.Tab value="leaves">Leaves</Tabs.Tab>
                             <Tabs.Tab value="shifts">Shifts</Tabs.Tab>
+                            <Tabs.Tab value="tasks">Tasks</Tabs.Tab>
                         </Tabs.List>
 
                         <Tabs.Panel value="details" className="space-y-4">
@@ -511,9 +537,7 @@ function EmployeeDetailPanel({ employee, detailLoading, activeTab, setActiveTab,
                                     </div>
                                 </div>
                             </div>
-                        </Tabs.Panel>
-
-                        <Tabs.Panel value="department" className="space-y-4">
+                            <hr />
                             <div className="rounded-lg border p-4 space-y-3">
                                 <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                                     <Building className="h-4 w-4" />
@@ -538,7 +562,21 @@ function EmployeeDetailPanel({ employee, detailLoading, activeTab, setActiveTab,
                                 </div>
                             </div>
                         </Tabs.Panel>
-
+                        {/* Attendance, leaves, and shifts */}
+                        <Tabs.Panel value="attendance" className="space-y-4">
+                            <div className="">
+                                <AttendanceCalendar auth={auth} employeeId={employee.id} />
+                            </div>
+                        </Tabs.Panel>
+                        <Tabs.Panel value="leaves" className="space-y-4">
+                            <div className="rounded-lg border p-4 space-y-4">
+                                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                                    <Calendar className="h-4 w-4" />
+                                    Leaves
+                                </div>
+                                <LeavePanel employeeId={employee.id} />
+                            </div>
+                        </Tabs.Panel>
                         <Tabs.Panel value="shifts" className="space-y-4">
                             <div className="rounded-lg border p-4 space-y-4">
                                 <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
