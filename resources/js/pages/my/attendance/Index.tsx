@@ -5,7 +5,6 @@ import {
     PunchWidget,
     AttendanceCalendar,
 } from '@/components/attendance';
-import { AttendanceList } from '@/components/attendance/AttendanceList';
 import DailyAttendancePanel from '@/components/admin/employees/DailyAttendancePanel';
 
 interface MyAttendancePageProps {

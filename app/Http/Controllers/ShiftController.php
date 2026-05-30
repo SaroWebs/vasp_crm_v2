@@ -11,6 +11,7 @@ use App\Models\EmployeeShiftAssignment;
 use App\Models\Shift;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -174,5 +175,69 @@ class ShiftController extends Controller
             'status' => 'success',
             'data' => $employees,
         ]);
+    }
+
+    /**
+     * Get shift assignments for a specific employee.
+     */
+    public function employeeAssignments(Employee $employee): JsonResponse
+    {
+        $assignments = $employee->shiftAssignments()
+            ->with('shift:id,name,start_time,end_time,grace_minutes,is_active')
+            ->orderByDesc('effective_from')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $assignments,
+        ]);
+    }
+
+    /**
+     * Change shift for an employee - creates a new assignment with proper overlap handling.
+     * If employee has active shift, closes it before creating new one.
+     */
+    public function changeShift(Request $request, Employee $employee): JsonResponse
+    {
+        $validated = $request->validate([
+            'shift_id' => 'required|exists:shifts,id',
+            'effective_from' => 'required|date_format:Y-m-d',
+            'effective_to' => 'nullable|date_format:Y-m-d|after:effective_from',
+            'notes' => 'nullable|string',
+        ]);
+
+        return DB::transaction(function () use ($validated, $employee) {
+            $effectiveFrom = Carbon::parse($validated['effective_from'])->toDateString();
+
+            // Close any active assignments that overlap with the new period
+            EmployeeShiftAssignment::query()
+                ->where('employee_id', $employee->id)
+                ->where('is_active', true)
+                ->where('effective_from', '<=', $validated['effective_from'])
+                ->where(function ($query) use ($validated) {
+                    $query->whereNull('effective_to')
+                        ->orWhere('effective_to', '>=', $validated['effective_from']);
+                })
+                ->each(function (EmployeeShiftAssignment $assignment) use ($effectiveFrom) {
+                    $assignment->update([
+                        'is_active' => false,
+                        'effective_to' => Carbon::parse($effectiveFrom)->subDay()->toDateString(),
+                    ]);
+                });
+
+            $assignment = EmployeeShiftAssignment::create([
+                'employee_id' => $employee->id,
+                'shift_id' => $validated['shift_id'],
+                'effective_from' => $effectiveFrom,
+                'effective_to' => $validated['effective_to'] ?? null,
+                'is_active' => true,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Shift changed successfully.',
+                'data' => $assignment->load(['shift:id,name,start_time,end_time,grace_minutes,is_active']),
+            ]);
+        });
     }
 }

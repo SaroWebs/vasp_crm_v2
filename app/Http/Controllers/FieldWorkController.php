@@ -125,14 +125,14 @@ class FieldWorkController extends Controller
         return response()->json(['message' => 'Field work assignment deleted successfully.']);
     }
 
-    /**
-     * GET /api/employees/{id}/field-work-assignments
-     * Get all field work assignments for an employee
-     */
+/**
+      * GET /api/employees/{id}/field-work-assignments
+      * Get all field work assignments for an employee
+      */
     public function getEmployeeFieldWorkAssignments(Request $request, Employee $employee)
     {
         $query = $employee->fieldWorkAssignments()
-            ->with('assignedByUser');
+            ->with(['assignedByUser', 'approvedByUser']);
 
         if ($request->filled('year')) {
             $year = $request->integer('year');
@@ -150,5 +150,39 @@ class FieldWorkController extends Controller
             'employee_name' => $employee->name,
             'field_work_assignments' => $fieldWorkAssignments,
         ]);
+    }
+
+    /**
+      * POST /admin/field-work-assignments/{id}/approve
+      * Approve a field work assignment
+      */
+    public function approve(Request $request, FieldWorkAssignment $fieldWorkAssignment)
+    {
+        $fieldWorkAssignment->update([
+            'status' => 'approved',
+            'approved_by_user_id' => auth()->id(),
+            'approval_notes' => $request->input('notes'),
+            'decided_at' => now(),
+        ]);
+        $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
+
+        return response()->json($fieldWorkAssignment);
+    }
+
+    /**
+      * POST /admin/field-work-assignments/{id}/reject
+      * Reject a field work assignment
+      */
+    public function reject(Request $request, FieldWorkAssignment $fieldWorkAssignment)
+    {
+        $fieldWorkAssignment->update([
+            'status' => 'rejected',
+            'approved_by_user_id' => auth()->id(),
+            'approval_notes' => $request->input('notes'),
+            'decided_at' => now(),
+        ]);
+        $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
+
+        return response()->json($fieldWorkAssignment);
     }
 }

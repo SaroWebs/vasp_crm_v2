@@ -3,17 +3,18 @@
 namespace Tests\Feature;
 
 use App\Models\Employee;
-use App\Models\EmployeeShiftAssignment;
-use App\Models\Shift;
+use App\Models\LeaveType;
+use App\Models\User;
 use App\Services\AttendanceCalculationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
-use DateTime;
-use DateTimeZone;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AttendanceCalculationTest extends TestCase
 {
+    use RefreshDatabase;
+
     private AttendanceCalculationService $service;
 
     private WorkingHoursService $workingHours;
@@ -36,6 +37,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 0,
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -61,6 +66,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 5, // 5 minutes grace
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -86,6 +95,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 0,
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -111,6 +124,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 0,
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -137,6 +154,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 0,
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -166,6 +187,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 0,
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -188,11 +213,11 @@ class AttendanceCalculationTest extends TestCase
 
         $this->assertTrue($shiftMeta['is_half_day']);
         $this->assertEquals('09:00:00', $shiftMeta['start_time']);
-        $this->assertEquals('14:30:00', $shiftMeta['end_time']);
+        $this->assertEquals('14:00:00', $shiftMeta['end_time']);
     }
 
     /**
-     * Test Saturday working hours (5.5 hours).
+     * Test Saturday working hours (5 hours).
      */
     public function test_saturday_scheduled_hours(): void
     {
@@ -200,13 +225,52 @@ class AttendanceCalculationTest extends TestCase
 
         $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate('test_code', $saturdayDate);
         $punchIn = '09:00:00';
-        $punchOut = '14:30:00';
+        $punchOut = '14:00:00';
 
         $metrics = $this->service->buildShiftMetrics($saturdayDate, $punchIn, $punchOut, $shiftMeta);
 
-        $this->assertEquals(5.5, $metrics['scheduled_hours']);
+        $this->assertEquals(5.0, $metrics['scheduled_hours']);
         $this->assertFalse($metrics['is_late_in']);
         $this->assertFalse($metrics['is_early_out']);
+    }
+
+    /**
+     * Test leave day detection.
+     */
+    public function test_leave_day_returns_no_working_hours(): void
+    {
+        $leaveType = LeaveType::factory()->create();
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        // Create leave request using raw query to avoid factory issues
+        \DB::table('leave_requests')->insert([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-05-25',
+            'end_date' => '2026-05-25',
+            'status' => 'approved',
+            'requested_by_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Test the isEmployeeOnLeave method directly
+        $isOnLeave = $this->service->isEmployeeOnLeave($employee, Carbon::parse('2026-05-25'));
+        $this->assertTrue($isOnLeave);
+    }
+
+    /**
+     * Test holiday status detection.
+     */
+    public function test_holiday_returns_no_working_hours(): void
+    {
+        // This test assumes holidays.json has 2026-01-26 as a holiday (Republic Day)
+        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate('test_code', '2026-01-26');
+
+        $this->assertTrue($shiftMeta['is_holiday']);
+        $this->assertNull($shiftMeta['start_time']);
+        $this->assertNull($shiftMeta['end_time']);
     }
 
     /**
@@ -221,6 +285,10 @@ class AttendanceCalculationTest extends TestCase
             'is_late_in' => false,
             'is_early_out' => false,
             'is_late_out' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $status = $this->service->determineAttendanceStatus($metrics);
@@ -248,29 +316,29 @@ class AttendanceCalculationTest extends TestCase
      */
     public function test_day_status_calculation(): void
     {
-        // Full day on Monday (10 hours scheduled)
+        // Full day on Monday (9 hours scheduled)
         $metricsFullDay = [
-            'total_work_minutes' => 600, // 10 hours
-            'scheduled_hours' => 10.0,
+            'total_work_minutes' => 540, // 9 hours
+            'scheduled_hours' => 9.0,
         ];
 
         $dayStatus = $this->service->calculateDayStatus($metricsFullDay);
 
         $this->assertTrue($dayStatus['is_full_day']);
         $this->assertFalse($dayStatus['is_half_day']);
-        $this->assertEquals(10.0, $dayStatus['hours_worked']);
+        $this->assertEquals(9.0, $dayStatus['hours_worked']);
 
-        // Half day on Saturday (5.5 hours scheduled, 3 hours worked)
+        // Half day on Saturday (5 hours scheduled, 2.5 hours worked)
         $metricsHalfDay = [
-            'total_work_minutes' => 180, // 3 hours
-            'scheduled_hours' => 5.5,
+            'total_work_minutes' => 150, // 2.5 hours
+            'scheduled_hours' => 5.0,
         ];
 
         $dayStatus = $this->service->calculateDayStatus($metricsHalfDay);
 
         $this->assertFalse($dayStatus['is_full_day']);
         $this->assertTrue($dayStatus['is_half_day']);
-        $this->assertEquals(3.0, $dayStatus['hours_worked']);
+        $this->assertEquals(2.5, $dayStatus['hours_worked']);
     }
 
     /**
@@ -284,6 +352,10 @@ class AttendanceCalculationTest extends TestCase
             'end_time' => '19:00:00',
             'grace_minutes' => 0,
             'is_half_day' => false,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
         ];
 
         $attendanceDate = '2026-05-25'; // Monday
@@ -297,5 +369,104 @@ class AttendanceCalculationTest extends TestCase
         $this->assertEquals(15, $metrics['early_in_minutes']);
         $this->assertEquals(30, $metrics['late_out_minutes']);
         $this->assertEquals(30, $metrics['overtime_minutes']);
+    }
+
+    /**
+     * Test on_leave status determination.
+     */
+    public function test_on_leave_status_determination(): void
+    {
+        $metrics = [
+            'punch_in' => null,
+            'punch_out' => null,
+            'is_leave_day' => true,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => false,
+        ];
+
+        $status = $this->service->determineAttendanceStatus($metrics);
+        $this->assertEquals('on_leave', $status);
+    }
+
+    /**
+     * Test field_work status determination.
+     */
+    public function test_field_work_status_determination(): void
+    {
+        $metrics = [
+            'punch_in' => null,
+            'punch_out' => null,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => true,
+            'is_remote_work' => false,
+        ];
+
+        $status = $this->service->determineAttendanceStatus($metrics);
+        $this->assertEquals('field_work', $status);
+    }
+
+    /**
+     * Test remote_work status determination.
+     */
+    public function test_remote_work_status_determination(): void
+    {
+        $metrics = [
+            'punch_in' => null,
+            'punch_out' => null,
+            'is_leave_day' => false,
+            'is_holiday' => false,
+            'is_field_work' => false,
+            'is_remote_work' => true,
+        ];
+
+        $status = $this->service->determineAttendanceStatus($metrics);
+        $this->assertEquals('remote_work', $status);
+    }
+
+    /**
+     * Test field work assignment detection.
+     */
+    public function test_field_work_assignment_detection(): void
+    {
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        \DB::table('field_work_assignments')->insert([
+            'employee_id' => $employee->id,
+            'start_date' => '2026-05-25',
+            'end_date' => '2026-05-25',
+            'location' => 'Client Site',
+            'status' => 'approved',
+            'assigned_by_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $isOnFieldWork = $this->service->isEmployeeOnFieldWork($employee, Carbon::parse('2026-05-25'));
+        $this->assertTrue($isOnFieldWork);
+    }
+
+    /**
+     * Test remote work assignment detection.
+     */
+    public function test_remote_work_assignment_detection(): void
+    {
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        \DB::table('remote_work_assignments')->insert([
+            'employee_id' => $employee->id,
+            'start_date' => '2026-05-26',
+            'end_date' => '2026-05-26',
+            'notes' => 'Working from home',
+            'assigned_by_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $isOnRemoteWork = $this->service->isEmployeeOnRemoteWork($employee, Carbon::parse('2026-05-26'));
+        $this->assertTrue($isOnRemoteWork);
     }
 }

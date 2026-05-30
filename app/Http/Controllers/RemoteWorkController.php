@@ -138,13 +138,13 @@ class RemoteWorkController extends Controller
         }
 
         $validated = $request->validate([
-            'approval_notes' => 'nullable|string|max:500',
+            'notes' => 'nullable|string|max:500',
         ]);
 
         $remoteWorkRequest->update([
             'status' => 'approved',
             'approved_by_user_id' => auth()->id(),
-            'approval_notes' => $validated['approval_notes'] ?? null,
+            'approval_notes' => $validated['notes'] ?? null,
             'decided_at' => now(),
         ]);
 
@@ -169,13 +169,13 @@ class RemoteWorkController extends Controller
         }
 
         $validated = $request->validate([
-            'approval_notes' => 'required|string|max:500',
+            'notes' => 'required|string|max:500',
         ]);
 
         $remoteWorkRequest->update([
             'status' => 'rejected',
             'approved_by_user_id' => auth()->id(),
-            'approval_notes' => $validated['approval_notes'],
+            'approval_notes' => $validated['notes'],
             'decided_at' => now(),
         ]);
 
@@ -205,12 +205,9 @@ class RemoteWorkController extends Controller
             $query->whereYear('start_date', $year);
         }
 
-        $remoteWorkRequests = $query->orderBy('start_date', 'desc')->get();
+        $perPage = $request->integer('per_page', 50);
+        $remoteWorkRequests = $query->orderBy('start_date', 'desc')->paginate($perPage);
 
-        return response()->json([
-            'employee_id' => $employee->id,
-            'employee_name' => $employee->name,
-            'remote_work_requests' => $remoteWorkRequests,
-        ]);
+        return response()->json($remoteWorkRequests);
     }
 }

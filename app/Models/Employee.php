@@ -74,6 +74,16 @@ class Employee extends Model
         return $this->hasMany(FieldWorkAssignment::class);
     }
 
+    public function fieldWorkRequests(): HasMany
+    {
+        return $this->hasMany(FieldWorkRequest::class);
+    }
+
+    public function remoteWorkAssignments(): HasMany
+    {
+        return $this->hasMany(RemoteWorkAssignment::class);
+    }
+
     public function holidayWorkRecords(): HasMany
     {
         return $this->hasMany(HolidayWorkRecord::class);

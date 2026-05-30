@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class FieldWorkAssignment extends Model
+class RemoteWorkAssignment extends Model
 {
     use HasFactory;
 
@@ -15,16 +15,8 @@ class FieldWorkAssignment extends Model
         'employee_id',
         'start_date',
         'end_date',
-        'location',
-        'description',
-        'custom_start_time',
-        'custom_end_time',
-        'assigned_by_user_id',
         'notes',
-        'status',
-        'approved_by_user_id',
-        'approval_notes',
-        'decided_at',
+        'assigned_by_user_id',
     ];
 
     protected function casts(): array
@@ -32,7 +24,6 @@ class FieldWorkAssignment extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
-            'decided_at' => 'timestamp',
         ];
     }
 
@@ -44,11 +35,6 @@ class FieldWorkAssignment extends Model
     public function assignedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_by_user_id');
-    }
-
-    public function approvedByUser(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'approved_by_user_id');
     }
 
     public function scopeForEmployee(Builder $query, int|Employee $employee): Builder
@@ -68,33 +54,8 @@ class FieldWorkAssignment extends Model
             });
     }
 
-    public function scopeActive(Builder $query): Builder
-    {
-        return $query->where('end_date', '>=', now()->toDateString());
-    }
-
-    public function scopeApproved(Builder $query): Builder
-    {
-        return $query->where('status', 'approved');
-    }
-
     public function getDaysCount(): int
     {
         return $this->start_date->diffInDays($this->end_date) + 1;
-    }
-
-    public function getWorkingHours(): array
-    {
-        if ($this->custom_start_time && $this->custom_end_time) {
-            return [
-                'start' => $this->custom_start_time,
-                'end' => $this->custom_end_time,
-            ];
-        }
-
-        return [
-            'start' => '09:00',
-            'end' => '18:00',
-        ];
     }
 }

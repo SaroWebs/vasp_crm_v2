@@ -3,7 +3,6 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -381,6 +380,13 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->hasRole('super-admin');
+    }
+    /**
+     * Check if user is admin (has admin role).
+     */
+    public function isAdmin(): bool
+    {
+        return $this->hasRole(['super-admin', 'admin', 'manager']);
     }
 
     /**

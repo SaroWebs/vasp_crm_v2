@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class FieldWorkAssignment extends Model
+class FieldWorkRequest extends Model
 {
     use HasFactory;
 
@@ -19,9 +19,8 @@ class FieldWorkAssignment extends Model
         'description',
         'custom_start_time',
         'custom_end_time',
-        'assigned_by_user_id',
-        'notes',
         'status',
+        'requested_by_user_id',
         'approved_by_user_id',
         'approval_notes',
         'decided_at',
@@ -41,14 +40,34 @@ class FieldWorkAssignment extends Model
         return $this->belongsTo(Employee::class);
     }
 
-    public function assignedByUser(): BelongsTo
+    public function requestedByUser(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'assigned_by_user_id');
+        return $this->belongsTo(User::class, 'requested_by_user_id');
     }
 
     public function approvedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    public function scopePending(Builder $query): Builder
+    {
+        return $query->where('status', 'pending');
+    }
+
+    public function scopeApproved(Builder $query): Builder
+    {
+        return $query->where('status', 'approved');
+    }
+
+    public function scopeRejected(Builder $query): Builder
+    {
+        return $query->where('status', 'rejected');
+    }
+
+    public function scopeCancelled(Builder $query): Builder
+    {
+        return $query->where('status', 'cancelled');
     }
 
     public function scopeForEmployee(Builder $query, int|Employee $employee): Builder
@@ -68,33 +87,8 @@ class FieldWorkAssignment extends Model
             });
     }
 
-    public function scopeActive(Builder $query): Builder
-    {
-        return $query->where('end_date', '>=', now()->toDateString());
-    }
-
-    public function scopeApproved(Builder $query): Builder
-    {
-        return $query->where('status', 'approved');
-    }
-
     public function getDaysCount(): int
     {
         return $this->start_date->diffInDays($this->end_date) + 1;
-    }
-
-    public function getWorkingHours(): array
-    {
-        if ($this->custom_start_time && $this->custom_end_time) {
-            return [
-                'start' => $this->custom_start_time,
-                'end' => $this->custom_end_time,
-            ];
-        }
-
-        return [
-            'start' => '09:00',
-            'end' => '18:00',
-        ];
     }
 }

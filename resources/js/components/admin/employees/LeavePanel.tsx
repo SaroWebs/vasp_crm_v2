@@ -1,3 +1,4 @@
+import { Link } from '@inertiajs/react';
 import { useState, useEffect, useCallback, useId } from 'react';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
@@ -11,9 +12,9 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-    CheckCircle2, XCircle, Clock, AlertCircle, RefreshCw,
+    CheckCircle2, XCircle, Clock, AlertCircle,
     CalendarDays, TrendingUp, Ban, MapPin, Laptop, Plus,
-    Edit2, Trash2, ChevronDown, ChevronUp, Loader2,
+    Edit2, Trash2, ChevronDown, ChevronUp, Loader2, ExternalLink,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,6 +25,8 @@ interface LeaveType {
     duration_type: 'full_day' | 'half_day' | 'custom_hours' | 'hourly';
     is_paid: boolean;
     requires_approval: boolean;
+    default_hours?: number | null;
+    is_active?: boolean;
 }
 
 interface LeaveBalance {
@@ -64,6 +67,14 @@ interface RemoteWorkRequest {
     created_at: string;
 }
 
+interface RemoteWorkAssignment {
+    id: number;
+    start_date: string;
+    end_date: string;
+    notes?: string | null;
+    assigned_by_user?: { name: string } | null;
+}
+
 interface FieldWorkAssignment {
     id: number;
     start_date: string;
@@ -73,7 +84,10 @@ interface FieldWorkAssignment {
     custom_start_time?: string | null;
     custom_end_time?: string | null;
     notes?: string | null;
+    status: 'pending' | 'approved' | 'rejected' | 'cancelled';
     assigned_by_user?: { name: string } | null;
+    approval_notes?: string | null;
+    approved_by_user?: { name: string } | null;
 }
 
 type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -93,10 +107,10 @@ const STATUS_CONFIG: Record<RequestStatus, {
     icon: React.ComponentType<{ className?: string }>;
     pill: string;
 }> = {
-    pending:   { label: 'Pending',   icon: Clock,        pill: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800' },
-    approved:  { label: 'Approved',  icon: CheckCircle2, pill: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800' },
-    rejected:  { label: 'Rejected',  icon: XCircle,      pill: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800' },
-    cancelled: { label: 'Cancelled', icon: Ban,          pill: 'bg-muted/60 text-muted-foreground border-border' },
+    pending: { label: 'Pending', icon: Clock, pill: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800' },
+    approved: { label: 'Approved', icon: CheckCircle2, pill: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800' },
+    rejected: { label: 'Rejected', icon: XCircle, pill: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800' },
+    cancelled: { label: 'Cancelled', icon: Ban, pill: 'bg-muted/60 text-muted-foreground border-border' },
 };
 
 function fmt(d: string) {
@@ -108,8 +122,8 @@ function days(s: string, e: string) {
 function unpack<T>(res: unknown): T[] {
     if (!res || typeof res !== 'object') return [];
     const r = res as Record<string, unknown>;
-    if (Array.isArray(r))       return r as unknown as T[];
-    if (Array.isArray(r.data))  return r.data as T[];
+    if (Array.isArray(r)) return r as unknown as T[];
+    if (Array.isArray(r.data)) return r.data as T[];
     return [];
 }
 function apiErr(e: unknown): string {
@@ -203,7 +217,7 @@ function ApproveRejectRow({ onApprove, onReject, loading }: {
     loading: boolean;
 }) {
     const [rejecting, setRejecting] = useState(false);
-    const [notes, setNotes]         = useState('');
+    const [notes, setNotes] = useState('');
 
     if (rejecting) return (
         <div className="flex flex-col gap-1.5 rounded-md border border-red-200 bg-red-50 p-2 dark:border-red-800 dark:bg-red-950/20">
@@ -248,9 +262,9 @@ function ApproveRejectRow({ onApprove, onReject, loading }: {
 // ─── Leave Balance Card ───────────────────────────────────────────────────────
 
 function BalanceCard({ b }: { b: LeaveBalance }) {
-    const name  = b.leave_type?.name ?? `Type #${b.leave_type_id}`;
+    const name = b.leave_type?.name ?? `Type #${b.leave_type_id}`;
     const total = b.opening_balance + b.allocated_hours;
-    const pct   = total > 0 ? Math.min((b.used_hours / total) * 100, 100) : 0;
+    const pct = total > 0 ? Math.min((b.used_hours / total) * 100, 100) : 0;
     return (
         <div className="rounded-lg border bg-card p-3 space-y-2">
             <div className="flex items-start justify-between gap-1">
@@ -280,7 +294,7 @@ function BalanceCard({ b }: { b: LeaveBalance }) {
 
 function LeaveRow({ req, onAction }: { req: LeaveRequest; onAction: () => void }) {
     const [actLoading, setActLoading] = useState(false);
-    const [expanded,   setExpanded]   = useState(false);
+    const [expanded, setExpanded] = useState(false);
     const d = days(req.start_date, req.end_date);
 
     async function approve() {
@@ -396,14 +410,73 @@ function RemoteRow({ req, onAction }: { req: RemoteWorkRequest; onAction: () => 
     );
 }
 
-// ─── Field Work Row (admin: can edit/delete) ──────────────────────────────────
+// ─── Remote Work Assignment Row (admin: can edit/delete) ──────────────────────
 
-function FieldRow({ fw, onEdit, onDelete }: {
-    fw: FieldWorkAssignment;
-    onEdit: (fw: FieldWorkAssignment) => void;
+function RemoteAssignmentRow({ assignment, onEdit, onDelete }: {
+    assignment: RemoteWorkAssignment;
+    onEdit: (a: RemoteWorkAssignment) => void;
     onDelete: (id: number) => void;
 }) {
+    const d = days(assignment.start_date, assignment.end_date);
+    return (
+        <div className="rounded-lg border bg-card p-3 space-y-1.5">
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                        <Laptop className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        <p className="text-xs font-semibold">Remote Work</p>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
+                        {fmt(assignment.start_date)} → {fmt(assignment.end_date)}
+                        <span className="ml-1.5 font-semibold text-foreground">{d}d</span>
+                    </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                    <button type="button" onClick={() => onEdit(assignment)}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                        <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => onDelete(assignment.id)}
+                        className="rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-600 transition-colors dark:hover:bg-red-950/30">
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            </div>
+            {assignment.notes && <p className="text-[10px] text-muted-foreground line-clamp-2">{assignment.notes}</p>}
+            {assignment.assigned_by_user && (
+                <p className="text-[10px] text-muted-foreground">Assigned by: {assignment.assigned_by_user.name}</p>
+            )}
+        </div>
+    );
+}
+
+// ─── Field Work Row (admin: can edit/delete/approve) ────────────────────────────
+
+function FieldRow({ fw, onEdit, onAction, onDelete }: {
+    fw: FieldWorkAssignment;
+    onEdit: (fw: FieldWorkAssignment) => void;
+    onAction?: () => void;
+    onDelete: (id: number) => void;
+}) {
+    const [loading, setLoading] = useState(false);
     const d = days(fw.start_date, fw.end_date);
+
+    async function approve() {
+        setLoading(true);
+        try {
+            await axios.post(`/admin/field-work-assignments/${fw.id}/approve`);
+            onAction?.();
+        } catch { /* */ } finally { setLoading(false); }
+    }
+
+    async function reject(notes: string) {
+        setLoading(true);
+        try {
+            await axios.post(`/admin/field-work-assignments/${fw.id}/reject`, { notes });
+            onAction?.();
+        } catch { /* */ } finally { setLoading(false); }
+    }
+
     return (
         <div className="rounded-lg border bg-card p-3 space-y-1.5">
             <div className="flex items-start justify-between gap-2">
@@ -420,7 +493,8 @@ function FieldRow({ fw, onEdit, onDelete }: {
                         )}
                     </p>
                 </div>
-                <div className="flex shrink-0 gap-1">
+                <div className="flex shrink-0 items-center gap-1">
+                    <StatusBadge status={fw.status} />
                     <button type="button" onClick={() => onEdit(fw)}
                         className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                         <Edit2 className="h-3.5 w-3.5" />
@@ -432,8 +506,13 @@ function FieldRow({ fw, onEdit, onDelete }: {
                 </div>
             </div>
             {fw.description && <p className="text-[10px] text-muted-foreground line-clamp-2">{fw.description}</p>}
-            {fw.assigned_by_user && (
-                <p className="text-[10px] text-muted-foreground">Assigned by: {fw.assigned_by_user.name}</p>
+            {fw.approval_notes && (
+                <p className="text-[10px] text-muted-foreground">
+                    ↳ {fw.approved_by_user?.name ?? 'Reviewer'}: {fw.approval_notes}
+                </p>
+            )}
+            {fw.status === 'pending' && (
+                <ApproveRejectRow onApprove={approve} onReject={reject} loading={loading} />
             )}
         </div>
     );
@@ -451,7 +530,7 @@ function AssignLeaveDialog({ open, onOpenChange, employeeId, leaveTypes, onSucce
     const id = useId();
     const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
     const [saving, setSaving] = useState(false);
-    const [err, setErr]       = useState('');
+    const [err, setErr] = useState('');
 
     function reset() { setForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' }); setErr(''); }
 
@@ -463,11 +542,11 @@ function AssignLeaveDialog({ open, onOpenChange, employeeId, leaveTypes, onSucce
         try {
             // POST /api/leave-requests
             await axios.post('/api/leave-requests', {
-                employee_id:   employeeId,
+                employee_id: employeeId,
                 leave_type_id: form.leave_type_id,
-                start_date:    form.start_date,
-                end_date:      form.end_date,
-                reason:        form.reason || null,
+                start_date: form.start_date,
+                end_date: form.end_date,
+                reason: form.reason || null,
             });
             reset(); onOpenChange(false); onSuccess();
         } catch (e) { setErr(apiErr(e)); }
@@ -532,7 +611,7 @@ function AssignRemoteDialog({ open, onOpenChange, employeeId, onSuccess }: {
     const id = useId();
     const [form, setForm] = useState({ start_date: '', end_date: '', reason: '' });
     const [saving, setSaving] = useState(false);
-    const [err, setErr]       = useState('');
+    const [err, setErr] = useState('');
 
     function reset() { setForm({ start_date: '', end_date: '', reason: '' }); setErr(''); }
 
@@ -543,9 +622,9 @@ function AssignRemoteDialog({ open, onOpenChange, employeeId, onSuccess }: {
             // POST /api/remote-work-requests
             await axios.post('/api/remote-work-requests', {
                 employee_id: employeeId,
-                start_date:  form.start_date,
-                end_date:    form.end_date,
-                reason:      form.reason || null,
+                start_date: form.start_date,
+                end_date: form.end_date,
+                reason: form.reason || null,
             });
             reset(); onOpenChange(false); onSuccess();
         } catch (e) { setErr(apiErr(e)); }
@@ -555,7 +634,7 @@ function AssignRemoteDialog({ open, onOpenChange, employeeId, onSuccess }: {
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
             <DialogContent className="max-w-sm">
-                <DialogHeader><DialogTitle>Assign Remote Work</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Request Remote Work</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
@@ -580,7 +659,108 @@ function AssignRemoteDialog({ open, onOpenChange, employeeId, onSuccess }: {
                     <Button variant="outline" size="sm" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
                     <Button size="sm" onClick={submit} disabled={saving}>
                         {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                        Assign WFH
+                        Submit Request
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ─── Assign Remote Work Assignment Dialog ──────────────────────────────────────
+
+interface RemoteAssignmentForm {
+    start_date: string; end_date: string; notes: string;
+}
+
+const EMPTY_REMOTE_ASSIGN_FORM: RemoteAssignmentForm = {
+    start_date: '', end_date: '', notes: '',
+};
+
+function AssignRemoteAssignmentDialog({ open, onOpenChange, employeeId, editing, onSuccess }: {
+    open: boolean; onOpenChange: (o: boolean) => void;
+    employeeId: number | string;
+    editing: RemoteWorkAssignment | null;
+    onSuccess: () => void;
+}) {
+    const id = useId();
+    const [form, setForm] = useState<RemoteAssignmentForm>(EMPTY_REMOTE_ASSIGN_FORM);
+    const [saving, setSaving] = useState(false);
+    const [err, setErr] = useState('');
+
+    useEffect(() => {
+        if (editing) {
+            setForm({
+                start_date: editing.start_date,
+                end_date: editing.end_date,
+                notes: editing.notes ?? '',
+            });
+        } else {
+            setForm(EMPTY_REMOTE_ASSIGN_FORM);
+        }
+        setErr('');
+    }, [editing, open]);
+
+    function set(k: keyof RemoteAssignmentForm) {
+        return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            setForm((p) => ({ ...p, [k]: e.target.value }));
+    }
+
+    async function submit() {
+        if (!form.start_date || !form.end_date) {
+            setErr('Start date and end date are required.'); return;
+        }
+        setSaving(true); setErr('');
+        const payload = {
+            employee_id: employeeId,
+            start_date: form.start_date,
+            end_date: form.end_date,
+            notes: form.notes || null,
+        };
+        try {
+            if (editing) {
+                // PUT /admin/remote-work-assignments/{id}
+                await axios.put(`/admin/remote-work-assignments/${editing.id}`, payload);
+            } else {
+                // POST /admin/remote-work-assignments
+                await axios.post('/admin/remote-work-assignments', payload);
+            }
+            onOpenChange(false); onSuccess();
+        } catch (e) { setErr(apiErr(e)); }
+        finally { setSaving(false); }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>{editing ? 'Edit Remote Work Assignment' : 'Assign Remote Work'}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                            <Label htmlFor={`${id}-sd`} className="text-xs">Start Date *</Label>
+                            <Input id={`${id}-sd`} type="date" className="h-8 text-xs"
+                                value={form.start_date} onChange={set('start_date')} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor={`${id}-ed`} className="text-xs">End Date *</Label>
+                            <Input id={`${id}-ed`} type="date" className="h-8 text-xs"
+                                value={form.end_date} onChange={set('end_date')} />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor={`${id}-notes`} className="text-xs">Notes</Label>
+                        <Textarea id={`${id}-notes`} placeholder="Optional notes…" className="min-h-[64px] resize-none text-xs"
+                            value={form.notes} onChange={set('notes')} />
+                    </div>
+                    {err && <p className="text-xs text-red-600">{err}</p>}
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button size="sm" onClick={submit} disabled={saving}>
+                        {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        {editing ? 'Save Changes' : 'Assign'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -609,18 +789,18 @@ function FieldWorkDialog({ open, onOpenChange, employeeId, editing, onSuccess }:
     const id = useId();
     const [form, setForm] = useState<FieldForm>(EMPTY_FIELD_FORM);
     const [saving, setSaving] = useState(false);
-    const [err, setErr]       = useState('');
+    const [err, setErr] = useState('');
 
     useEffect(() => {
         if (editing) {
             setForm({
-                start_date:        editing.start_date,
-                end_date:          editing.end_date,
-                location:          editing.location,
-                description:       editing.description   ?? '',
+                start_date: editing.start_date,
+                end_date: editing.end_date,
+                location: editing.location,
+                description: editing.description ?? '',
                 custom_start_time: editing.custom_start_time?.slice(0, 5) ?? '',
-                custom_end_time:   editing.custom_end_time?.slice(0, 5)   ?? '',
-                notes:             editing.notes ?? '',
+                custom_end_time: editing.custom_end_time?.slice(0, 5) ?? '',
+                notes: editing.notes ?? '',
             });
         } else {
             setForm(EMPTY_FIELD_FORM);
@@ -639,22 +819,22 @@ function FieldWorkDialog({ open, onOpenChange, employeeId, editing, onSuccess }:
         }
         setSaving(true); setErr('');
         const payload = {
-            employee_id:       employeeId,
-            start_date:        form.start_date,
-            end_date:          form.end_date,
-            location:          form.location.trim(),
-            description:       form.description  || null,
+            employee_id: employeeId,
+            start_date: form.start_date,
+            end_date: form.end_date,
+            location: form.location.trim(),
+            description: form.description || null,
             custom_start_time: form.custom_start_time || null,
-            custom_end_time:   form.custom_end_time   || null,
-            notes:             form.notes || null,
+            custom_end_time: form.custom_end_time || null,
+            notes: form.notes || null,
         };
         try {
             if (editing) {
-                // PUT /api/field-work-assignments/{id}
-                await axios.put(`/api/field-work-assignments/${editing.id}`, payload);
+                // PUT /admin/field-work-assignments/{id}
+                await axios.put(`/admin/field-work-assignments/${editing.id}`, payload);
             } else {
-                // POST /api/field-work-assignments
-                await axios.post('/api/field-work-assignments', payload);
+                // POST /admin/field-work-assignments
+                await axios.post('/admin/field-work-assignments', payload);
             }
             onOpenChange(false); onSuccess();
         } catch (e) { setErr(apiErr(e)); }
@@ -745,30 +925,33 @@ function DeleteDialog({ open, onOpenChange, onConfirm, loading }: {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function LeavePanel({ employeeId }: LeavePanelProps) {
-    const [year,   setYear]   = useState(CURRENT_YEAR);
-    const [view,   setView]   = useState<PanelView>('leaves');
+    const [year, setYear] = useState(CURRENT_YEAR);
+    const [view, setView] = useState<PanelView>('leaves');
     const [filter, setFilter] = useState<RequestStatus | 'all'>('all');
 
     // Data
-    const [balances,   setBalances]   = useState<LeaveBalance[]>([]);
-    const [leaveReqs,  setLeaveReqs]  = useState<LeaveRequest[]>([]);
+    const [balances, setBalances] = useState<LeaveBalance[]>([]);
+    const [leaveReqs, setLeaveReqs] = useState<LeaveRequest[]>([]);
     const [remoteReqs, setRemoteReqs] = useState<RemoteWorkRequest[]>([]);
-    const [fieldWork,  setFieldWork]  = useState<FieldWorkAssignment[]>([]);
+    const [remoteAssign, setRemoteAssign] = useState<RemoteWorkAssignment[]>([]);
+    const [fieldWork, setFieldWork] = useState<FieldWorkAssignment[]>([]);
     const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
 
     // Loading / error per section
-    const [balL,  setBalL]  = useState(false); const [balE,  setBalE]  = useState('');
-    const [reqL,  setReqL]  = useState(false); const [reqE,  setReqE]  = useState('');
-    const [remL,  setRemL]  = useState(false); const [remE,  setRemE]  = useState('');
-    const [fwL,   setFwL]   = useState(false); const [fwE,   setFwE]   = useState('');
-    const [delL,  setDelL]  = useState(false);
+    const [balL, setBalL] = useState(false); const [balE, setBalE] = useState('');
+    const [reqL, setReqL] = useState(false); const [reqE, setReqE] = useState('');
+    const [remL, setRemL] = useState(false); const [remE, setRemE] = useState('');
+    const [fwL, setFwL] = useState(false); const [fwE, setFwE] = useState('');
+    const [delL, setDelL] = useState(false);
 
     // Dialog state
-    const [leaveOpen,  setLeaveOpen]  = useState(false);
+    const [leaveOpen, setLeaveOpen] = useState(false);
     const [remoteOpen, setRemoteOpen] = useState(false);
-    const [fieldOpen,  setFieldOpen]  = useState(false);
-    const [editingFw,  setEditingFw]  = useState<FieldWorkAssignment | null>(null);
-    const [deleteFwId, setDeleteFwId] = useState<number | null>(null);
+    const [remoteAssignOpen, setRemoteAssignOpen] = useState(false);
+    const [fieldOpen, setFieldOpen] = useState(false);
+    const [editingFw, setEditingFw] = useState<FieldWorkAssignment | null>(null);
+    const [editingRemoteAssign, setEditingRemoteAssign] = useState<RemoteWorkAssignment | null>(null);
+    const [deleteId, setDeleteId] = useState<{ type: 'field' | 'remote'; id: number } | null>(null);
 
     // ── Fetchers ────────────────────────────────────────────────────────────
 
@@ -796,6 +979,13 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
         } catch (e) { setRemE(apiErr(e)); } finally { setRemL(false); }
     }, [employeeId]);
 
+    const fetchRemoteAssign = useCallback(async (y: number) => {
+        try {
+            const { data } = await axios.get(`/api/employees/${employeeId}/remote-work-assignments`, { params: { year: y, per_page: 50 } });
+            setRemoteAssign(unpack<RemoteWorkAssignment>(data));
+        } catch { /* ignore errors, assignments are secondary */ }
+    }, [employeeId]);
+
     const fetchField = useCallback(async (y: number) => {
         setFwL(true); setFwE('');
         try {
@@ -820,34 +1010,39 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
         fetchBalances(year);
         fetchLeaveReqs(year);
         fetchRemote(year);
+        fetchRemoteAssign(year);
         fetchField(year);
         setFilter('all');
-    }, [year, fetchBalances, fetchLeaveReqs, fetchRemote, fetchField]);
+    }, [year, fetchBalances, fetchLeaveReqs, fetchRemote, fetchRemoteAssign, fetchField]);
 
-    // ── Delete field work ────────────────────────────────────────────────────
+    // ── Delete operations ────────────────────────────────────────────────────
 
-    async function deleteFieldWork() {
-        if (!deleteFwId) return;
+    async function deleteItem() {
+        if (!deleteId) return;
         setDelL(true);
         try {
-            // DELETE /api/field-work-assignments/{id}
-            await axios.delete(`/api/field-work-assignments/${deleteFwId}`);
-            setDeleteFwId(null);
-            fetchField(year);
+            if (deleteId.type === 'field') {
+                await axios.delete(`/admin/field-work-assignments/${deleteId.id}`);
+                fetchField(year);
+            } else if (deleteId.type === 'remote') {
+                await axios.delete(`/admin/remote-work-assignments/${deleteId.id}`);
+                fetchRemoteAssign(year);
+            }
+            setDeleteId(null);
         } catch { /* */ } finally { setDelL(false); }
     }
 
     // ── Derived ──────────────────────────────────────────────────────────────
 
-    const pendingLeave  = leaveReqs.filter((r) => r.status === 'pending').length;
+    const pendingLeave = leaveReqs.filter((r) => r.status === 'pending').length;
     const pendingRemote = remoteReqs.filter((r) => r.status === 'pending').length;
-    const filteredLeave  = filter === 'all' ? leaveReqs  : leaveReqs.filter((r)  => r.status === filter);
+    const filteredLeave = filter === 'all' ? leaveReqs : leaveReqs.filter((r) => r.status === filter);
     const filteredRemote = filter === 'all' ? remoteReqs : remoteReqs.filter((r) => r.status === filter);
 
     const VIEW_CONFIG: Record<PanelView, { label: string; pending?: number }> = {
-        leaves: { label: 'Leave',       pending: pendingLeave  },
+        leaves: { label: 'Leave', pending: pendingLeave },
         remote: { label: 'Remote Work', pending: pendingRemote },
-        field:  { label: 'Field Work' },
+        field: { label: 'Field Work', pending: 0 },
     };
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -898,8 +1093,8 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                             <SectionHead icon={TrendingUp} title={`Balances — ${year}`} />
                             {balL ? <Skeleton rows={2} h="h-20" />
                                 : balE ? <SectionErr msg={balE} onRetry={() => fetchBalances(year)} />
-                                : balances.length === 0 ? <Empty icon={TrendingUp} msg="No balances for this year." />
-                                : <div className="grid grid-cols-2 gap-2">{balances.map((b) => <BalanceCard key={b.id} b={b} />)}</div>
+                                    : balances.length === 0 ? <Empty icon={TrendingUp} msg="No balances for this year." />
+                                        : <div className="grid grid-cols-2 gap-2">{balances.map((b) => <BalanceCard key={b.id} b={b} />)}</div>
                             }
                         </section>
 
@@ -911,6 +1106,11 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                                         {!reqL && leaveReqs.length > 0 && (
                                             <FilterPills value={filter} onChange={setFilter} pendingCount={pendingLeave} />
                                         )}
+                                        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                                            <Link href="/admin/leave-types">
+                                                <ExternalLink className="mr-1 h-3 w-3" />Manage
+                                            </Link>
+                                        </Button>
                                         <Button size="sm" variant="outline" className="h-7 text-xs"
                                             onClick={() => setLeaveOpen(true)}>
                                             <Plus className="mr-1 h-3 w-3" />Assign
@@ -920,39 +1120,65 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                             />
                             {reqL ? <Skeleton />
                                 : reqE ? <SectionErr msg={reqE} onRetry={() => fetchLeaveReqs(year)} />
-                                : filteredLeave.length === 0 ? <Empty icon={CalendarDays} msg={filter === 'all' ? 'No leave requests.' : `No ${filter} requests.`} />
-                                : <div className="space-y-2">{filteredLeave.map((r) => (
-                                    <LeaveRow key={r.id} req={r} onAction={() => fetchLeaveReqs(year)} />
-                                ))}</div>
+                                    : filteredLeave.length === 0 ? <Empty icon={CalendarDays} msg={filter === 'all' ? 'No leave requests.' : `No ${filter} requests.`} />
+                                        : <div className="space-y-2">{filteredLeave.map((r) => (
+                                            <LeaveRow key={r.id} req={r} onAction={() => fetchLeaveReqs(year)} />
+                                        ))}</div>
                             }
                         </section>
                     </div>
                 )}
 
-                {/* ══ REMOTE WORK VIEW ══ */}
+                {/* ══ REMOTE WORK VIEW (combined requests + assignments) ══ */}
                 {view === 'remote' && (
-                    <section className="space-y-2.5">
-                        <SectionHead icon={Laptop} title="Remote Work Requests"
-                            action={
-                                <div className="flex items-center gap-2">
-                                    {!remL && remoteReqs.length > 0 && (
-                                        <FilterPills value={filter} onChange={setFilter} pendingCount={pendingRemote} />
-                                    )}
-                                    <Button size="sm" variant="outline" className="h-7 text-xs"
-                                        onClick={() => setRemoteOpen(true)}>
-                                        <Plus className="mr-1 h-3 w-3" />Assign
-                                    </Button>
-                                </div>
+                    <div className="space-y-5">
+                        {/* if employee_id is logged user id Remote Work Requests*/}
+                        {/* else Assign remote work */}
+                        <section>
+                            <SectionHead icon={Laptop} title="Remote Work Assignments"
+                                action={
+                                    <div className="flex items-center gap-2">
+
+                                        <Button size="sm" variant="outline" className="h-7 text-xs"
+                                            onClick={() => setRemoteAssignOpen(true)}>
+                                            <Plus className="mr-1 h-3 w-3" />Assign
+                                        </Button>
+                                    </div>
+                                }
+                            />
+
+                            {remoteAssign.map((a) => (
+                                <RemoteAssignmentRow key={`assign-${a.id}`} assignment={a}
+                                    onEdit={(a) => { setEditingRemoteAssign(a); setRemoteAssignOpen(true); }}
+                                    onDelete={(id) => setDeleteId({ type: 'remote', id })}
+                                />
+                            ))}
+                        </section>
+                        <section className="space-y-2.5">
+                            <SectionHead icon={Laptop} title="Remote Work Requests"
+                                action={
+                                    <div className="flex items-center gap-2">
+                                        {!remL && remoteReqs.length > 0 && (
+                                            <FilterPills value={filter} onChange={setFilter} pendingCount={pendingRemote} />
+                                        )}
+                                        <Button size="sm" variant="outline" className="h-7 text-xs"
+                                            onClick={() => setRemoteOpen(true)}>
+                                            <Plus className="mr-1 h-3 w-3" />Request
+                                        </Button>
+                                    </div>
+                                }
+                            />
+                            {remL ? <Skeleton />
+                                : remE ? <SectionErr msg={remE} onRetry={() => fetchRemote(year)} />
+                                    : filteredRemote.length === 0 && remoteAssign.length === 0 ? <Empty icon={Laptop} msg={filter === 'all' ? 'No remote work requests or assignments.' : `No ${filter} requests.`} />
+                                        : <div className="space-y-2">
+                                            {filteredRemote.map((r) => (
+                                                <RemoteRow key={`req-${r.id}`} req={r} onAction={() => fetchRemote(year)} />
+                                            ))}
+                                        </div>
                             }
-                        />
-                        {remL ? <Skeleton />
-                            : remE ? <SectionErr msg={remE} onRetry={() => fetchRemote(year)} />
-                            : filteredRemote.length === 0 ? <Empty icon={Laptop} msg={filter === 'all' ? 'No remote work requests.' : `No ${filter} requests.`} />
-                            : <div className="space-y-2">{filteredRemote.map((r) => (
-                                <RemoteRow key={r.id} req={r} onAction={() => fetchRemote(year)} />
-                            ))}</div>
-                        }
-                    </section>
+                        </section>
+                    </div>
                 )}
 
                 {/* ══ FIELD WORK VIEW ══ */}
@@ -960,21 +1186,27 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                     <section className="space-y-2.5">
                         <SectionHead icon={MapPin} title="Field Work Assignments"
                             action={
-                                <Button size="sm" variant="outline" className="h-7 text-xs"
-                                    onClick={() => { setEditingFw(null); setFieldOpen(true); }}>
-                                    <Plus className="mr-1 h-3 w-3" />Assign
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    {!fwL && fieldWork.length > 0 && (
+                                        <FilterPills value={filter} onChange={setFilter} pendingCount={0} />
+                                    )}
+                                    <Button size="sm" variant="outline" className="h-7 text-xs"
+                                        onClick={() => { setEditingFw(null); setFieldOpen(true); }}>
+                                        <Plus className="mr-1 h-3 w-3" />Assign
+                                    </Button>
+                                </div>
                             }
                         />
                         {fwL ? <Skeleton />
                             : fwE ? <SectionErr msg={fwE} onRetry={() => fetchField(year)} />
-                            : fieldWork.length === 0 ? <Empty icon={MapPin} msg="No field work assignments this year." />
-                            : <div className="space-y-2">{fieldWork.map((fw) => (
-                                <FieldRow key={fw.id} fw={fw}
-                                    onEdit={(f) => { setEditingFw(f); setFieldOpen(true); }}
-                                    onDelete={(id) => setDeleteFwId(id)}
-                                />
-                            ))}</div>
+                                : fieldWork.length === 0 ? <Empty icon={MapPin} msg="No field work assignments this year." />
+                                    : <div className="space-y-2">{fieldWork.map((fw) => (
+                                        <FieldRow key={fw.id} fw={fw}
+                                            onEdit={(f) => { setEditingFw(f); setFieldOpen(true); }}
+                                            onAction={() => fetchField(year)}
+                                            onDelete={(id) => setDeleteId({ type: 'field', id })}
+                                        />
+                                    ))}</div>
                         }
                     </section>
                 )}
@@ -991,14 +1223,19 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                 employeeId={employeeId}
                 onSuccess={() => fetchRemote(year)}
             />
+            <AssignRemoteAssignmentDialog
+                open={remoteAssignOpen} onOpenChange={setRemoteAssignOpen}
+                employeeId={employeeId} editing={editingRemoteAssign}
+                onSuccess={() => fetchRemoteAssign(year)}
+            />
             <FieldWorkDialog
                 open={fieldOpen} onOpenChange={setFieldOpen}
                 employeeId={employeeId} editing={editingFw}
                 onSuccess={() => fetchField(year)}
             />
             <DeleteDialog
-                open={deleteFwId !== null} onOpenChange={(o) => { if (!o) setDeleteFwId(null); }}
-                onConfirm={deleteFieldWork} loading={delL}
+                open={deleteId !== null} onOpenChange={(o) => { if (!o) setDeleteId(null); }}
+                onConfirm={deleteItem} loading={delL}
             />
         </>
     );

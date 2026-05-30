@@ -51,7 +51,7 @@ class AttendanceController extends Controller
                     [
                         'machine_id' => $punchData['MachineId'] ?? null,
                         'ip' => $punchData['Ip'] ?? null,
-                        'is_live' => $punchData['Islive'] ?? false,
+                        'is_live' => false,
                     ]
                 );
 
@@ -70,7 +70,7 @@ class AttendanceController extends Controller
                         'Ip' => $punchData['Ip'] ?? null,
                         'GroupName' => $punchData['GroupName'] ?? null,
                         'EmployeeName' => $punchData['EmployeeName'] ?? null,
-                        'Islive' => $punchData['Islive'] ?? false,
+                        'Islive' => false,
                     ]
                 );
 
@@ -82,6 +82,7 @@ class AttendanceController extends Controller
 
                 if (! empty($punchData['Islive']) || $punchData['Islive'] === true) {
                     $this->sendLivePunchNotification($punchData);
+
                 }
             }
 
@@ -94,104 +95,6 @@ class AttendanceController extends Controller
         ]);
     }
 
-    public function getAttendanceSummary(string $employeeId, Carbon $date): array
-    {
-        $punches = Punch::where('EmployeeId', $employeeId)
-            ->whereDate('PunchTime', $date->toDateString())
-            ->orderBy('PunchTime')
-            ->pluck('PunchTime')
-            ->map(fn ($t) => Carbon::parse($t))
-            ->values();
-
-        if ($punches->isEmpty()) {
-            return [
-                'status' => 'success',
-                'employee_id' => $employeeId,
-                'date' => $date->toDateString(),
-                'shift_id' => null,
-                'shift_start' => null,
-                'shift_end' => null,
-                'shift_grace_minutes' => 0,
-                'punch_in' => null,
-                'punch_out' => null,
-                'breaks' => [],
-                'total_break_minutes' => 0,
-                'total_work_minutes' => null,
-                'late_in_minutes' => 0,
-                'early_out_minutes' => 0,
-                'is_late_in' => false,
-                'is_early_out' => false,
-                'overtime_minutes' => 0,
-            ];
-        }
-
-        $punchIn = $punches->first();
-        $punchOut = null;
-        $breaks = [];
-
-        $remaining = $punches->slice(1)->values(); // everything after punch_in
-
-        $i = 0;
-        while ($i < $remaining->count()) {
-            $breakOut = $remaining->get($i);
-            $breakIn = $remaining->get($i + 1); // may be null
-
-            if ($breakIn === null) {
-                $punchOut = $breakOut;
-                break;
-            }
-
-            $breaks[] = [
-                'break_out' => $breakOut->toDateTimeString(),
-                'break_in' => $breakIn->toDateTimeString(),
-                'duration_minutes' => (int) $breakOut->diffInMinutes($breakIn),
-            ];
-
-            $i += 2;
-        }
-
-        $totalBreakMinutes = collect($breaks)->sum('duration_minutes');
-
-        $totalWorkMinutes = $punchOut
-            ? (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes
-            : null;
-        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
-        $shiftMetrics = $this->buildShiftMetrics(
-            $date->toDateString(),
-            $punchIn->format('H:i:s'),
-            $punchOut?->format('H:i:s'),
-            $shiftMeta
-        );
-        $overtimeMinutes = $punchOut
-            ? $this->calculateOvertimeMinutes($employeeId, $date->toDateString(), $punchOut->format('H:i:s'), $totalWorkMinutes)
-            : 0;
-
-        return [
-            'status' => 'success',
-            'employee_id' => $employeeId,
-            'date' => $date->toDateString(),
-            'shift_id' => $shiftMeta['shift_id'],
-            'shift_start' => $shiftMeta['start_time'],
-            'shift_end' => $shiftMeta['end_time'],
-            'shift_grace_minutes' => $shiftMeta['grace_minutes'],
-            'punch_in' => $punchIn->toDateTimeString(),
-            'punch_out' => $punchOut?->toDateTimeString(),
-            'breaks' => $breaks,
-            'total_break_minutes' => $totalBreakMinutes,
-            'total_work_minutes' => $totalWorkMinutes,
-            'early_in_minutes' => $shiftMetrics['early_in_minutes'],
-            'late_in_minutes' => $shiftMetrics['late_in_minutes'],
-            'early_out_minutes' => $shiftMetrics['early_out_minutes'],
-            'late_out_minutes' => $shiftMetrics['late_out_minutes'],
-            'is_early_in' => $shiftMetrics['is_early_in'],
-            'is_late_in' => $shiftMetrics['is_late_in'],
-            'is_early_out' => $shiftMetrics['is_early_out'],
-            'is_late_out' => $shiftMetrics['is_late_out'],
-            'late_minutes' => $shiftMetrics['late_in_minutes'],
-            'is_late' => $shiftMetrics['is_late_in'],
-            'overtime_minutes' => $overtimeMinutes,
-        ];
-    }
 
     public function getDailyDetails(Request $request)
     {
@@ -736,10 +639,10 @@ class AttendanceController extends Controller
             'attendance_date' => $attendanceDate,
             'punch_in' => $punchIn,
             'punch_out' => null,
-            'ip' => $punch->Ip,
-            'employee_name' => $punch->EmployeeName,
-            'group_name' => $punch->GroupName,
-            'is_live' => $punch->Islive ? 1 : 0,
+            'ip' => $punch['Ip'],
+            'employee_name' => $punch['EmployeeName'],
+            'group_name' => $punch['GroupName'],
+            'is_live' => $punch['Islive'] ? 1 : 0,
             'mode' => $mode,
             'created_at' => $now,
             'updated_at' => $now,
@@ -762,22 +665,11 @@ class AttendanceController extends Controller
             return;
         }
 
-        // ---------------------------------------------------------------
-        // PRE-PASS: Collapse consecutive same-role punches.
-        //
-        // For machine-1/3 (dedicated IN/OUT), consecutive punches on the
-        // SAME role are noise (double-taps, missed opposite machine).
-        // Rule:
-        //   - Consecutive IN  punches → keep the FIRST  (earliest entry)
-        //   - Consecutive OUT punches → keep the LAST   (latest exit)
-        //
-        // For machine-2 (in-out toggle), keep all — they alternate by design.
-        // ---------------------------------------------------------------
         $collapsed = collect();
         $lastRole = null; // 'in' | 'out' | 'inout' | 'unknown'
 
         foreach ($punches as $punch) {
-            $mid = $punch->MachineId !== null ? (int) $punch->MachineId : null;
+            $mid = $punch['MachineId'] !== null ? (int) $punch['MachineId'] : null;
 
             if ($this->isPunchInMachine($mid)) {
                 if ($lastRole === 'in') {
@@ -810,8 +702,8 @@ class AttendanceController extends Controller
         $open = null;
 
         foreach ($collapsed as $punch) {
-            $mid = $punch->MachineId !== null ? (int) $punch->MachineId : null;
-            $time = $punch->PunchTime->format('H:i:s');
+            $mid = $punch['MachineId'] !== null ? (int) $punch['MachineId'] : null;
+            $time = $punch['PunchTime']->format('H:i:s');
 
             if ($this->isPunchInMachine($mid)) {
                 if ($open !== null) {
@@ -830,10 +722,10 @@ class AttendanceController extends Controller
                     $segments[] = $seg;
                 } else {
                     $open['punch_out'] = $time;
-                    if ($punch->Ip) {
-                        $open['ip'] = $punch->Ip;
+                    if ($punch['Ip']) {
+                        $open['ip'] = $punch['Ip'];
                     }
-                    if ($punch->Islive) {
+                    if ($punch['Islive']) {
                         $open['is_live'] = 1;
                     }
                     $segments[] = $open;
@@ -848,10 +740,10 @@ class AttendanceController extends Controller
                     $open = $this->makeSegment($employeeId, $attendanceDate, $mid, $time, $punch, $mode, $now);
                 } else {
                     $open['punch_out'] = $time;
-                    if ($punch->Ip) {
-                        $open['ip'] = $punch->Ip;
+                    if ($punch['Ip']) {
+                        $open['ip'] = $punch['Ip'];
                     }
-                    if ($punch->Islive) {
+                    if ($punch['Islive']) {
                         $open['is_live'] = 1;
                     }
                     $segments[] = $open;
@@ -970,7 +862,7 @@ class AttendanceController extends Controller
             };
 
             $employee = Employee::with(['offices' => $officeQuery])
-                ->where('code', $punchData['EmployeeId'])
+                ->where('code', $punchData["EmployeeId"])
                 ->first();
 
             if (! $employee) {
@@ -984,9 +876,9 @@ class AttendanceController extends Controller
                 $employee->load(['offices' => $officeQuery]);
             }
 
-            $employeeName = $employee->name ?? $punchData['EmployeeName'] ?? $punchData['EmployeeId'];
-            $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
-            $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
+            $employeeName = $employee->name ?? $punchData["EmployeeName"] ?? $punchData["EmployeeId"];
+            $punchTime = Carbon::parse($punchData["PunchTime"])->format('d M Y, h:i A');
+            $machineId = isset($punchData["MachineId"]) ? (int) $punchData["MachineId"] : null;
 
             if ($machineId === self::MACHINE_ID_PUNCH_IN) {
                 $message = "*{$employeeName}* has *PUNCHED IN* at {$punchTime}.";
@@ -1006,13 +898,13 @@ class AttendanceController extends Controller
                     $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
                 }
             }
-            Punch::where('EmployeeId', $punchData['EmployeeId'])
-                ->where('PunchTime', $punchData['PunchTime'])
+            Punch::where("EmployeeId", $punchData["EmployeeId"])
+                ->where("PunchTime", $punchData["PunchTime"])
                 ->update(['Islive' => false]);
 
         } catch (\Throwable $e) {
             Log::error('Failed to send live punch notification', [
-                'employee_id' => $punchData['EmployeeId'],
+                'employee_id' => $punchData["EmployeeId"],
                 'error' => $e->getMessage(),
             ]);
         }
@@ -1021,15 +913,15 @@ class AttendanceController extends Controller
     private function sendVisitorPunchNotification(array $punchData): void
     {
         try {
-            $visitor = Visitor::where('code', $punchData['EmployeeId'])->first();
+            $visitor = Visitor::where('code', $punchData["EmployeeId"])->first();
 
             if (! $visitor) {
                 return;
             }
 
-            $visitorName = $visitor->name ?? $punchData['EmployeeName'] ?? 'Visitor #'.$punchData['EmployeeId'];
-            $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
-            $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
+            $visitorName = $visitor->name ?? $punchData["EmployeeName"] ?? 'Visitor #'.$punchData["EmployeeId"];
+            $punchTime = Carbon::parse($punchData["PunchTime"])->format('d M Y, h:i A');
+            $machineId = isset($punchData["MachineId"]) ? (int) $punchData["MachineId"] : null;
 
             if ($machineId === self::MACHINE_ID_PUNCH_IN) {
                 $message = "*{$visitorName}* (Visitor) has *PUNCHED IN* at {$punchTime}.";
@@ -1045,14 +937,337 @@ class AttendanceController extends Controller
             // Send to default office notification number
             $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
 
-            VisitorPunch::where('visitor_code', $punchData['EmployeeId'])
-                ->where('punch_time', $punchData['PunchTime'])
+            VisitorPunch::where('visitor_code', $punchData["EmployeeId"])
+                ->where('punch_time', $punchData["PunchTime"])
                 ->update(['is_live' => false]);
         } catch (\Throwable $e) {
             Log::error('Failed to send visitor punch notification', [
-                'visitor_code' => $punchData['EmployeeId'],
+                'visitor_code' => $punchData["EmployeeId"],
                 'error' => $e->getMessage(),
             ]);
         }
     }
+
+
+    public function getAttendanceSummary(string $employeeId, Carbon $date): array
+    {
+        $emptyResult = [
+            "status"              => "success",
+            "employee_id"         => $employeeId,
+            "date"                => $date->toDateString(),
+            "shift_id"            => null,
+            "shift_start"         => null,
+            "shift_end"           => null,
+            "shift_grace_minutes" => 0,
+            "punch_in"            => null,
+            "punch_out"           => null,
+            "breaks"              => [],
+            "total_break_minutes" => 0,
+            "total_work_minutes"  => null,
+            "early_in_minutes"    => 0,
+            "late_in_minutes"     => 0,
+            "early_out_minutes"   => 0,
+            "late_out_minutes"    => 0,
+            "is_early_in"         => false,
+            "is_late_in"          => false,
+            "is_early_out"        => false,
+            "is_late_out"         => false,
+            "is_late"             => false,
+            "late_minutes"        => 0,
+            "overtime_minutes"    => 0,
+        ];
+    
+        // ── 1. Fetch raw punches ───────────────────────────────────────────────────
+        // Keep as Eloquent Collection — do NOT call ->toArray().
+        // Laravel's toArray() snake_cases PascalCase columns so $punch["PunchTime"]
+        // would silently return null. Object syntax $punch->PunchTime is correct.
+        $rawPunches = Punch::where("EmployeeId", $employeeId)
+            ->whereDate("PunchTime", $date->toDateString())
+            ->orderBy("PunchTime")
+            ->get(["PunchTime", "MachineId"]);
+    
+        if ($rawPunches->isEmpty()) {
+            return $emptyResult;
+        }
+    
+        // ── 2. Build a flat, typed event list ─────────────────────────────────────
+        $events     = [];    // [["time" => Carbon, "direction" => string], ...]
+        $hasUnknown = false;
+    
+        foreach ($rawPunches as $punch) {
+            $time      = Carbon::parse($punch->PunchTime);
+            $machineId = (int) $punch->MachineId;
+    
+            if ($machineId === 3) {
+                $events[] = ["time" => $time, "direction" => "in"];
+            } elseif ($machineId === 1) {
+                $events[] = ["time" => $time, "direction" => "out"];
+            } elseif ($machineId === 2) {
+                // Position-resolved in step 4
+                $events[] = ["time" => $time, "direction" => "combined"];
+            } else {
+                $events[]   = ["time" => $time, "direction" => "unknown"];
+                $hasUnknown = true;
+            }
+        }
+    
+        if ($hasUnknown) {
+            return $this->getAttendanceSummaryByTimeHeuristic($employeeId, $date, $emptyResult);
+        }
+    
+        // ── 3. Collapse consecutive same-direction typed events (MachineId 1 & 3) ─
+        //
+        //  Consecutive INs  → keep the FIRST  (earliest entry)
+        //  Consecutive OUTs → keep the LAST   (latest exit)
+        //  "combined" events pass through untouched; position-resolved next.
+        //
+        $collapsed = [];
+        $lastDir   = null;
+    
+        foreach ($events as $event) {
+            $dir = $event["direction"];
+    
+            if ($dir === "combined") {
+                $collapsed[] = $event;
+                $lastDir     = "combined";
+                continue;
+            }
+    
+            if ($dir === $lastDir) {
+                if ($dir === "out") {
+                    // Replace last OUT with the later one
+                    $collapsed[count($collapsed) - 1] = $event;
+                }
+                // Consecutive INs: keep first — do nothing
+            } else {
+                $collapsed[] = $event;
+                $lastDir     = $dir;
+            }
+        }
+    
+        // ── 4. Position-resolve "combined" machine events ─────────────────────────
+        //
+        //  index 0     → in
+        //  index N-1   → out
+        //  middle odd  → out (break_out)
+        //  middle even → in  (break_in)
+        //
+        $total    = count($collapsed);
+        $resolved = [];
+    
+        foreach ($collapsed as $idx => $event) {
+            if ($event["direction"] !== "combined") {
+                $resolved[] = $event;
+                continue;
+            }
+    
+            if ($idx === 0) {
+                $resolved[] = ["time" => $event["time"], "direction" => "in"];
+            } elseif ($idx === $total - 1) {
+                $resolved[] = ["time" => $event["time"], "direction" => "out"];
+            } else {
+                $middleIdx  = $idx - 1; // 0-based within the middle segment
+                $resolved[] = [
+                    "time"      => $event["time"],
+                    "direction" => ($middleIdx % 2 === 0) ? "out" : "in",
+                ];
+            }
+        }
+    
+        // Ensure sequence starts with an IN
+        if (empty($resolved) || $resolved[0]["direction"] !== "in") {
+            return $emptyResult;
+        }
+    
+        // ── 5. Extract punch_in, punch_out, and breaks ────────────────────────────
+        //
+        //  index 0       → punch_in
+        //  index N-1     → punch_out   (only when N >= 2)
+        //  index 1…N-2   → middle events → break pairs (only when N >= 4)
+        //
+        //  N == 2 or N == 3: $breaks stays [] — no complete middle pair exists.
+        //
+        $resolvedCount = count($resolved);
+        $punchIn       = $resolved[0]["time"];
+        $punchOut      = null;
+        $breaks        = [];
+    
+        if ($resolvedCount >= 2) {
+            $punchOut = $resolved[$resolvedCount - 1]["time"];
+    
+            if ($resolvedCount >= 4) {
+                $middle = array_slice($resolved, 1, $resolvedCount - 2);
+    
+                for ($i = 0; $i + 1 < count($middle); $i += 2) {
+                    $breakOutEvent = $middle[$i];
+                    $breakInEvent  = $middle[$i + 1];
+    
+                    $breaks[] = [
+                        "break_out"        => $breakOutEvent["time"]->toDateTimeString(),
+                        "break_in"         => $breakInEvent["time"]->toDateTimeString(),
+                        "duration_minutes" => (int) $breakOutEvent["time"]->diffInMinutes($breakInEvent["time"]),
+                    ];
+                }
+            }
+        }
+    
+        // ── 6. Compute totals and return ──────────────────────────────────────────
+        $totalBreakMinutes = collect($breaks)->sum("duration_minutes");
+    
+        $totalWorkMinutes = $punchOut
+            ? max(0, (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes)
+            : null;
+    
+        $shiftMeta    = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
+        $shiftMetrics = $this->buildShiftMetrics(
+            $date->toDateString(),
+            $punchIn->format("H:i:s"),
+            $punchOut?->format("H:i:s"),
+            $shiftMeta
+        );
+    
+        $overtimeMinutes = $punchOut
+            ? $this->calculateOvertimeMinutes(
+                $employeeId,
+                $date->toDateString(),
+                $punchOut->format("H:i:s"),
+                $totalWorkMinutes
+            )
+            : 0;
+    
+        return [
+            "status"              => "success",
+            "employee_id"         => $employeeId,
+            "date"                => $date->toDateString(),
+            "shift_id"            => $shiftMeta["shift_id"],
+            "shift_start"         => $shiftMeta["start_time"],
+            "shift_end"           => $shiftMeta["end_time"],
+            "shift_grace_minutes" => $shiftMeta["grace_minutes"],
+            "punch_in"            => $punchIn->toDateTimeString(),
+            "punch_out"           => $punchOut?->toDateTimeString(),
+            "breaks"              => $breaks,
+            "total_break_minutes" => $totalBreakMinutes,
+            "total_work_minutes"  => $totalWorkMinutes,
+            "early_in_minutes"    => $shiftMetrics["early_in_minutes"],
+            "late_in_minutes"     => $shiftMetrics["late_in_minutes"],
+            "early_out_minutes"   => $shiftMetrics["early_out_minutes"],
+            "late_out_minutes"    => $shiftMetrics["late_out_minutes"],
+            "is_early_in"         => $shiftMetrics["is_early_in"],
+            "is_late_in"          => $shiftMetrics["is_late_in"],
+            "is_early_out"        => $shiftMetrics["is_early_out"],
+            "is_late_out"         => $shiftMetrics["is_late_out"],
+            "late_minutes"        => $shiftMetrics["late_in_minutes"],
+            "is_late"             => $shiftMetrics["is_late_in"],
+            "overtime_minutes"    => $overtimeMinutes,
+        ];
+    }
+    
+    /**
+     * Fallback: time-heuristic for punches with unknown MachineId.
+     *
+     * Punches within $mergeGapMinutes of the previous one are dropped as
+     * duplicate swipes. The cleaned list is then treated positionally:
+     *   index 0     = punch_in
+     *   index N-1   = punch_out  (N >= 2)
+     *   index 1…N-2 = middle break pairs (only when N >= 4)
+     */
+    private function getAttendanceSummaryByTimeHeuristic(
+        string $employeeId,
+        Carbon $date,
+        array  $emptyResult,
+        int    $mergeGapMinutes = 2
+    ): array {
+        $punches = Punch::where("EmployeeId", $employeeId)
+            ->whereDate("PunchTime", $date->toDateString())
+            ->orderBy("PunchTime")
+            ->pluck("PunchTime")
+            ->map(fn ($t) => Carbon::parse($t))
+            ->values();
+    
+        if ($punches->isEmpty()) {
+            return $emptyResult;
+        }
+    
+        // Deduplicate: drop punches within the merge gap of the previous one
+        $merged   = [$punches[0]];
+        $lastTime = $punches[0];
+    
+        for ($i = 1; $i < $punches->count(); $i++) {
+            $current = $punches[$i];
+            if ($current->diffInMinutes($lastTime) > $mergeGapMinutes) {
+                $merged[]  = $current;
+                $lastTime  = $current;
+            }
+        }
+    
+        $mergedCount = count($merged);
+        $punchIn     = $merged[0];
+        $punchOut    = $mergedCount >= 2 ? $merged[$mergedCount - 1] : null;
+        $breaks      = [];
+    
+        if ($mergedCount >= 4) {
+            $middle = array_slice($merged, 1, $mergedCount - 2);
+    
+            for ($i = 0; $i + 1 < count($middle); $i += 2) {
+                $breakOut = $middle[$i];
+                $breakIn  = $middle[$i + 1];
+    
+                $breaks[] = [
+                    "break_out"        => $breakOut->toDateTimeString(),
+                    "break_in"         => $breakIn->toDateTimeString(),
+                    "duration_minutes" => (int) $breakOut->diffInMinutes($breakIn),
+                ];
+            }
+        }
+    
+        $totalBreakMinutes = collect($breaks)->sum("duration_minutes");
+        $totalWorkMinutes  = $punchOut
+            ? max(0, (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes)
+            : null;
+    
+        $shiftMeta    = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
+        $shiftMetrics = $this->buildShiftMetrics(
+            $date->toDateString(),
+            $punchIn->format("H:i:s"),
+            $punchOut?->format("H:i:s"),
+            $shiftMeta
+        );
+    
+        $overtimeMinutes = $punchOut
+            ? $this->calculateOvertimeMinutes(
+                $employeeId,
+                $date->toDateString(),
+                $punchOut->format("H:i:s"),
+                $totalWorkMinutes
+            )
+            : 0;
+    
+        return [
+            "status"              => "success",
+            "employee_id"         => $employeeId,
+            "date"                => $date->toDateString(),
+            "shift_id"            => $shiftMeta["shift_id"],
+            "shift_start"         => $shiftMeta["start_time"],
+            "shift_end"           => $shiftMeta["end_time"],
+            "shift_grace_minutes" => $shiftMeta["grace_minutes"],
+            "punch_in"            => $punchIn->toDateTimeString(),
+            "punch_out"           => $punchOut?->toDateTimeString(),
+            "breaks"              => $breaks,
+            "total_break_minutes" => $totalBreakMinutes,
+            "total_work_minutes"  => $totalWorkMinutes,
+            "early_in_minutes"    => $shiftMetrics["early_in_minutes"],
+            "late_in_minutes"     => $shiftMetrics["late_in_minutes"],
+            "early_out_minutes"   => $shiftMetrics["early_out_minutes"],
+            "late_out_minutes"    => $shiftMetrics["late_out_minutes"],
+            "is_early_in"         => $shiftMetrics["is_early_in"],
+            "is_late_in"          => $shiftMetrics["is_late_in"],
+            "is_early_out"        => $shiftMetrics["is_early_out"],
+            "is_late_out"         => $shiftMetrics["is_late_out"],
+            "late_minutes"        => $shiftMetrics["late_in_minutes"],
+            "is_late"             => $shiftMetrics["is_late_in"],
+            "overtime_minutes"    => $overtimeMinutes,
+        ];
+    }
+
+
 }

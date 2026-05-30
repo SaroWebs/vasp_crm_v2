@@ -8,6 +8,8 @@ use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\FieldWorkController;
+use App\Http\Controllers\RemoteWorkAssignmentController;
 use App\Http\Controllers\Client\ClientCommentAttachmentController;
 use App\Http\Controllers\Client\ClientPortalAuthController;
 use App\Http\Controllers\Client\ClientTicketCommentController;
@@ -441,6 +443,26 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         // Consolidated reports route
         Route::get('/api/reports/consolidated', [ReportController::class, 'getConsolidatedReports'])->name('api.reports.consolidated');
         Route::get('/api/reports/consolidated/export', [ReportController::class, 'exportConsolidatedReports'])->name('api.reports.consolidated.export');
+
+        // Remote Work Assignments routes (admin-direct assignment)
+        Route::prefix('remote-work-assignments')->controller(RemoteWorkAssignmentController::class)->group(function () {
+            Route::post('/', 'store')->name('admin.remote-work-assignments.store');      // Create remote work assignment
+            Route::delete('/{remoteWorkAssignment}', 'destroy')->name('admin.remote-work-assignments.destroy'); // Delete remote work assignment
+        });
+
+        // Field Work Assignments routes (admin-direct assignment)
+        Route::prefix('field-work-assignments')->controller(FieldWorkController::class)->group(function () {
+            Route::post('/', 'store')->name('admin.field-work-assignments.store');      // Create field work assignment
+            Route::put('/{fieldWorkAssignment}', 'update')->name('admin.field-work-assignments.update');   // Update field work assignment
+            Route::delete('/{fieldWorkAssignment}', 'destroy')->name('admin.field-work-assignments.destroy'); // Delete field work assignment
+            Route::post('/{fieldWorkAssignment}/approve', 'approve')->name('admin.field-work-assignments.approve'); // Approve field work assignment
+            Route::post('/{fieldWorkAssignment}/reject', 'reject')->name('admin.field-work-assignments.reject'); // Reject field work assignment
+        });
+
+        // Leave Types management route
+        Route::get('/leave-types', function () {
+            return Inertia::render('admin/leave-types/Index');
+        })->name('leave-types.index');
     });
 });
 
