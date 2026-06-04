@@ -15,35 +15,35 @@ class LeaveBalance extends Model
         'employee_id',
         'leave_type_id',
         'year',
-        'opening_balance',
-        'allocated_hours',
-        'used_hours',
-        'closing_balance',
+        'opening_leaves',
+        'assigned_leaves',
+        'consumed_leaves',
+        'remaining_leaves',
     ];
 
     protected function casts(): array
     {
         return [
-            'opening_balance' => 'decimal:2',
-            'allocated_hours' => 'decimal:2',
-            'used_hours' => 'decimal:2',
-            'closing_balance' => 'decimal:2',
+            'opening_leaves' => 'integer',
+            'assigned_leaves' => 'integer',
+            'consumed_leaves' => 'integer',
+            'remaining_leaves' => 'integer',
         ];
     }
 
     protected function appends(): array
     {
-        return ['remaining_hours', 'carried_over_hours'];
+        return ['carried_over_leaves'];
     }
 
-    public function getRemainingHoursAttribute(): float
+    public function getCarriedOverLeavesAttribute(): int
     {
-        return max(0, floatval($this->allocated_hours) - floatval($this->used_hours));
+        return (int) ($this->attributes['opening_leaves'] ?? 0);
     }
 
-    public function getCarriedOverHoursAttribute(): float
+    public function getAvailableBalance(): int
     {
-        return floatval($this->opening_balance) ?? 0;
+        return max(0, (int) ($this->attributes['remaining_leaves'] ?? 0));
     }
 
     public function employee(): BelongsTo
@@ -73,10 +73,5 @@ class LeaveBalance extends Model
         $leaveTypeId = $leaveType instanceof LeaveType ? $leaveType->id : $leaveType;
 
         return $query->where('leave_type_id', $leaveTypeId);
-    }
-
-    public function getAvailableBalance(): float
-    {
-        return max(0, floatval($this->closing_balance) - floatval($this->used_hours));
     }
 }

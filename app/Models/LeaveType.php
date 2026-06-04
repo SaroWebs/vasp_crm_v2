@@ -43,6 +43,33 @@ class LeaveType extends Model
         return $this->hasMany(LeaveBalance::class);
     }
 
+    public function getDailyLeaveHours(): float
+    {
+        $defaultHours = (float) ($this->default_hours ?? 8);
+
+        if ($defaultHours <= 0 || $defaultHours > 24) {
+            return 8.0;
+        }
+
+        return $defaultHours;
+    }
+
+    public function getConsumptionHoursPerDay(): float
+    {
+        $hoursPerDay = $this->getDailyLeaveHours();
+
+        if ($this->duration_type === 'half_day') {
+            return round($hoursPerDay / 2, 2);
+        }
+
+        return round($hoursPerDay, 2);
+    }
+
+    public function getConsumptionHoursForDays(float $days): float
+    {
+        return round(max(0, $days) * $this->getConsumptionHoursPerDay(), 2);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

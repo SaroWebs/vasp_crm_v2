@@ -7,9 +7,11 @@ use App\Http\Requests\UpdateRemoteWorkAssignmentRequest;
 use App\Models\Employee;
 use App\Models\RemoteWorkAssignment;
 use App\Models\User;
+use App\Services\AttendanceEffectService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class RemoteWorkAssignmentController extends Controller
 {
@@ -74,6 +76,12 @@ class RemoteWorkAssignmentController extends Controller
         }
 
         $assignment = RemoteWorkAssignment::create($validated);
+        app(AttendanceEffectService::class)->apply(
+            $assignment->employee,
+            $assignment->start_date,
+            $assignment->end_date,
+            'remote',
+        );
         $assignment->load(['employee', 'assignedByUser']);
 
         return response()->json($assignment, 201);
@@ -112,7 +120,25 @@ class RemoteWorkAssignmentController extends Controller
             ], 422);
         }
 
-        $remoteWorkAssignment->update($validated);
+        DB::transaction(function () use ($remoteWorkAssignment, $validated): void {
+            $oldStartDate = $remoteWorkAssignment->start_date;
+            $oldEndDate = $remoteWorkAssignment->end_date;
+
+            $remoteWorkAssignment->update($validated);
+
+            app(AttendanceEffectService::class)->clear(
+                $remoteWorkAssignment->employee,
+                $oldStartDate,
+                $oldEndDate,
+            );
+            app(AttendanceEffectService::class)->apply(
+                $remoteWorkAssignment->employee,
+                $remoteWorkAssignment->start_date,
+                $remoteWorkAssignment->end_date,
+                'remote',
+            );
+        });
+
         $remoteWorkAssignment->load(['employee', 'assignedByUser']);
 
         return response()->json($remoteWorkAssignment);
@@ -124,6 +150,12 @@ class RemoteWorkAssignmentController extends Controller
      */
     public function destroy(RemoteWorkAssignment $remoteWorkAssignment): JsonResponse
     {
+        app(AttendanceEffectService::class)->clear(
+            $remoteWorkAssignment->employee,
+            $remoteWorkAssignment->start_date,
+            $remoteWorkAssignment->end_date,
+        );
+
         $remoteWorkAssignment->delete();
 
         return response()->json(['message' => 'Remote work assignment deleted successfully.']);

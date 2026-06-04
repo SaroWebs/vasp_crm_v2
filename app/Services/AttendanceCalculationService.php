@@ -224,7 +224,7 @@ class AttendanceCalculationService
             'shift_id' => null,
             'start_time' => $workingHours['start']->format('H:i:s'),
             'end_time' => $workingHours['end']->format('H:i:s'),
-            'grace_minutes' => 0,
+            'grace_minutes' => $this->resolveGraceMinutes(0),
             'is_half_day' => $isHalfDay,
             'is_leave_day' => false,
             'is_holiday' => false,
@@ -268,7 +268,7 @@ class AttendanceCalculationService
             'shift_id' => $assignment->shift->id,
             'start_time' => $assignment->shift->start_time,
             'end_time' => $assignment->shift->end_time,
-            'grace_minutes' => (int) $assignment->shift->grace_minutes,
+            'grace_minutes' => $this->resolveGraceMinutes((int) $assignment->shift->grace_minutes),
             'is_half_day' => false,
         ];
     }
@@ -315,7 +315,7 @@ class AttendanceCalculationService
         // Handle punch_in
         if ($punchIn) {
             $actualIn = Carbon::parse($attendanceDate.' '.$punchIn);
-            $graceStart = $scheduledStart->copy()->addMinutes((int) $shiftMeta['grace_minutes']);
+            $graceStart = $scheduledStart->copy()->addMinutes($this->resolveGraceMinutes((int) ($shiftMeta['grace_minutes'] ?? 0)));
 
             if ($actualIn->lt($scheduledStart)) {
                 $result['early_in_minutes'] = abs($actualIn->diffInMinutes($scheduledStart));
@@ -491,5 +491,10 @@ class AttendanceCalculationService
             'hours_worked' => round($hoursWorked, 2),
             'hours_required' => round($scheduledHours, 2),
         ];
+    }
+
+    private function resolveGraceMinutes(int $graceMinutes): int
+    {
+        return max(1, $graceMinutes);
     }
 }

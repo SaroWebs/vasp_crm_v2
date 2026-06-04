@@ -6,9 +6,12 @@ use App\Http\Requests\StoreLeaveRequest;
 use App\Http\Requests\UpdateLeaveRequest;
 use App\Models\Employee;
 use App\Models\LeaveApproval;
+use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
+use App\Services\AttendanceEffectService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class LeaveController extends Controller
 {
@@ -75,6 +78,13 @@ class LeaveController extends Controller
             ]));
 
             if ($isAdminCreated) {
+                $this->consumeLeaveBalance($leaveRequest);
+                app(AttendanceEffectService::class)->apply(
+                    $leaveRequest->employee,
+                    $leaveRequest->start_date,
+                    $leaveRequest->end_date,
+                );
+
                 LeaveApproval::create([
                     'leave_request_id' => $leaveRequest->id,
                     'approved_by_user_id' => auth()->id(),
@@ -156,15 +166,24 @@ class LeaveController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        $leaveRequest->update(['status' => 'approved']);
+        DB::transaction(function () use ($leaveRequest, $validated): void {
+            $this->consumeLeaveBalance($leaveRequest);
 
-        LeaveApproval::create([
-            'leave_request_id' => $leaveRequest->id,
-            'approved_by_user_id' => auth()->id(),
-            'decision' => 'approved',
-            'notes' => $validated['notes'] ?? null,
-            'decided_at' => now(),
-        ]);
+            $leaveRequest->update(['status' => 'approved']);
+            app(AttendanceEffectService::class)->apply(
+                $leaveRequest->employee,
+                $leaveRequest->start_date,
+                $leaveRequest->end_date,
+            );
+
+            LeaveApproval::create([
+                'leave_request_id' => $leaveRequest->id,
+                'approved_by_user_id' => auth()->id(),
+                'decision' => 'approved',
+                'notes' => $validated['notes'] ?? null,
+                'decided_at' => now(),
+            ]);
+        });
 
         $leaveRequest->load(['employee', 'leaveType', 'approvals.approvedByUser']);
 
@@ -206,6 +225,50 @@ class LeaveController extends Controller
             'message' => 'Leave request rejected successfully.',
             'leave_request' => $leaveRequest,
         ]);
+    }
+
+    private function consumeLeaveBalance(LeaveRequest $leaveRequest): LeaveBalance
+    {
+        $leaveRequest->loadMissing('leaveType');
+
+        $leaveType = $leaveRequest->leaveType;
+
+        if (! $leaveType) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => 'Leave type is required to approve this request.',
+            ]);
+        }
+
+        $year = (int) $leaveRequest->start_date->year;
+        $consumedLeaves = $leaveRequest->getConsumedLeaves();
+
+        $leaveBalance = LeaveBalance::query()
+            ->where('employee_id', $leaveRequest->employee_id)
+            ->where('leave_type_id', $leaveRequest->leave_type_id)
+            ->where('year', $year)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $leaveBalance) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => 'No leave balance assigned for this employee and leave type for the selected year.',
+            ]);
+        }
+
+        $availableLeaves = $leaveBalance->getAvailableBalance();
+
+        if ($availableLeaves < $consumedLeaves) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => 'Insufficient leave balance for this request.',
+            ]);
+        }
+
+        $leaveBalance->update([
+            'consumed_leaves' => (int) $leaveBalance->consumed_leaves + (int) $consumedLeaves,
+            'remaining_leaves' => max(0, (int) $leaveBalance->opening_leaves + (int) $leaveBalance->assigned_leaves - ((int) $leaveBalance->consumed_leaves + (int) $consumedLeaves)),
+        ]);
+
+        return $leaveBalance;
     }
 
     /**

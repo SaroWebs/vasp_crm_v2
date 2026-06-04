@@ -63,10 +63,10 @@ interface LeaveBalance {
     leave_type_id: number;
     leave_type?: LeaveType;
     year: number;
-    allocated_hours: number;
-    used_hours: number;
-    remaining_hours: number;
-    carried_over_hours: number;
+    assigned_leaves: number;
+    consumed_leaves: number;
+    remaining_leaves: number;
+    carried_over_leaves: number;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -108,7 +108,7 @@ export default function Index() {
     const [selectedLeaveType, setSelectedLeaveType] = useState<string | null>(null);
     const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
     const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
-    const [allocatedHours, setAllocatedHours] = useState<number>(8);
+    const [numberOfLeaves, setNumberOfLeaves] = useState<number>(8);
     const [year, setYear] = useState(new Date().getFullYear());
 
     useEffect(() => {
@@ -249,7 +249,7 @@ export default function Index() {
             const response = await axios.post('/api/leave-balances/bulk-assign', {
                 leave_type_id: parseInt(selectedLeaveType),
                 employee_ids: employeeIds,
-                allocated_hours: allocatedHours,
+                number_of_leaves: numberOfLeaves,
                 year: year,
             });
 
@@ -262,7 +262,7 @@ export default function Index() {
             setSelectedLeaveType(null);
             setSelectedDepartments([]);
             setSelectedEmployees([]);
-            setAllocatedHours(8);
+            setNumberOfLeaves(8);
         } catch (error: any) {
             setMessage({
                 type: 'error',
@@ -467,14 +467,14 @@ export default function Index() {
                                     searchable
                                 />
 
-                                {/* Hours Input */}
+                                {/* Leave Count Input */}
                                 <NumberInput
-                                    label="Allocated Hours/Days"
+                                    label="Number of leaves"
                                     placeholder="8"
-                                    value={allocatedHours}
-                                    onChange={(val) => setAllocatedHours(Number(val) || 8)}
+                                    value={numberOfLeaves}
+                                    onChange={(val) => setNumberOfLeaves(Number(val) || 8)}
                                     min={0}
-                                    step={0.5}
+                                    step={1}
                                 />
 
                                 {/* Year Selection */}
@@ -493,7 +493,7 @@ export default function Index() {
 
                                 {/* Summary */}
                                 <Alert color="blue" title="Assignment Summary">
-                                    Will assign {allocatedHours} hours to {employeesToAssignCount} employee
+                                    Will assign {numberOfLeaves} leaves to {employeesToAssignCount} employee
                                     {employeesToAssignCount !== 1 ? 's' : ''} for {year}
                                 </Alert>
 
@@ -671,13 +671,13 @@ const AssignedLeaveList = () => {
     };
 
     const stats = {
-        totalAllocated: leaveBalances.reduce((sum, lb) => sum + lb.allocated_hours, 0),
-        totalUsed: leaveBalances.reduce((sum, lb) => sum + lb.used_hours, 0),
-        totalRemaining: leaveBalances.reduce((sum, lb) => sum + lb.remaining_hours, 0),
+        totalAssigned: leaveBalances.reduce((sum, lb) => sum + lb.assigned_leaves, 0),
+        totalConsumed: leaveBalances.reduce((sum, lb) => sum + lb.consumed_leaves, 0),
+        totalRemaining: leaveBalances.reduce((sum, lb) => sum + lb.remaining_leaves, 0),
         totalEmployees: new Set(leaveBalances.map((lb) => lb.employee_id)).size,
     };
 
-    const avgUtilization = stats.totalAllocated > 0 ? (stats.totalUsed / stats.totalAllocated) * 100 : 0;
+    const avgUtilization = stats.totalAssigned > 0 ? (stats.totalConsumed / stats.totalAssigned) * 100 : 0;
 
     return (
         <Stack gap="lg">
@@ -687,10 +687,10 @@ const AssignedLeaveList = () => {
                     <Group justify="space-between">
                         <div>
                             <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                                Total Allocated
+                                Total Assigned
                             </Text>
                             <Text fw={700} size="lg">
-                                {Number(stats.totalAllocated).toFixed(1)} hrs
+                                {Number(stats.totalAssigned)} leaves
                             </Text>
                         </div>
                         <Calendar size={32} color="var(--mantine-color-blue-6)" />
@@ -701,11 +701,11 @@ const AssignedLeaveList = () => {
                     <Group justify="space-between">
                         <div>
                             <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                                Hours Used
+                                Leaves Used
                             </Text>
-                            <Text fw={700} size="lg">
-                                {Number(stats.totalUsed).toFixed(1)} hrs
-                            </Text>
+<Text size="lg">
+                                    {Number(stats.totalConsumed)} leaves
+                                </Text>
                         </div>
                         <Clock size={32} color="var(--mantine-color-yellow-6)" />
                     </Group>
@@ -718,7 +718,7 @@ const AssignedLeaveList = () => {
                                 Remaining
                             </Text>
                             <Text fw={700} size="lg">
-                                {Number(stats.totalRemaining).toFixed(1)} hrs
+                                {Number(stats.totalRemaining).toFixed(1)} leaves
                             </Text>
                         </div>
                         <TrendingUp size={32} color="var(--mantine-color-green-6)" />
@@ -847,9 +847,9 @@ const AssignedLeaveList = () => {
                                     <Grid.Col span={6}>
                                         <Stack gap={0}>
                                             <Text size="xs" c="dimmed">
-                                                Allocated
+                                                Assigned
                                             </Text>
-                                            <Text fw={700}>{Number(balance.allocated_hours).toFixed(1)} hrs</Text>
+                                            <Text fw={700}>{Number(balance.assigned_leaves)} leaves</Text>
                                         </Stack>
                                     </Grid.Col>
                                     <Grid.Col span={6}>
@@ -858,7 +858,7 @@ const AssignedLeaveList = () => {
                                                 Used
                                             </Text>
                                             <Text fw={700} c="orange">
-                                                {Number(balance.used_hours).toFixed(1)} hrs
+                                                {Number(balance.consumed_leaves)} leaves
                                             </Text>
                                         </Stack>
                                     </Grid.Col>
@@ -868,7 +868,7 @@ const AssignedLeaveList = () => {
                                                 Remaining
                                             </Text>
                                             <Text fw={700} c="green">
-                                                {Number(balance.remaining_hours || 0).toFixed(1)} hrs
+                                                {Number(balance.remaining_leaves || 0)} leaves
                                             </Text>
                                         </Stack>
                                     </Grid.Col>
@@ -878,7 +878,7 @@ const AssignedLeaveList = () => {
                                                 Carry Over
                                             </Text>
                                             <Text fw={700} c="blue">
-                                                {Number(balance.carried_over_hours || 0).toFixed(1)} hrs
+                                                {Number(balance.carried_over_leaves || 0)} leaves
                                             </Text>
                                         </Stack>
                                     </Grid.Col>
@@ -891,13 +891,13 @@ const AssignedLeaveList = () => {
                                             Utilization
                                         </Text>
                                         <Text size="xs" fw={700}>
-                                            {Number(((balance.used_hours / balance.allocated_hours) * 100)).toFixed(0)}%
+                                            {Number(((balance.consumed_leaves / balance.assigned_leaves) * 100)).toFixed(0)}%
                                         </Text>
                                     </Group>
                                     <Progress
-                                        value={Number((balance.used_hours / balance.allocated_hours) * 100)}
+                                        value={Number((balance.consumed_leaves / balance.assigned_leaves) * 100)}
                                         color={getUtilizationColor(
-                                            (balance.used_hours / balance.allocated_hours) * 100
+                                            (balance.consumed_leaves / balance.assigned_leaves) * 100
                                         )}
                                         size="md"
                                         radius="md"
@@ -922,7 +922,7 @@ const AssignedLeaveList = () => {
                                 <Table.Th>Employee</Table.Th>
                                 <Table.Th>Leave Type</Table.Th>
                                 <Table.Th>Department</Table.Th>
-                                <Table.Th align="right">Allocated</Table.Th>
+                                <Table.Th align="right">Assigned</Table.Th>
                                 <Table.Th align="right">Used</Table.Th>
                                 <Table.Th align="right">Remaining</Table.Th>
                                 <Table.Th align="right">Utilization</Table.Th>
@@ -930,7 +930,7 @@ const AssignedLeaveList = () => {
                         </Table.Thead>
                         <Table.Tbody>
                             {leaveBalances.map((balance) => {
-                                const utilization = (balance.used_hours / balance.allocated_hours) * 100;
+                                const utilization = (balance.consumed_leaves / balance.assigned_leaves) * 100;
                                 return (
                                     <Table.Tr key={balance.id}>
                                         <Table.Td>
@@ -955,16 +955,16 @@ const AssignedLeaveList = () => {
                                             <Text size="sm">{balance.employee?.department?.name || '-'}</Text>
                                         </Table.Td>
                                         <Table.Td align="right">
-                                            <Text fw={600}>{Number(balance.allocated_hours).toFixed(1)}</Text>
+                                            <Text fw={600}>{Number(balance.assigned_leaves)}</Text>
                                         </Table.Td>
                                         <Table.Td align="right">
                                             <Text fw={600} c="orange">
-                                                {Number(balance.used_hours).toFixed(1)}
+                                                {Number(balance.consumed_leaves)}
                                             </Text>
                                         </Table.Td>
                                         <Table.Td align="right">
                                             <Text fw={600} c="green">
-                                                {Number(balance.allocated_hours - balance.used_hours).toFixed(1)}
+                                                {Number(balance.remaining_leaves)}
                                             </Text>
                                         </Table.Td>
                                         <Table.Td align="right">

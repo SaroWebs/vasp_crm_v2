@@ -34,10 +34,10 @@ interface LeaveBalance {
     leave_type_id: number;
     leave_type?: LeaveType;
     year: number;
-    opening_balance: number;
-    allocated_hours: number;
-    used_hours: number;
-    closing_balance: number;
+    opening_leaves: number;
+    assigned_leaves: number;
+    consumed_leaves: number;
+    remaining_leaves: number;
 }
 
 interface LeaveRequest {
@@ -268,8 +268,8 @@ function ApproveRejectRow({ onApprove, onReject, loading }: {
 
 function BalanceCard({ b }: { b: LeaveBalance }) {
     const name = b.leave_type?.name ?? `Type #${b.leave_type_id}`;
-    const total = b.opening_balance + b.allocated_hours;
-    const pct = total > 0 ? Math.min((b.used_hours / total) * 100, 100) : 0;
+    const total = b.opening_leaves + b.assigned_leaves;
+    const pct = total > 0 ? Math.min((b.consumed_leaves / total) * 100, 100) : 0;
     return (
         <div className="rounded-lg border bg-card p-3 space-y-2">
             <div className="flex items-start justify-between gap-1">
@@ -285,10 +285,10 @@ function BalanceCard({ b }: { b: LeaveBalance }) {
                     style={{ width: `${pct}%` }} />
             </div>
             <div className="flex items-end justify-between">
-                <p className="text-[10px] text-muted-foreground">{b.used_hours}h / {total}h used</p>
+                <p className="text-[10px] text-muted-foreground">{b.consumed_leaves} / {total} leaves used</p>
                 <p className={`text-sm font-bold tabular-nums leading-none
-                    ${b.closing_balance <= 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                    {b.closing_balance}h left
+                    ${b.remaining_leaves <= 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    {b.remaining_leaves} left
                 </p>
             </div>
         </div>

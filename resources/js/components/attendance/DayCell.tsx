@@ -12,6 +12,9 @@ export type DayStatus =
     | 'absent'
     | 'late'
     | 'half_day'
+    | 'leave'
+    | 'field_work'
+    | 'remote_work'
     | 'weekend'
     | 'holiday'
     | 'empty'
@@ -39,9 +42,23 @@ interface DayCellProps {
         punch_out: string | null;
         mode: string;
         is_half_day?: boolean;
+        late_minutes?: number;
+        early_out_minutes?: number;
     } | null;
     holiday?: Holiday;
     workingHours?: WorkingHoursForDay;
+    dayMeta?: {
+        shift_id?: number | null;
+        shift_start?: string | null;
+        shift_end?: string | null;
+        shift_grace_minutes?: number | null;
+        shift_source?: 'assigned_shift' | 'general_hours' | 'none';
+        is_leave_day?: boolean;
+        is_holiday?: boolean;
+        is_field_work?: boolean;
+        is_remote_work?: boolean;
+        status?: DayStatus | 'leave' | 'field_work' | 'remote_work';
+    };
     onClick?: () => void;
 }
 
@@ -53,6 +70,12 @@ const statusStyles: Record<DayStatus, string> = {
     late: 'bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900',
     half_day:
         'bg-sky-50 text-sky-900 border-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-900',
+    leave:
+        'bg-violet-50 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-900',
+    field_work:
+        'bg-cyan-50 text-cyan-900 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-200 dark:border-cyan-900',
+    remote_work:
+        'bg-indigo-50 text-indigo-900 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-200 dark:border-indigo-900',
     weekend: 'bg-muted/40 text-muted-foreground border-border/60',
     holiday:
         'bg-purple-50 text-purple-900 border-purple-200 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-900',
@@ -65,6 +88,9 @@ const dotStyles: Record<DayStatus, string> = {
     absent: 'bg-red-500',
     late: 'bg-amber-500',
     half_day: 'bg-sky-500',
+    leave: 'bg-violet-500',
+    field_work: 'bg-cyan-500',
+    remote_work: 'bg-indigo-500',
     weekend: 'bg-muted-foreground/40',
     holiday: 'bg-purple-500',
     empty: 'bg-transparent',
@@ -76,6 +102,9 @@ const statusBadge: Partial<Record<DayStatus, string>> = {
     absent: 'A',
     late: 'L',
     half_day: '½',
+    leave: 'Lv',
+    field_work: 'FW',
+    remote_work: 'RW',
     holiday: 'H',
 };
 
@@ -94,6 +123,12 @@ function getStatusLabel(status: DayStatus): string {
             return 'Late';
         case 'half_day':
             return 'Half Day';
+        case 'leave':
+            return 'Leave';
+        case 'field_work':
+            return 'Field Work';
+        case 'remote_work':
+            return 'Remote Work';
         case 'weekend':
             return 'Non-working day';
         case 'holiday':
@@ -115,6 +150,7 @@ export function DayCell({
     record,
     holiday,
     workingHours,
+    dayMeta,
     onClick,
 }: DayCellProps) {
     // ✅ FIX: All hooks must be called unconditionally before any early returns
@@ -144,12 +180,19 @@ export function DayCell({
 
     const punchIn = formatTime(record?.punch_in ?? null);
     const punchOut = formatTime(record?.punch_out ?? null);
+    const scheduleStart = dayMeta?.shift_start ?? workingHours?.start ?? null;
+    const scheduleEnd = dayMeta?.shift_end ?? workingHours?.end ?? null;
     const workingHoursLabel =
-        workingHours?.start && workingHours?.end
-            ? `${workingHours.start.slice(0, 5)}–${workingHours.end.slice(0, 5)}`
+        scheduleStart && scheduleEnd
+            ? `${scheduleStart.slice(0, 5)} - ${scheduleEnd.slice(0, 5)}`
             : null;
     const metaLabel = holiday?.name ?? (status === 'weekend' ? 'Off' : null);
     const badge = statusBadge[status];
+    const sourceLabel = dayMeta?.shift_source === 'assigned_shift'
+        ? 'Assigned shift'
+        : dayMeta?.shift_source === 'general_hours'
+            ? 'General hours'
+            : null;
 
     const cell = (
         <button
@@ -218,7 +261,7 @@ export function DayCell({
                 <TooltipTrigger asChild>{cell}</TooltipTrigger>
                 <TooltipContent
                     side="top"
-                    className="max-w-[220px] rounded-lg border bg-popover p-3 shadow-md space-y-1.5"
+                    className="max-w-[240px] space-y-1.5 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md"
                 >
                     <div className="flex items-center justify-between gap-3">
                         <span className="text-xs font-semibold">{date}</span>
@@ -233,8 +276,8 @@ export function DayCell({
                     </div>
 
                     {holiday?.name && (
-                        <div className="text-xs text-purple-600 dark:text-purple-400">
-                            🎉 {holiday.name}
+                        <div className="text-xs text-purple-700 dark:text-purple-300">
+                            {holiday.name}
                             {holiday.type && (
                                 <span className="ml-1 opacity-60">({holiday.type})</span>
                             )}
@@ -247,9 +290,18 @@ export function DayCell({
                         </div>
                     )}
 
+                    {sourceLabel && (
+                        <div className="text-xs text-muted-foreground">
+                            {sourceLabel}
+                            {dayMeta?.shift_grace_minutes != null
+                                ? `, ${dayMeta.shift_grace_minutes} min grace`
+                                : ''}
+                        </div>
+                    )}
+
                     {(punchIn || punchOut) && (
                         <div className="text-xs font-medium tabular-nums">
-                            {punchIn ?? '--:--'} → {punchOut ?? '--:--'}
+                            {punchIn ?? '--:--'} - {punchOut ?? '--:--'}
                             {record?.mode && (
                                 <span className="ml-1 text-muted-foreground capitalize">
                                     · {record.mode}
@@ -261,6 +313,12 @@ export function DayCell({
                     {record?.is_half_day && (
                         <div className="text-xs text-sky-600 dark:text-sky-400">
                             Half day
+                        </div>
+                    )}
+
+                    {dayMeta?.is_leave_day && (
+                        <div className="text-xs text-violet-700 dark:text-violet-300">
+                            On leave
                         </div>
                     )}
                 </TooltipContent>

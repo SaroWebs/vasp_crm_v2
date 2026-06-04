@@ -6,7 +6,9 @@ use App\Http\Requests\StoreFieldWorkRequest;
 use App\Http\Requests\UpdateFieldWorkRequest;
 use App\Models\Employee;
 use App\Models\FieldWorkAssignment;
+use App\Services\AttendanceEffectService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class FieldWorkController extends Controller
 {
@@ -72,6 +74,11 @@ class FieldWorkController extends Controller
         $validated['decided_at'] = now();
 
         $fieldWorkAssignment = FieldWorkAssignment::create($validated);
+        app(AttendanceEffectService::class)->apply(
+            $fieldWorkAssignment->employee,
+            $fieldWorkAssignment->start_date,
+            $fieldWorkAssignment->end_date,
+        );
         $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
 
         return response()->json($fieldWorkAssignment, 201);
@@ -96,7 +103,27 @@ class FieldWorkController extends Controller
     {
         $validated = $request->validated();
 
-        $fieldWorkAssignment->update($validated);
+        DB::transaction(function () use ($fieldWorkAssignment, $validated): void {
+            $oldStartDate = $fieldWorkAssignment->start_date;
+            $oldEndDate = $fieldWorkAssignment->end_date;
+
+            $fieldWorkAssignment->update($validated);
+
+            app(AttendanceEffectService::class)->clear(
+                $fieldWorkAssignment->employee,
+                $oldStartDate,
+                $oldEndDate,
+            );
+
+            if ($fieldWorkAssignment->status === 'approved') {
+                app(AttendanceEffectService::class)->apply(
+                    $fieldWorkAssignment->employee,
+                    $fieldWorkAssignment->start_date,
+                    $fieldWorkAssignment->end_date,
+                );
+            }
+        });
+
         $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
 
         return response()->json($fieldWorkAssignment);
@@ -108,6 +135,12 @@ class FieldWorkController extends Controller
      */
     public function destroy(FieldWorkAssignment $fieldWorkAssignment)
     {
+        app(AttendanceEffectService::class)->clear(
+            $fieldWorkAssignment->employee,
+            $fieldWorkAssignment->start_date,
+            $fieldWorkAssignment->end_date,
+        );
+
         $fieldWorkAssignment->delete();
 
         return response()->json(['message' => 'Field work assignment deleted successfully.']);
@@ -153,6 +186,13 @@ class FieldWorkController extends Controller
             'approval_notes' => $request->input('notes'),
             'decided_at' => now(),
         ]);
+
+        app(AttendanceEffectService::class)->apply(
+            $fieldWorkAssignment->employee,
+            $fieldWorkAssignment->start_date,
+            $fieldWorkAssignment->end_date,
+        );
+
         $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
 
         return response()->json($fieldWorkAssignment);
@@ -170,6 +210,13 @@ class FieldWorkController extends Controller
             'approval_notes' => $request->input('notes'),
             'decided_at' => now(),
         ]);
+
+        app(AttendanceEffectService::class)->clear(
+            $fieldWorkAssignment->employee,
+            $fieldWorkAssignment->start_date,
+            $fieldWorkAssignment->end_date,
+        );
+
         $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
 
         return response()->json($fieldWorkAssignment);

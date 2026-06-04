@@ -5,10 +5,10 @@ import { Calendar, CalendarDays, Clock } from 'lucide-react';
 
 interface LeaveTypeBalance {
     leave_type: { id: number; name: string };
-    opening_balance: number;
-    allocated_hours: number;
-    used_hours: number;
-    closing_balance: number;
+    opening_leaves: number;
+    assigned_leaves: number;
+    consumed_leaves: number;
+    remaining_leaves: number;
     available_balance: number;
 }
 
@@ -81,10 +81,10 @@ export function LeaveBalanceDisplay({ auth, year }: LeaveBalanceDisplayProps) {
                                 </Text>
                                 <Text size="xs" color="dimmed">Available</Text>
                                 <Text size="lg">
-                                    {balance.available_balance.toFixed(1)} hrs
+                                    {balance.available_balance} leaves
                                 </Text>
                                 <Badge size="xs" color="blue" variant="light">
-                                    Allocated: {balance.allocated_hours}
+                                    Assigned: {balance.assigned_leaves}
                                 </Badge>
                             </Stack>
                         </Card>

@@ -54,7 +54,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->postJson('/api/leave-balances/bulk-assign', [
                 'leave_type_id' => $this->leaveType->id,
                 'employee_ids' => $employees->pluck('id')->toArray(),
-                'allocated_hours' => 8,
+                'number_of_leaves' => 8,
                 'year' => 2026,
             ]);
 
@@ -69,7 +69,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
                 'employee_id' => $employee->id,
                 'leave_type_id' => $this->leaveType->id,
                 'year' => 2026,
-                'allocated_hours' => 8,
+                'assigned_leaves' => 8,
             ]);
         }
     }
@@ -83,16 +83,17 @@ class LeaveBalanceBulkAssignTest extends TestCase
             'employee_id' => $employee->id,
             'leave_type_id' => $this->leaveType->id,
             'year' => 2026,
-            'allocated_hours' => 5,
-            'used_hours' => 0,
-            'opening_balance' => 0,
+            'opening_leaves' => 0,
+            'assigned_leaves' => 5,
+            'consumed_leaves' => 0,
+            'remaining_leaves' => 5,
         ]);
 
         $response = $this->actingAs($this->admin)
             ->postJson('/api/leave-balances/bulk-assign', [
                 'leave_type_id' => $this->leaveType->id,
                 'employee_ids' => [$employee->id],
-                'allocated_hours' => 8,
+                'number_of_leaves' => 8,
                 'year' => 2026,
             ]);
 
@@ -106,7 +107,8 @@ class LeaveBalanceBulkAssignTest extends TestCase
             'employee_id' => $employee->id,
             'leave_type_id' => $this->leaveType->id,
             'year' => 2026,
-            'allocated_hours' => 8,
+            'assigned_leaves' => 8,
+            'remaining_leaves' => 8,
         ]);
     }
 
@@ -116,7 +118,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->postJson('/api/leave-balances/bulk-assign', []);
 
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['leave_type_id', 'employee_ids', 'allocated_hours', 'year']);
+        $response->assertJsonValidationErrors(['leave_type_id', 'employee_ids', 'number_of_leaves', 'year']);
     }
 
     public function test_bulk_assign_validates_leave_type_exists(): void
@@ -127,7 +129,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->postJson('/api/leave-balances/bulk-assign', [
                 'leave_type_id' => 9999,
                 'employee_ids' => [$employee->id],
-                'allocated_hours' => 8,
+                'number_of_leaves' => 8,
                 'year' => 2026,
             ]);
 
@@ -135,7 +137,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
         $response->assertJsonValidationErrors('leave_type_id');
     }
 
-    public function test_bulk_assign_validates_allocated_hours_positive(): void
+    public function test_bulk_assign_validates_number_of_leaves_positive(): void
     {
         $employee = Employee::factory()->create();
 
@@ -143,12 +145,12 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->postJson('/api/leave-balances/bulk-assign', [
                 'leave_type_id' => $this->leaveType->id,
                 'employee_ids' => [$employee->id],
-                'allocated_hours' => -5,
+                'number_of_leaves' => -5,
                 'year' => 2026,
             ]);
 
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors('allocated_hours');
+        $response->assertJsonValidationErrors('number_of_leaves');
     }
 
     public function test_bulk_assign_validates_year_is_numeric(): void
@@ -159,7 +161,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->postJson('/api/leave-balances/bulk-assign', [
                 'leave_type_id' => $this->leaveType->id,
                 'employee_ids' => [$employee->id],
-                'allocated_hours' => 8,
+                'number_of_leaves' => 8,
                 'year' => 'invalid',
             ]);
 
@@ -172,7 +174,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
         $response = $this->postJson('/api/leave-balances/bulk-assign', [
             'leave_type_id' => $this->leaveType->id,
             'employee_ids' => [1],
-            'allocated_hours' => 8,
+            'number_of_leaves' => 8,
             'year' => 2026,
         ]);
 
@@ -187,7 +189,7 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->postJson('/api/leave-balances/bulk-assign', [
                 'leave_type_id' => $this->leaveType->id,
                 'employee_ids' => [$employee->id],
-                'allocated_hours' => 8,
+                'number_of_leaves' => 8,
                 'year' => 2026,
             ]);
 
@@ -196,8 +198,8 @@ class LeaveBalanceBulkAssignTest extends TestCase
             ->where('year', 2026)
             ->first();
 
-        // closing_balance = opening_balance + allocated_hours - used_hours
-        $expectedClosingBalance = 0 + 8 - 0;
-        $this->assertEquals($expectedClosingBalance, $leaveBalance->closing_balance);
+        // remaining_leaves = opening_leaves + assigned_leaves - consumed_leaves
+        $expectedRemainingLeaves = 0 + 8 - 0;
+        $this->assertEquals($expectedRemainingLeaves, $leaveBalance->remaining_leaves);
     }
 }

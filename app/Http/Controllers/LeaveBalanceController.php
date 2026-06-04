@@ -51,7 +51,7 @@ class LeaveBalanceController extends Controller
      * {
      *   "leave_type_id": 1,
      *   "employee_ids": [1, 2, 3],
-     *   "allocated_hours": 8,
+     *   "number_of_leaves": 8,
      *   "year": 2026
      * }
      */
@@ -61,14 +61,14 @@ class LeaveBalanceController extends Controller
             'leave_type_id' => 'required|exists:leave_types,id',
             'employee_ids' => 'required|array|min:1',
             'employee_ids.*' => 'exists:employees,id',
-            'allocated_hours' => 'required|numeric|min:0',
+            'number_of_leaves' => 'required|integer|min:0',
             'year' => 'required|integer|min:2000|max:2100',
         ]);
 
         return DB::transaction(function () use ($validated) {
             $leaveType = LeaveType::find($validated['leave_type_id']);
             $year = $validated['year'];
-            $allocatedHours = (float) $validated['allocated_hours'];
+            $numberOfLeaves = (int) $validated['number_of_leaves'];
             $employeeIds = $validated['employee_ids'];
 
             $results = [
@@ -87,18 +87,26 @@ class LeaveBalanceController extends Controller
                             'year' => $year,
                         ],
                         [
-                            'opening_balance' => 0,
-                            'allocated_hours' => $allocatedHours,
-                            'used_hours' => 0,
-                            'closing_balance' => $allocatedHours,
+                            'opening_leaves' => 0,
+                            'assigned_leaves' => $numberOfLeaves,
+                            'consumed_leaves' => 0,
+                            'remaining_leaves' => $numberOfLeaves,
                         ]
+                    );
+
+                    $closingBalance = $this->calculateClosingBalance(
+                        (int) $balance->opening_leaves,
+                        $numberOfLeaves,
+                        (int) $balance->consumed_leaves,
                     );
 
                     if ($balance->wasRecentlyCreated) {
                         $results['created']++;
                     } else {
-                        // Update existing balance
-                        $balance->update(['allocated_hours' => $allocatedHours]);
+                        $balance->update([
+                            'assigned_leaves' => $numberOfLeaves,
+                            'remaining_leaves' => $closingBalance,
+                        ]);
                         $results['updated']++;
                     }
                 } catch (\Exception $e) {
@@ -139,10 +147,12 @@ class LeaveBalanceController extends Controller
             'employee_id' => 'required|exists:employees,id',
             'leave_type_id' => 'required|exists:leave_types,id',
             'year' => 'required|integer|min:2000|max:2100',
-            'allocated_hours' => 'required|numeric|min:0',
-            'opening_balance' => 'nullable|numeric',
-            'used_hours' => 'nullable|numeric',
+            'number_of_leaves' => 'required|integer|min:0',
+            'opening_leaves' => 'nullable|integer|min:0',
         ]);
+
+        $openingLeaves = (int) ($validated['opening_leaves'] ?? 0);
+        $assignedLeaves = (int) $validated['number_of_leaves'];
 
         // Check for duplicate
         $existing = LeaveBalance::where([
@@ -158,10 +168,13 @@ class LeaveBalanceController extends Controller
         }
 
         $balance = LeaveBalance::create([
-            ...$validated,
-            'opening_balance' => $validated['opening_balance'] ?? 0,
-            'used_hours' => $validated['used_hours'] ?? 0,
-            'closing_balance' => ($validated['opening_balance'] ?? 0) + $validated['allocated_hours'],
+            'employee_id' => $validated['employee_id'],
+            'leave_type_id' => $validated['leave_type_id'],
+            'year' => $validated['year'],
+            'opening_leaves' => $openingLeaves,
+            'assigned_leaves' => $assignedLeaves,
+            'consumed_leaves' => 0,
+            'remaining_leaves' => $this->calculateClosingBalance($openingLeaves, $assignedLeaves, 0),
         ]);
 
         return response()->json($balance->load(['employee', 'leaveType']), 201);
@@ -174,19 +187,25 @@ class LeaveBalanceController extends Controller
     public function update(Request $request, LeaveBalance $leaveBalance)
     {
         $validated = $request->validate([
-            'allocated_hours' => 'sometimes|numeric|min:0',
-            'used_hours' => 'sometimes|numeric|min:0',
-            'opening_balance' => 'sometimes|numeric',
+            'number_of_leaves' => 'sometimes|integer|min:0',
+            'opening_leaves' => 'sometimes|integer|min:0',
         ]);
 
-        $leaveBalance->update($validated);
+        $openingLeaves = (int) ($validated['opening_leaves'] ?? $leaveBalance->opening_leaves);
+        $assignedLeaves = (int) ($validated['number_of_leaves'] ?? $leaveBalance->assigned_leaves);
 
-        // Recalculate closing balance
         $leaveBalance->update([
-            'closing_balance' => ($leaveBalance->opening_balance ?? 0) + ($validated['allocated_hours'] ?? $leaveBalance->allocated_hours) - ($validated['used_hours'] ?? $leaveBalance->used_hours),
+            'opening_leaves' => $openingLeaves,
+            'assigned_leaves' => $assignedLeaves,
+            'remaining_leaves' => $this->calculateClosingBalance($openingLeaves, $assignedLeaves, (int) $leaveBalance->consumed_leaves),
         ]);
 
         return response()->json($leaveBalance->load(['employee', 'leaveType']));
+    }
+
+    private function calculateClosingBalance(int $openingLeaves, int $assignedLeaves, int $consumedLeaves): int
+    {
+        return max(0, $openingLeaves + $assignedLeaves - $consumedLeaves);
     }
 
     /**

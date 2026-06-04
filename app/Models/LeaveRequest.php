@@ -83,4 +83,14 @@ class LeaveRequest extends Model
     {
         return $this->start_date->diffInDays($this->end_date) + 1;
     }
+
+    public function getConsumedHours(): float
+    {
+        return $this->getConsumedLeaves();
+    }
+
+    public function getConsumedLeaves(): float
+    {
+        return (float) $this->getDaysCount();
+    }
 }

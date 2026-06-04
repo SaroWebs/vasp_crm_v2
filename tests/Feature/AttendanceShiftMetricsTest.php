@@ -118,6 +118,44 @@ class AttendanceShiftMetricsTest extends TestCase
         $this->assertFalse($decorated['is_late_out']);
     }
 
+    public function test_shift_metrics_apply_a_minimum_one_minute_grace_for_late_entry(): void
+    {
+        $employee = Employee::factory()->create(['code' => '9011']);
+        $shift = Shift::create([
+            'name' => 'Zero Grace Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '18:00:00',
+            'grace_minutes' => 0,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-05-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
+        $attendance = Attendance::create([
+            'employee_id' => $employee->code,
+            'attendance_date' => '2026-05-16',
+            'punch_in' => '09:00:30',
+            'punch_out' => '18:00:00',
+            'employee_name' => $employee->name,
+            'mode' => 'office',
+        ]);
+
+        $controller = new AttendanceController;
+        $ref = new \ReflectionMethod(AttendanceController::class, 'decorateAttendanceWithShiftMetrics');
+        $ref->setAccessible(true);
+        $decorated = $ref->invoke($controller, $attendance);
+
+        $this->assertSame($shift->id, $decorated['shift_id']);
+        $this->assertSame(0, $decorated['late_minutes']);
+        $this->assertFalse($decorated['is_late']);
+    }
+
     public function test_shift_metrics_calculates_early_in_and_late_out(): void
     {
         $employee = Employee::factory()->create(['code' => '9003']);

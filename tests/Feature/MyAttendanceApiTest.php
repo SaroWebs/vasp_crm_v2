@@ -201,10 +201,10 @@ class MyAttendanceApiTest extends TestCase
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'year' => 2026,
-            'opening_balance' => 12,
-            'allocated_hours' => 12,
-            'used_hours' => 2,
-            'closing_balance' => 10,
+            'opening_leaves' => 12,
+            'assigned_leaves' => 12,
+            'consumed_leaves' => 2,
+            'remaining_leaves' => 10,
         ]);
 
         $response = $this->getJson('/api/my/leave-balances?year=2026');

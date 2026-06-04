@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios, { AxiosInstance } from 'axios';
 import { ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle } from 'lucide-react';
-import { AttendanceCalendarGrid } from './AttendanceCalendarGrid';
+import { AttendanceCalendarGrid, type AttendanceCalendarDay } from './AttendanceCalendarGrid';
 import { AttendanceSummaryCards } from './AttendanceSummaryCards';
 import { Auth } from '@/types';
 
@@ -14,6 +14,14 @@ interface AttendanceRecord {
     is_half_day?: boolean;
     employee_name?: string | null;
     group_name?: string;
+    shift_id?: number | null;
+    shift_start?: string | null;
+    shift_end?: string | null;
+    shift_grace_minutes?: number | null;
+    shift_source?: 'assigned_shift' | 'general_hours' | 'none';
+    status?: string;
+    late_minutes?: number;
+    early_out_minutes?: number;
 }
 
 interface WorkingHoursConfig {
@@ -47,6 +55,7 @@ interface AttendanceApiResponse {
     calendar?: {
         holidays: Array<{ date: string; name: string; type?: string }>;
         working_hours: WorkingHoursConfig;
+        days?: AttendanceCalendarDay[];
     };
     month: string;
     year: string;
@@ -75,10 +84,53 @@ const LEGEND_ITEMS = [
     { label: 'Present', className: 'bg-emerald-100 border border-emerald-300' },
     { label: 'Late', className: 'bg-amber-100  border border-amber-300' },
     { label: 'Half Day', className: 'bg-sky-100    border border-sky-300' },
+    { label: 'Leave', className: 'bg-violet-100 border border-violet-300' },
     { label: 'Absent', className: 'bg-red-100    border border-red-300' },
     { label: 'Holiday', className: 'bg-purple-100 border border-purple-300' },
     { label: 'Weekend', className: 'bg-muted/60   border border-border' },
 ];
+
+function formatDateLabel(date: string): string {
+    return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+}
+
+function formatTimeLabel(time: string | null | undefined): string {
+    if (!time) {
+        return '--:--';
+    }
+
+    return time.slice(0, 5);
+}
+
+function getStatusLabel(status: string | undefined): string {
+    switch (status) {
+        case 'present':
+            return 'Present';
+        case 'late':
+            return 'Late';
+        case 'half_day':
+            return 'Half Day';
+        case 'leave':
+            return 'Leave';
+        case 'holiday':
+            return 'Holiday';
+        case 'field_work':
+            return 'Field Work';
+        case 'remote_work':
+            return 'Remote Work';
+        case 'weekend':
+            return 'Weekend';
+        case 'absent':
+            return 'Absent';
+        default:
+            return 'No Data';
+    }
+}
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -136,18 +188,16 @@ export function AttendanceCalendar({
     const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
     const [summary, setSummary] = useState<AttendanceSummary | null>(null);
     const [calendarMeta, setCalendarMeta] = useState<AttendanceApiResponse['calendar']>();
+    const [selectedDay, setSelectedDay] = useState<AttendanceCalendarDay | null>(null);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const empId = employeeId ? employeeId : auth.user?.employee?.id ?? auth.user.id;
     const employeeName = auth.user.name;
-    let url = `/my-attendance`;
-    if(employeeId){
-        url = `/admin/employee-attendance/${employeeId}`;
-    }else{
-        url = `/api/my/attendance`;
-    }
+    const url = employeeId
+        ? `/admin/employee-attendance/${employeeId}`
+        : `/api/my/attendance`;
 
     // ── Fetch ────────────────────────────────────────────────────────────────
 
@@ -189,12 +239,29 @@ export function AttendanceCalendar({
                 setLoading(false);
             }
         },
-        [axiosInstance, auth, empId],
+        [axiosInstance, auth, empId, url],
     );
 
     useEffect(() => {
         fetchAttendance(currentMonth, currentYear);
     }, [currentMonth, currentYear, fetchAttendance]);
+
+    useEffect(() => {
+        if (!calendarMeta?.days?.length) {
+            setSelectedDay(null);
+            return;
+        }
+
+        const today = new Date();
+        const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const match =
+            calendarMeta.days.find((day) => day.date === todayKey)
+            ?? calendarMeta.days.find((day) => day.record)
+            ?? calendarMeta.days[0]
+            ?? null;
+
+        setSelectedDay(match);
+    }, [calendarMeta, currentMonth, currentYear]);
 
     // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -215,6 +282,11 @@ export function AttendanceCalendar({
             return newMonth;
         });
     }
+
+    const handleDayClick = useCallback((day: AttendanceCalendarDay) => {
+        setSelectedDay(day);
+        onDayClick?.(day.date);
+    }, [onDayClick]);
 
     const isCurrentMonth =
         currentMonth === now.getMonth() + 1 && currentYear === now.getFullYear();
@@ -307,8 +379,57 @@ export function AttendanceCalendar({
                         month={currentMonth}
                         year={currentYear}
                         calendar={calendarMeta}
-                        onDayClick={onDayClick}
+                        onDayClick={handleDayClick}
                     />
+                </div>
+            )}
+
+            {/* ── Selected day details ── */}
+            {selectedDay && (
+                <div className="rounded-xl border bg-background/80 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold">{formatDateLabel(selectedDay.date)}</p>
+                            <p className="text-xs text-muted-foreground">
+                                {getStatusLabel(selectedDay.status)}{selectedDay.shift_source === 'assigned_shift' ? ' - assigned shift' : selectedDay.shift_source === 'general_hours' ? ' - general hours' : ''}
+                            </p>
+                        </div>
+                        <div className="rounded-full border bg-muted/60 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {selectedDay.shift_grace_minutes != null ? `${selectedDay.shift_grace_minutes} min grace` : 'No grace'}
+                        </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-lg border p-3">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Schedule</p>
+                            <p className="mt-1 text-sm font-medium">
+                                {selectedDay.shift_start && selectedDay.shift_end
+                                    ? `${formatTimeLabel(selectedDay.shift_start)} - ${formatTimeLabel(selectedDay.shift_end)}`
+                                    : 'No fixed schedule'}
+                            </p>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Punch</p>
+                            <p className="mt-1 text-sm font-medium">
+                                {selectedDay.record?.punch_in || selectedDay.record?.punch_out
+                                    ? `${formatTimeLabel(selectedDay.record?.punch_in)} - ${formatTimeLabel(selectedDay.record?.punch_out)}`
+                                    : 'No punch recorded'}
+                            </p>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</p>
+                            <p className="mt-1 text-sm font-medium capitalize">
+                                {selectedDay.record?.mode ?? 'N/A'}
+                            </p>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Notes</p>
+                            <p className="mt-1 text-sm font-medium">
+                                {selectedDay.holiday?.name
+                                    ?? (selectedDay.status === 'leave' ? 'Approved leave' : selectedDay.status === 'weekend' ? 'Weekly off' : 'Attendance day')}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             )}
 

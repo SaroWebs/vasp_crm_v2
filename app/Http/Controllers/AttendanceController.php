@@ -281,11 +281,14 @@ class AttendanceController extends Controller
             ->get()
             ->map(fn ($balance) => [
                 'leave_type' => $balance->leaveType ? ['id' => $balance->leaveType->id, 'name' => $balance->leaveType->name] : null,
-                'opening_balance' => $balance->opening_balance,
-                'allocated_hours' => $balance->allocated_hours,
-                'used_hours' => $balance->used_hours,
-                'closing_balance' => $balance->closing_balance,
+                'opening_leaves' => $balance->opening_leaves,
+                'assigned_leaves' => $balance->assigned_leaves,
+                'number_of_leaves' => $balance->assigned_leaves,
+                'consumed_leaves' => $balance->consumed_leaves,
+                'used_leaves' => $balance->consumed_leaves,
+                'remaining_leaves' => $balance->remaining_leaves,
                 'available_balance' => $balance->getAvailableBalance(),
+                'available_leaves' => $balance->getAvailableBalance(),
             ]);
 
         return response()->json([
@@ -495,6 +498,7 @@ class AttendanceController extends Controller
         $month = $validated['month'] ?? (int) date('m');
         $year = $validated['year'] ?? (int) date('Y');
         $summary = $this->computeSummary($attendance, $month, $year);
+        $calendarDays = $this->buildAttendanceCalendarDays($employee, $attendanceData, $month, $year);
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
@@ -507,6 +511,7 @@ class AttendanceController extends Controller
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
                 'holidays' => $workingHoursService->getHolidaysForYear($year),
+                'days' => $calendarDays,
             ],
             'month' => $month,
             'year' => $year,
@@ -613,6 +618,7 @@ class AttendanceController extends Controller
         $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
         $summary = $this->computeSummary($records, $month, $year);
+        $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $month, $year);
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
@@ -625,6 +631,7 @@ class AttendanceController extends Controller
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
                 'holidays' => $workingHoursService->getHolidaysForYear($year),
+                'days' => $calendarDays,
             ],
             'month' => $month,
             'year' => $year,
@@ -654,6 +661,7 @@ class AttendanceController extends Controller
         $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
         $summary = $this->computeSummary($records, $month, $year);
+        $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $month, $year);
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
@@ -666,6 +674,7 @@ class AttendanceController extends Controller
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
                 'holidays' => $workingHoursService->getHolidaysForYear($year),
+                'days' => $calendarDays,
             ],
             'month' => $month,
             'year' => $year,
@@ -1091,6 +1100,7 @@ class AttendanceController extends Controller
         $attendanceDate = Carbon::parse($attendance->attendance_date)->toDateString();
         $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $attendance->employee_id, $attendanceDate);
         $metrics = $this->buildShiftMetrics($attendanceDate, $attendance->punch_in, $attendance->punch_out, $shiftMeta);
+        $metrics['status'] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
 
         return array_merge($attendance->toArray(), $metrics);
     }
@@ -1533,5 +1543,115 @@ class AttendanceController extends Controller
             'is_late' => $shiftMetrics['is_late_in'],
             'overtime_minutes' => $overtimeMinutes,
         ];
+    }
+
+    /**
+     * Build the day-by-day calendar payload for the attendance UI.
+     *
+     * @param  Collection<int, array<string, mixed>>  $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildAttendanceCalendarDays(Employee $employee, Collection $records, int $month, int $year): array
+    {
+        $workingHoursService = app(WorkingHoursService::class);
+        $holidayMap = collect($workingHoursService->getHolidaysForYear($year))->keyBy('date');
+        $recordMap = $records->mapWithKeys(function (array $record): array {
+            $date = Carbon::parse($record['attendance_date'])->toDateString();
+
+            return [$date => $record];
+        });
+
+        $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
+        $days = [];
+
+        for ($day = 1; $day <= $daysInMonth; $day++) {
+            $date = Carbon::create($year, $month, $day)->toDateString();
+            $record = $recordMap->get($date);
+            $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $date);
+            $holiday = $holidayMap->get($date);
+            $isCurrentMonthDay = Carbon::parse($date)->isToday();
+
+            $status = $this->normalizeCalendarStatus($record['status'] ?? $this->resolveCalendarStatus($shiftMeta));
+
+            $days[] = [
+                'day' => $day,
+                'date' => $date,
+                'status' => $status,
+                'is_today' => $isCurrentMonthDay,
+                'record' => $record,
+                'holiday' => $holiday ? [
+                    'date' => $holiday['date'] ?? $date,
+                    'name' => $holiday['name'] ?? 'Holiday',
+                    'type' => $holiday['type'] ?? null,
+                ] : null,
+                'shift_id' => $shiftMeta['shift_id'],
+                'shift_start' => $shiftMeta['start_time'],
+                'shift_end' => $shiftMeta['end_time'],
+                'shift_grace_minutes' => $shiftMeta['grace_minutes'],
+                'shift_source' => $this->resolveShiftSource($shiftMeta),
+                'is_leave_day' => (bool) ($shiftMeta['is_leave_day'] ?? false),
+                'is_holiday' => (bool) ($shiftMeta['is_holiday'] ?? false),
+                'is_field_work' => (bool) ($shiftMeta['is_field_work'] ?? false),
+                'is_remote_work' => (bool) ($shiftMeta['is_remote_work'] ?? false),
+            ];
+        }
+
+        return $days;
+    }
+
+    /**
+     * Normalize the calendar status for days that do not have a punch record.
+     *
+     * @param  array{shift_id: ?int, start_time: ?string, end_time: ?string, grace_minutes: int, is_half_day?: bool, is_leave_day?: bool, is_holiday?: bool, is_field_work?: bool, is_remote_work?: bool}  $shiftMeta
+     */
+    private function resolveCalendarStatus(array $shiftMeta): string
+    {
+        if ($shiftMeta['is_leave_day'] ?? false) {
+            return 'leave';
+        }
+
+        if ($shiftMeta['is_holiday'] ?? false) {
+            return 'holiday';
+        }
+
+        if ($shiftMeta['is_field_work'] ?? false) {
+            return 'field_work';
+        }
+
+        if ($shiftMeta['is_remote_work'] ?? false) {
+            return 'remote_work';
+        }
+
+        if (! $shiftMeta['start_time'] || ! $shiftMeta['end_time']) {
+            return 'weekend';
+        }
+
+        return 'absent';
+    }
+
+    private function normalizeCalendarStatus(string $status): string
+    {
+        return match ($status) {
+            'on_leave' => 'leave',
+            default => $status,
+        };
+    }
+
+    /**
+     * Distinguish assigned shifts from general working hours for display.
+     *
+     * @param  array{shift_id: ?int, start_time: ?string, end_time: ?string}  $shiftMeta
+     */
+    private function resolveShiftSource(array $shiftMeta): string
+    {
+        if ($shiftMeta['shift_id']) {
+            return 'assigned_shift';
+        }
+
+        if ($shiftMeta['start_time'] && $shiftMeta['end_time']) {
+            return 'general_hours';
+        }
+
+        return 'none';
     }
 }

@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\RemoteWorkRequest;
+use App\Services\AttendanceEffectService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class RemoteWorkController extends Controller
 {
@@ -142,12 +144,21 @@ class RemoteWorkController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        $remoteWorkRequest->update([
-            'status' => 'approved',
-            'approved_by_user_id' => auth()->id(),
-            'approval_notes' => $validated['notes'] ?? null,
-            'decided_at' => now(),
-        ]);
+        DB::transaction(function () use ($remoteWorkRequest, $validated): void {
+            $remoteWorkRequest->update([
+                'status' => 'approved',
+                'approved_by_user_id' => auth()->id(),
+                'approval_notes' => $validated['notes'] ?? null,
+                'decided_at' => now(),
+            ]);
+
+            app(AttendanceEffectService::class)->apply(
+                $remoteWorkRequest->employee,
+                $remoteWorkRequest->start_date,
+                $remoteWorkRequest->end_date,
+                'remote',
+            );
+        });
 
         $remoteWorkRequest->load(['employee', 'requestedByUser', 'approvedByUser']);
 

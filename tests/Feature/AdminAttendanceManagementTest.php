@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\VerifyCsrfToken;
 use App\Models\Employee;
+use App\Models\LeaveBalance;
 use App\Models\LeaveType;
 use App\Models\RemoteWorkAssignment;
 use App\Models\Role;
@@ -40,10 +41,19 @@ class AdminAttendanceManagementTest extends TestCase
     public function test_admin_created_leave_is_immediately_approved(): void
     {
         $admin = $this->signInAsAdmin();
-        $employee = Employee::factory()->create();
+        $employee = Employee::factory()->create(['code' => 'ADM001']);
         $leaveType = LeaveType::create([
             'name' => 'Casual Leave',
             'is_active' => true,
+        ]);
+        LeaveBalance::create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => 2026,
+            'opening_leaves' => 0,
+            'assigned_leaves' => 1,
+            'consumed_leaves' => 0,
+            'remaining_leaves' => 1,
         ]);
 
         $response = $this->postJson('/api/leave-requests', [
@@ -62,12 +72,18 @@ class AdminAttendanceManagementTest extends TestCase
             'approved_by_user_id' => $admin->user_id,
             'decision' => 'approved',
         ]);
+        $this->assertDatabaseHas('attendances', [
+            'employee_id' => 'ADM001',
+            'attendance_date' => '2026-06-12 00:00:00',
+            'punch_in' => null,
+            'punch_out' => null,
+        ]);
     }
 
     public function test_admin_can_update_remote_work_assignment_and_overlap_is_rejected(): void
     {
         $this->signInAsAdmin();
-        $employee = Employee::factory()->create();
+        $employee = Employee::factory()->create(['code' => 'RW001']);
 
         $assignment = RemoteWorkAssignment::create([
             'employee_id' => $employee->id,
@@ -92,6 +108,16 @@ class AdminAttendanceManagementTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('notes', 'Updated');
+
+        $this->assertDatabaseMissing('attendances', [
+            'employee_id' => 'RW001',
+            'attendance_date' => '2026-06-10',
+        ]);
+        $this->assertDatabaseHas('attendances', [
+            'employee_id' => 'RW001',
+            'attendance_date' => '2026-06-12',
+            'mode' => 'remote',
+        ]);
 
         $this->putJson("/admin/remote-work-assignments/{$assignment->id}", [
             'start_date' => '2026-06-20',
@@ -121,6 +147,12 @@ class AdminAttendanceManagementTest extends TestCase
             'employee_id' => $employee->id,
             'location' => 'Client location',
             'status' => 'approved',
+        ]);
+        $this->assertDatabaseHas('attendances', [
+            'employee_id' => 'FW001',
+            'attendance_date' => '2026-06-15',
+            'punch_in' => null,
+            'punch_out' => null,
         ]);
 
         $service = app(AttendanceCalculationService::class);

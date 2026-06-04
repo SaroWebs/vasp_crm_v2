@@ -12,8 +12,35 @@ interface AttendanceRecord {
     punch_out: string | null;
     mode: string;
     is_half_day?: boolean;
+    late_minutes?: number;
+    early_out_minutes?: number;
     employee_name?: string | null;
 }
+
+export interface AttendanceCalendarDay {
+    day: number;
+    date: string;
+    status: DayStatus;
+    record?: AttendanceRecord | null;
+    holiday?: Holiday | null;
+    shift_id?: number | null;
+    shift_start?: string | null;
+    shift_end?: string | null;
+    shift_grace_minutes?: number | null;
+    shift_source?: 'assigned_shift' | 'general_hours' | 'none';
+    is_leave_day?: boolean;
+    is_holiday?: boolean;
+    is_field_work?: boolean;
+    is_remote_work?: boolean;
+}
+
+interface CalendarPlaceholder {
+    day: null;
+    date: '';
+    status: 'empty';
+}
+
+type CalendarGridItem = AttendanceCalendarDay | CalendarPlaceholder;
 
 interface WorkingHoursConfig {
     workdays: Array<{
@@ -29,6 +56,7 @@ interface WorkingHoursConfig {
 interface AttendanceCalendarMeta {
     holidays: Holiday[];
     working_hours: WorkingHoursConfig;
+    days?: AttendanceCalendarDay[];
 }
 
 interface AttendanceCalendarGridProps {
@@ -36,7 +64,7 @@ interface AttendanceCalendarGridProps {
     month: number;
     year: number;
     calendar?: AttendanceCalendarMeta;
-    onDayClick?: (date: string) => void;
+    onDayClick?: (day: AttendanceCalendarDay) => void;
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -54,13 +82,19 @@ function formatDate(day: number, month: number, year: number): string {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function isToday(day: number, month: number, year: number): boolean {
+function isDateToday(date: string): boolean {
     const today = new Date();
-    return (
-        today.getDate() === day &&
-        today.getMonth() + 1 === month &&
-        today.getFullYear() === year
+    const todayKey = formatDate(
+        today.getDate(),
+        today.getMonth() + 1,
+        today.getFullYear(),
     );
+
+    return date === todayKey;
+}
+
+function isCalendarDay(item: CalendarGridItem): item is AttendanceCalendarDay {
+    return item.day !== null;
 }
 
 function getDayName(day: number, month: number, year: number): string {
@@ -203,15 +237,21 @@ export function AttendanceCalendarGrid({
     const firstDay = getFirstDayOfMonth(month, year);
 
     const calendarDays = useMemo(() => {
-        const days: Array<{
-            day: number | null;
-            date: string;
-            status: DayStatus;
-            isToday?: boolean;
-            record?: AttendanceRecord | null;
-            holiday?: Holiday;
-            workingHours?: WorkingHoursForDay;
-        }> = [];
+        if (calendar?.days?.length) {
+            const days: CalendarGridItem[] = [];
+
+            for (let i = 0; i < firstDay; i++) {
+                days.push({ day: null, date: '', status: 'empty' });
+            }
+
+            calendar.days.forEach((day) => {
+                days.push(day);
+            });
+
+            return days;
+        }
+
+        const days: CalendarGridItem[] = [];
 
         for (let i = 0; i < firstDay; i++) {
             days.push({ day: null, date: '', status: 'empty' });
@@ -228,21 +268,23 @@ export function AttendanceCalendarGrid({
                 calendar?.working_hours,
             );
             const status = getDayStatus(day, month, year, record, true, holiday, workingHours);
-            const isTodayDate = isToday(day, month, year);
 
             days.push({
                 day,
                 date,
                 status,
-                isToday: isTodayDate,
                 record: record ?? null,
                 holiday,
-                workingHours,
+                shift_id: null,
+                shift_start: workingHours.start,
+                shift_end: workingHours.end,
+                shift_grace_minutes: 0,
+                shift_source: workingHours.start && workingHours.end ? 'general_hours' : 'none',
             });
         }
 
         return days;
-    }, [daysInMonth, firstDay, month, year, recordMap, holidayMap, calendar?.working_hours]);
+    }, [calendar, daysInMonth, firstDay, month, year, recordMap, holidayMap]);
 
     return (
         <div className="w-full">
@@ -260,24 +302,33 @@ export function AttendanceCalendarGrid({
 
             {/* Calendar grid */}
             <div className="grid grid-cols-7 gap-[clamp(2px,0.6cqw,6px)]">
-                {calendarDays.map((item, index) => (
-                    <DayCell
-                        key={index}
-                        day={item.day}
-                        status={item.status}
-                        date={item.date}
-                        isToday={item.isToday}
-                        isCurrentMonth={true}
-                        record={item.record ?? null}
-                        holiday={item.holiday}
-                        workingHours={item.workingHours}
-                        onClick={
-                            item.date && onDayClick
-                                ? () => onDayClick(item.date)
-                                : undefined
-                        }
-                    />
-                ))}
+                {calendarDays.map((item, index) => {
+                    const isRealDay = isCalendarDay(item);
+
+                    return (
+                        <DayCell
+                            key={isRealDay ? item.date : `blank-${index}`}
+                            day={item.day}
+                            status={item.status}
+                            date={item.date}
+                            isToday={isRealDay ? isDateToday(item.date) : false}
+                            isCurrentMonth={true}
+                            record={isRealDay ? item.record ?? null : null}
+                            holiday={isRealDay ? item.holiday ?? undefined : undefined}
+                            workingHours={
+                                isRealDay && item.shift_start && item.shift_end
+                                    ? { start: item.shift_start, end: item.shift_end }
+                                    : undefined
+                            }
+                            dayMeta={isRealDay ? item : undefined}
+                            onClick={
+                                isRealDay && onDayClick
+                                    ? () => onDayClick(item)
+                                    : undefined
+                            }
+                        />
+                    );
+                })}
             </div>
         </div>
     );

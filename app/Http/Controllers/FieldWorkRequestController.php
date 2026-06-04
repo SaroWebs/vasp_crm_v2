@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateFieldWorkRequest;
 use App\Models\Employee;
 use App\Models\FieldWorkAssignment;
 use App\Models\FieldWorkRequest;
+use App\Services\AttendanceEffectService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -143,7 +144,7 @@ class FieldWorkRequestController extends Controller
             ]);
 
             // Create field work assignment for the approved period
-            FieldWorkAssignment::create([
+            $fieldWorkAssignment = FieldWorkAssignment::create([
                 'employee_id' => $fieldWorkRequest->employee_id,
                 'start_date' => $fieldWorkRequest->start_date,
                 'end_date' => $fieldWorkRequest->end_date,
@@ -154,6 +155,12 @@ class FieldWorkRequestController extends Controller
                 'assigned_by_user_id' => auth()->id(),
                 'status' => 'approved',
             ]);
+
+            app(AttendanceEffectService::class)->apply(
+                $fieldWorkAssignment->employee,
+                $fieldWorkAssignment->start_date,
+                $fieldWorkAssignment->end_date,
+            );
 
             $fieldWorkRequest->load(['employee', 'requestedByUser', 'approvedByUser']);
 
