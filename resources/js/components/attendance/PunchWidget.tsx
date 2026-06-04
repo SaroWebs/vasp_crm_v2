@@ -1,16 +1,44 @@
 import { useEffect, useState } from 'react';
-import { Button, Switch, Tooltip, Alert } from '@mantine/core';
+import { Button, Switch, Tooltip, Alert, AlertProps } from '@mantine/core';
 import { Fingerprint, Info, CheckCircle2, XCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface PunchWidgetProps {
+    auth: any;
     onPunchSuccess?: () => void;
 }
 
-export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
+export function PunchWidget({ auth, onPunchSuccess }: PunchWidgetProps) {
     const [loading, setLoading] = useState(false);
     const [isRemote, setIsRemote] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [hasEmployeeCode, setHasEmployeeCode] = useState<boolean | null>(null);
+    const [loadingCode, setLoadingCode] = useState(true);
+
+    useEffect(() => {
+        const checkEmployeeCode = async () => {
+            setLoadingCode(true);
+            try {
+                const response = await axios.get('/api/my/attendance/today');
+                const data = response.data.data;
+                setHasEmployeeCode(data.shift !== null || data.punch_in !== null);
+            } catch (err: any) {
+                if (err.response?.status === 404 && err.response?.data?.message?.includes('Employee code')) {
+                    setHasEmployeeCode(false);
+                } else {
+                    setHasEmployeeCode(true);
+                }
+            } finally {
+                setLoadingCode(false);
+            }
+        };
+
+        if (auth?.user?.employee) {
+            checkEmployeeCode();
+        } else {
+            setLoadingCode(false);
+        }
+    }, [auth]);
 
     useEffect(() => {
         if (!message) return;
@@ -38,6 +66,33 @@ export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
         }
     };
 
+    if (loadingCode) {
+        return (
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                    <Switch checked={false} disabled label="Remote" labelPosition="left" />
+                    <Button disabled loading size="md">
+                        Punch
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!hasEmployeeCode) {
+        return (
+            <div className="flex flex-col gap-3">
+                <Alert
+                    color="yellow"
+                    icon={<Info size={16} />}
+                    title="Biometric ID Required"
+                >
+                    Your employee code is not set up. Please contact admin to generate your biometric employee ID.
+                </Alert>
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
@@ -54,7 +109,6 @@ export function PunchWidget({ onPunchSuccess }: PunchWidgetProps) {
                     w={200}
                 >
                     <div className="flex flex-col gap-2">
-
                         <Switch
                             checked={isRemote}
                             onChange={(e) => setIsRemote(e.currentTarget.checked)}

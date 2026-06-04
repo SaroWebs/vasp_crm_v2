@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
-use App\Models\User;
 use App\Models\ProjectPhase;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ProjectPhaseController extends Controller
 {
@@ -23,7 +23,7 @@ class ProjectPhaseController extends Controller
      */
     public function index(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project phases.');
         }
 
@@ -40,7 +40,7 @@ class ProjectPhaseController extends Controller
      */
     public function store(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_phases')) {
+        if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 
@@ -77,7 +77,7 @@ class ProjectPhaseController extends Controller
      */
     public function show(Project $project, ProjectPhase $phase)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project phases.');
         }
 
@@ -97,7 +97,7 @@ class ProjectPhaseController extends Controller
      */
     public function update(Request $request, Project $project, ProjectPhase $phase)
     {
-        if (!$this->checkPermission('project.manage_phases')) {
+        if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 
@@ -130,7 +130,7 @@ class ProjectPhaseController extends Controller
      */
     public function destroy(Project $project, ProjectPhase $phase)
     {
-        if (!$this->checkPermission('project.manage_phases')) {
+        if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 
@@ -157,7 +157,7 @@ class ProjectPhaseController extends Controller
      */
     public function reorder(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_phases')) {
+        if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 
@@ -185,7 +185,7 @@ class ProjectPhaseController extends Controller
      */
     public function getTasks(Project $project, ProjectPhase $phase)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project phase tasks.');
         }
 
@@ -206,7 +206,7 @@ class ProjectPhaseController extends Controller
      */
     public function updateProgress(Project $project, ProjectPhase $phase)
     {
-        if (!$this->checkPermission('project.manage_phases')) {
+        if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 

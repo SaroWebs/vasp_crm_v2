@@ -2,13 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use Inertia\Inertia;
-use App\Models\Product;
 use App\Models\Notification;
+use App\Models\Product;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 
 class ProductController extends Controller
 {
@@ -23,6 +22,7 @@ class ProductController extends Controller
     private function checkPermission($permission)
     {
         $user = User::find(Auth::user()->id);
+
         return $user->hasPermission($permission);
     }
 
@@ -34,7 +34,7 @@ class ProductController extends Controller
         $user = User::find(Auth::user()->id);
 
         // Super admins have access to everything
-        if (!$this->checkPermission('product.read')) {
+        if (! $this->checkPermission('product.read')) {
             abort(403, 'Insufficient permissions to view products.');
         }
 
@@ -47,8 +47,8 @@ class ProductController extends Controller
 
         if ($request->has('search')) {
             $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                    ->orWhere('description', 'like', '%' . $request->search . '%');
+                $q->where('name', 'like', '%'.$request->search.'%')
+                    ->orWhere('description', 'like', '%'.$request->search.'%');
             });
         }
 
@@ -60,7 +60,7 @@ class ProductController extends Controller
         return Inertia::render('admin/products/Index', [
             'products' => $products,
             'filters' => $request->only(['status', 'search']),
-            'userPermissions' => $user->getAllPermissions()->pluck('slug')
+            'userPermissions' => $user->getAllPermissions()->pluck('slug'),
         ]);
     }
 
@@ -69,9 +69,8 @@ class ProductController extends Controller
      */
     public function create()
     {
-        
 
-        if (!$this->checkPermission('product.create')) {
+        if (! $this->checkPermission('product.create')) {
             abort(403, 'Insufficient permissions to create products.');
         }
 
@@ -83,9 +82,8 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        
 
-        if (!$this->checkPermission('product.create')) {
+        if (! $this->checkPermission('product.create')) {
             abort(403, 'Insufficient permissions to create products.');
         }
 
@@ -94,7 +92,7 @@ class ProductController extends Controller
             'description' => 'nullable|string|max:1000',
             'version' => 'nullable|string|max:50',
             'status' => 'required|in:active,inactive,discontinued',
-            'metadata' => 'nullable|array'
+            'metadata' => 'nullable|array',
         ]);
 
         $product = Product::create([
@@ -117,14 +115,13 @@ class ProductController extends Controller
      */
     public function show(Product $product)
     {
-        
 
-        if (!$this->checkPermission('product.read')) {
+        if (! $this->checkPermission('product.read')) {
             abort(403, 'Insufficient permissions to view product.');
         }
 
         return Inertia::render('admin/products/Show', [
-            'product' => $product
+            'product' => $product,
         ]);
     }
 
@@ -133,14 +130,13 @@ class ProductController extends Controller
      */
     public function edit(Product $product)
     {
-        
 
-        if (!$this->checkPermission('product.update')) {
+        if (! $this->checkPermission('product.update')) {
             abort(403, 'Insufficient permissions to edit product.');
         }
 
         return Inertia::render('admin/products/Edit', [
-            'product' => $product
+            'product' => $product,
         ]);
     }
 
@@ -149,18 +145,17 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product)
     {
-        
 
-        if (!$this->checkPermission('product.update')) {
+        if (! $this->checkPermission('product.update')) {
             abort(403, 'Insufficient permissions to update product.');
         }
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:products,name,' . $product->id,
+            'name' => 'required|string|max:255|unique:products,name,'.$product->id,
             'description' => 'nullable|string|max:1000',
             'version' => 'nullable|string|max:50',
             'status' => 'required|in:active,inactive,discontinued',
-            'metadata' => 'nullable|array'
+            'metadata' => 'nullable|array',
         ]);
 
         $product->update([
@@ -182,9 +177,8 @@ class ProductController extends Controller
      */
     public function destroy(Product $product)
     {
-        
 
-        if (!$this->checkPermission('product.delete')) {
+        if (! $this->checkPermission('product.delete')) {
             abort(403, 'Insufficient permissions to delete product.');
         }
 
@@ -201,9 +195,8 @@ class ProductController extends Controller
      */
     public function restore(Product $product)
     {
-        
 
-        if (!$this->checkPermission('product.update')) {
+        if (! $this->checkPermission('product.update')) {
             abort(403, 'Insufficient permissions to restore product.');
         }
 
@@ -224,10 +217,10 @@ class ProductController extends Controller
         Notification::create([
             'user_id' => Auth::id(),
             'title' => 'Product Activity',
-            'message' => $action . ': ' . $subject->name,
+            'message' => $action.': '.$subject->name,
             'type' => 'system',
             'is_read' => false,
-            'data' => json_encode($properties)
+            'data' => json_encode($properties),
         ]);
     }
 }

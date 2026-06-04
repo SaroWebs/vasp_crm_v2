@@ -143,7 +143,35 @@ class AdminTicketController extends Controller
             });
         }
 
-        $tickets = $query->latest('created_at')->paginate(15);
+        $sortableColumns = [
+            'title' => 'tickets.title',
+            'priority' => 'tickets.priority',
+            'status' => 'tickets.status',
+            'created_at' => 'tickets.created_at',
+        ];
+        $orderBy = $request->input('order_by', 'created_at');
+        $direction = $request->input('order_direction', 'desc') === 'asc' ? 'asc' : 'desc';
+
+        if ($orderBy === 'client') {
+            $query->leftJoin('clients', 'tickets.client_id', '=', 'clients.id')
+                ->orderBy('clients.name', $direction)
+                ->orderBy('tickets.id')
+                ->select('tickets.*');
+        } elseif ($orderBy === 'assignee') {
+            $query->leftJoin('users as assigned_users', 'tickets.assigned_to', '=', 'assigned_users.id')
+                ->orderBy('assigned_users.name', $direction)
+                ->orderBy('tickets.id')
+                ->select('tickets.*');
+        } elseif (array_key_exists($orderBy, $sortableColumns)) {
+            $query->orderBy($sortableColumns[$orderBy], $direction)
+                ->orderBy('tickets.id');
+        } else {
+            $orderBy = 'created_at';
+            $direction = 'desc';
+            $query->latest('tickets.created_at');
+        }
+
+        $tickets = $query->paginate(15);
 
         // Compute work status for each ticket
         $tickets->getCollection()->transform(function ($ticket) {
@@ -165,7 +193,11 @@ class AdminTicketController extends Controller
 
         return Inertia::render('admin/tickets/Index', [
             'tickets' => $tickets,
-            'filters' => $request->only(['status', 'priority', 'client_id', 'search']),
+            'filters' => [
+                ...$request->only(['status', 'priority', 'client_id', 'search']),
+                'order_by' => $orderBy,
+                'order_direction' => $direction,
+            ],
             'clients' => $clients,
             'stats' => $stats,
         ]);

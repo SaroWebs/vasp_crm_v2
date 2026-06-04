@@ -31,6 +31,8 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
+    ArrowDown,
+    ArrowUp,
     Calendar,
     CheckCircle,
     ChevronLeft,
@@ -54,6 +56,14 @@ import { toast } from 'sonner';
 import AdminRaiseTicket from './AdminRaiseTicket';
 import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
 import TicketAssignmentDialog from '@/components/ticket-assignment-dialog';
+
+type SortField =
+    | 'title'
+    | 'client'
+    | 'priority'
+    | 'assignee'
+    | 'status'
+    | 'created_at';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -81,6 +91,8 @@ interface TicketsIndexProps {
         priority?: string;
         client_id?: string;
         search?: string;
+        order_by?: SortField;
+        order_direction?: 'asc' | 'desc';
     };
     userPermissions?: string[];
     clients?: Array<{ id: number; name: string }>;
@@ -108,8 +120,16 @@ export default function TicketsIndex(props: TicketsIndexProps) {
     const [clientFilter, setClientFilter] = useState(
         filters.client_id || 'all',
     );
+    const [orderBy, setOrderBy] = useState<SortField>(
+        filters.order_by || 'created_at',
+    );
+    const [orderDirection, setOrderDirection] = useState<'asc' | 'desc'>(
+        filters.order_direction || 'desc',
+    );
+
     const [isLoading, setIsLoading] = useState(false);
     const [closingTicketId, setClosingTicketId] = useState<number | null>(null);
+    const [mounted, setMounted] = useState(false);
 
     const handleCloseTicket = (ticketId: number) => {
         setClosingTicketId(ticketId);
@@ -132,17 +152,21 @@ export default function TicketsIndex(props: TicketsIndexProps) {
 
     const [debouncedSearch] = useDebouncedValue(searchQuery, 800);
 
-    const applyFilters = (overrides: { search?: string; status?: string; client_id?: string } = {}) => {
+    const applyFilters = (overrides: { search?: string; status?: string; client_id?: string; order_by?: SortField; order_direction?: 'asc' | 'desc' } = {}) => {
         setIsLoading(true);
         const search = 'search' in overrides ? overrides.search : debouncedSearch;
         const status = 'status' in overrides ? overrides.status : statusFilter;
         const client = 'client_id' in overrides ? overrides.client_id : clientFilter;
+        const nextOrderBy = 'order_by' in overrides ? overrides.order_by : orderBy;
+        const nextOrderDirection = 'order_direction' in overrides ? overrides.order_direction : orderDirection;
         router.get(
             '/admin/tickets',
             {
                 search: search || undefined,
                 status: status !== 'all' ? status : undefined,
                 client_id: client !== 'all' ? client : undefined,
+                order_by: nextOrderBy,
+                order_direction: nextOrderDirection,
             },
             {
                 preserveScroll: true,
@@ -153,11 +177,9 @@ export default function TicketsIndex(props: TicketsIndexProps) {
     };
 
     // Auto-fire when debounced search changes (skip on mount)
-    const [mounted, setMounted] = useState(false);
     useEffect(() => {
         if (!mounted) { setMounted(true); return; }
         applyFilters({ search: debouncedSearch });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearch]);
 
     // Handle pagination
@@ -170,6 +192,8 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                 search: searchQuery || undefined,
                 status: statusFilter !== 'all' ? statusFilter : undefined,
                 client_id: clientFilter !== 'all' ? clientFilter : undefined,
+                order_by: orderBy,
+                order_direction: orderDirection,
             },
             {
                 preserveScroll: true,
@@ -177,6 +201,24 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                 onFinish: () => setIsLoading(false),
             },
         );
+    };
+
+    const toggleSort = (field: SortField) => {
+        const isSameField = orderBy === field;
+        const nextDirection = isSameField && orderDirection === 'asc' ? 'desc' : 'asc';
+        setOrderBy(field);
+        setOrderDirection(nextDirection);
+        applyFilters({ order_by: field, order_direction: nextDirection });  
+    };
+
+    const renderSortIcon = (field: SortField) => {
+        if (orderBy !== field) {
+            return null;
+        }
+
+        const SortIcon = orderDirection === 'asc' ? ArrowUp : ArrowDown;
+
+        return <SortIcon className="h-3.5 w-3.5" aria-hidden="true" />;
     };
 
     // tickets.data is already server-filtered; use directly
@@ -529,12 +571,43 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Ticket</TableHead>
-                                            <TableHead>Client</TableHead>
-                                            <TableHead>Priority</TableHead>
-                                            <TableHead>Assignee</TableHead>
-                                            <TableHead>Created</TableHead>
-                                            <TableHead>Work</TableHead>
+                                            <TableHead onClick={() => {toggleSort('title')}} className="cursor-pointer">
+                                                <div className="flex items-center justify-start gap-3">
+                                                    Ticket {renderSortIcon('title')}
+                                                </div>
+                                            </TableHead>
+                                            <TableHead onClick={() => {toggleSort('client')}} className="cursor-pointer">
+                                                <div className="flex items-center justify-start gap-3">
+                                                    Client
+                                                    {renderSortIcon('client')}
+                                                </div>
+                                            </TableHead>
+                                            <TableHead onClick={() => {toggleSort('priority')}} className="cursor-pointer">
+                                                <div className="flex items-center justify-start gap-3">
+                                                    Priority
+                                                    {renderSortIcon('priority')}
+                                                </div>
+                                            </TableHead>
+                                            <TableHead onClick={() => {toggleSort('assignee')}} className="cursor-pointer">
+                                                <div className="flex items-center justify-start gap-3">
+                                                    Assignee
+                                                    {renderSortIcon('assignee')}
+                                                </div>
+                                            </TableHead>
+                                            <TableHead onClick={() => {toggleSort('status')}} className="cursor-pointer">
+                                                <div className="flex items-center justify-start gap-3">
+                                                    Status {renderSortIcon('status')}
+                                                </div>
+                                            </TableHead>
+                                            <TableHead onClick={() => {toggleSort('created_at')}} className="cursor-pointer">
+                                                <div className="flex items-center justify-start gap-3">
+                                                    Created
+                                                    {renderSortIcon('created_at')}
+                                                </div>
+                                            </TableHead>
+                                            <TableHead>
+                                                Work
+                                            </TableHead>
                                             <TableHead className='text-right'>Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -602,6 +675,9 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
+                                                    {getTicketStatusBadge(ticket.status)}
+                                                </TableCell>
+                                                <TableCell>
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex items-center space-x-1">
                                                             <Calendar className="h-4 w-4" />
@@ -628,9 +704,6 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center justify-end gap-2">
-                                                        {/* Status Badge - Shows ticket status with icon and color */}
-                                                        {getTicketStatusBadge(ticket.status)}
-
                                                         {/* Actions Dropdown - View and manage ticket */}
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>

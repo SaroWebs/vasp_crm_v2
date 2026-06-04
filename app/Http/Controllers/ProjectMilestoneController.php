@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
-use App\Models\User;
 use App\Models\ProjectMilestone;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ProjectMilestoneController extends Controller
 {
@@ -23,7 +23,7 @@ class ProjectMilestoneController extends Controller
      */
     public function index(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project milestones.');
         }
 
@@ -40,7 +40,7 @@ class ProjectMilestoneController extends Controller
      */
     public function store(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_milestones')) {
+        if (! $this->checkPermission('project.manage_milestones')) {
             abort(403, 'Insufficient permissions to manage project milestones.');
         }
 
@@ -74,7 +74,7 @@ class ProjectMilestoneController extends Controller
      */
     public function show(Project $project, ProjectMilestone $milestone)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project milestones.');
         }
 
@@ -90,7 +90,7 @@ class ProjectMilestoneController extends Controller
      */
     public function update(Request $request, Project $project, ProjectMilestone $milestone)
     {
-        if (!$this->checkPermission('project.manage_milestones')) {
+        if (! $this->checkPermission('project.manage_milestones')) {
             abort(403, 'Insufficient permissions to manage project milestones.');
         }
 
@@ -122,7 +122,7 @@ class ProjectMilestoneController extends Controller
      */
     public function destroy(Project $project, ProjectMilestone $milestone)
     {
-        if (!$this->checkPermission('project.manage_milestones')) {
+        if (! $this->checkPermission('project.manage_milestones')) {
             abort(403, 'Insufficient permissions to manage project milestones.');
         }
 
@@ -142,7 +142,7 @@ class ProjectMilestoneController extends Controller
      */
     public function complete(Project $project, ProjectMilestone $milestone)
     {
-        if (!$this->checkPermission('project.manage_milestones')) {
+        if (! $this->checkPermission('project.manage_milestones')) {
             abort(403, 'Insufficient permissions to manage project milestones.');
         }
 
@@ -163,7 +163,7 @@ class ProjectMilestoneController extends Controller
      */
     public function reorder(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_milestones')) {
+        if (! $this->checkPermission('project.manage_milestones')) {
             abort(403, 'Insufficient permissions to manage project milestones.');
         }
 
@@ -191,7 +191,7 @@ class ProjectMilestoneController extends Controller
      */
     public function overdue(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project milestones.');
         }
 
@@ -205,7 +205,7 @@ class ProjectMilestoneController extends Controller
      */
     public function upcoming(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project milestones.');
         }
 

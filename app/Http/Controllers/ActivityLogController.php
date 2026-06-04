@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\User;
 use App\Services\ActivityLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,10 +22,10 @@ class ActivityLogController extends Controller
      */
     public function index(Request $request)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -56,7 +57,7 @@ class ActivityLogController extends Controller
         }
 
         // Apply user filter if not admin
-        if (!$user->isSuperAdmin()) {
+        if (! $user->isSuperAdmin()) {
             $query->forUser($user->id);
         }
 
@@ -66,7 +67,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $logs
+            'data' => $logs,
         ]);
     }
 
@@ -75,22 +76,22 @@ class ActivityLogController extends Controller
      */
     public function show(ActivityLog $activityLog)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         // Check if user can view this log (own logs or admin)
-        if (!$user->isSuperAdmin() && $activityLog->causer_id !== $user->id) {
+        if (! $user->isSuperAdmin() && $activityLog->causer_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         return response()->json([
             'success' => true,
-            'data' => $activityLog->load(['user', 'subject'])
+            'data' => $activityLog->load(['user', 'subject']),
         ]);
     }
 
@@ -99,21 +100,21 @@ class ActivityLogController extends Controller
      */
     public function getModelActivity(Request $request, $modelType, $modelId)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $modelClass = $this->getModelClass($modelType);
-        if (!$modelClass) {
+        if (! $modelClass) {
             return response()->json(['message' => 'Invalid model type'], 400);
         }
 
         $model = $modelClass::find($modelId);
-        if (!$model) {
+        if (! $model) {
             return response()->json(['message' => 'Model not found'], 404);
         }
 
@@ -121,7 +122,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $logs
+            'data' => $logs,
         ]);
     }
 
@@ -130,16 +131,16 @@ class ActivityLogController extends Controller
      */
     public function getUserActivity(Request $request, $userId)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         // Users can only view their own logs unless they're admin
-        if (!$user->isSuperAdmin() && $user->id !== $userId) {
+        if (! $user->isSuperAdmin() && $user->id !== $userId) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -147,7 +148,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $logs
+            'data' => $logs,
         ]);
     }
 
@@ -156,11 +157,11 @@ class ActivityLogController extends Controller
      */
     public function getStatistics(Request $request)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -168,7 +169,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $statistics
+            'data' => $statistics,
         ]);
     }
 
@@ -177,11 +178,11 @@ class ActivityLogController extends Controller
      */
     public function getRecentActivity(Request $request)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -189,7 +190,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $logs
+            'data' => $logs,
         ]);
     }
 
@@ -198,26 +199,26 @@ class ActivityLogController extends Controller
      */
     public function clearOldLogs(Request $request)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.delete')) {
+        if (! $user->hasPermission('activity_log.delete')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
         $validated = $request->validate([
-            'days' => 'required|integer|min:1|max:365'
+            'days' => 'required|integer|min:1|max:365',
         ]);
 
         $cutoffDate = now()->subDays($validated['days']);
-        
+
         $deletedCount = ActivityLog::where('created_at', '<', $cutoffDate)->delete();
 
         return response()->json([
             'success' => true,
             'message' => "Deleted {$deletedCount} old activity logs",
-            'deleted_count' => $deletedCount
+            'deleted_count' => $deletedCount,
         ]);
     }
 
@@ -226,11 +227,11 @@ class ActivityLogController extends Controller
      */
     public function export(Request $request)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
-        
+
         // Check permissions
-        if (!$user->hasPermission('activity_log.read')) {
+        if (! $user->hasPermission('activity_log.read')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
@@ -256,7 +257,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $logs
+            'data' => $logs,
         ]);
     }
 
@@ -286,10 +287,10 @@ class ActivityLogController extends Controller
             'Content-Disposition' => 'attachment; filename="activity_logs.csv"',
             'Pragma' => 'no-cache',
             'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires' => '0'
+            'Expires' => '0',
         ];
 
-        $callback = function() use ($logs) {
+        $callback = function () use ($logs) {
             $file = fopen('php://output', 'w');
             fputcsv($file, ['ID', 'Log Name', 'Description', 'Subject Type', 'Subject ID', 'Causer Type', 'Causer ID', 'Created At', 'Properties']);
 
@@ -303,7 +304,7 @@ class ActivityLogController extends Controller
                     $log->causer_type,
                     $log->causer_id,
                     $log->created_at,
-                    json_encode($log->properties)
+                    json_encode($log->properties),
                 ]);
             }
 

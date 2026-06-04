@@ -8,8 +8,6 @@ use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
 use App\Http\Controllers\AttendanceController;
-use App\Http\Controllers\FieldWorkController;
-use App\Http\Controllers\RemoteWorkAssignmentController;
 use App\Http\Controllers\Client\ClientCommentAttachmentController;
 use App\Http\Controllers\Client\ClientPortalAuthController;
 use App\Http\Controllers\Client\ClientTicketCommentController;
@@ -20,6 +18,13 @@ use App\Http\Controllers\CommentAttachmentController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeProgressController;
+use App\Http\Controllers\FieldWorkController;
+use App\Http\Controllers\FieldWorkRequestController;
+use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\HolidayWorkController;
+use App\Http\Controllers\LeaveBalanceController;
+use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\MenuManagementController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizationUserController;
@@ -30,6 +35,8 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMilestoneController;
 use App\Http\Controllers\ProjectPhaseController;
 use App\Http\Controllers\ProjectTimelineController;
+use App\Http\Controllers\RemoteWorkAssignmentController;
+use App\Http\Controllers\RemoteWorkController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ShiftController;
@@ -447,6 +454,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         // Remote Work Assignments routes (admin-direct assignment)
         Route::prefix('remote-work-assignments')->controller(RemoteWorkAssignmentController::class)->group(function () {
             Route::post('/', 'store')->name('admin.remote-work-assignments.store');      // Create remote work assignment
+            Route::put('/{remoteWorkAssignment}', 'update')->name('admin.remote-work-assignments.update'); // Update remote work assignment
             Route::delete('/{remoteWorkAssignment}', 'destroy')->name('admin.remote-work-assignments.destroy'); // Delete remote work assignment
         });
 
@@ -463,6 +471,11 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::get('/leave-types', function () {
             return Inertia::render('admin/leave-types/Index');
         })->name('leave-types.index');
+
+        // Holiday management route
+        Route::get('/holidays', function () {
+            return Inertia::render('admin/holidays/Index');
+        })->name('holidays.index');
     });
 });
 
@@ -538,8 +551,6 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
 
     // My Attendance routes
     Route::get('/my/attendance', [AttendanceController::class, 'myAttendancePage'])->name('my.attendance');
-    Route::get('/api/my/attendance', [AttendanceController::class, 'getEmployeeAttendance'])->name('api.my.attendance');
-    Route::post('/api/my/attendance/punch', [AttendanceController::class, 'punchEntry'])->name('api.my.attendance.punch');
 
     // My Task View route
     Route::get('/my/tasks/{task}', function ($taskId) {
@@ -613,6 +624,123 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     Route::get('/api/activity-logs/export', [ActivityLogController::class, 'export'])->name('api.activity-logs.export');
     Route::get('/api/daily/attendance', [AttendanceController::class, 'getDailyDetails'])->name('api.attendance.daily');
     Route::get('/api/attendance/{employeeId}', [AttendanceController::class, 'getAttendance'])->name('api.attendance');
+
+    Route::prefix('api/holidays')->controller(HolidayController::class)->group(function () {
+        Route::get('/', 'index'); // ?year=2026&type=national
+        Route::post('/', 'store'); // date, name, type in body
+        Route::patch('/copy_year', 'copyYear'); // from_year, to_year in body
+        Route::put('/d/{holiday}', 'update'); // date, name, type in body
+        Route::delete('/d/{holiday}', 'destroy');
+    });
+
+    // Leave Types routes
+    Route::prefix('api/leave-types')->controller(LeaveTypeController::class)->group(function () {
+        Route::get('/', 'index');      // Get all leave types, ?active_only=true
+        Route::post('/', 'store');      // Create leave type
+        Route::get('/{leaveType}', 'show');       // Get specific leave type
+        Route::put('/{leaveType}', 'update');     // Update leave type
+        Route::delete('/{leaveType}', 'destroy');  // Delete leave type
+    });
+
+    // Leave Requests routes
+    Route::prefix('api/leave-requests')->controller(LeaveController::class)->group(function () {
+        Route::get('/', 'index');      // Get leave requests, ?status=pending&employee_id=1&start_date=2026-05-01&end_date=2026-05-31
+        Route::post('/', 'store');      // Create leave request
+        Route::get('/{leaveRequest}', 'show');     // Get specific leave request
+        Route::put('/{leaveRequest}', 'update');   // Update leave request (only if pending)
+        Route::delete('/{leaveRequest}', 'destroy'); // Cancel leave request (only if pending)
+        Route::post('/{leaveRequest}/approve', 'approve'); // Approve leave request
+        Route::post('/{leaveRequest}/reject', 'reject');   // Reject leave request
+    });
+
+    // Leave Balance routes
+    Route::prefix('api/leave-balances')->controller(LeaveBalanceController::class)->group(function () {
+        Route::get('/', 'index');           // Get leave balances, ?employee_id=1&year=2026
+        Route::post('/', 'store');          // Create single leave balance
+        Route::post('/bulk-assign', 'bulkAssign');  // Bulk assign leave balances
+        Route::get('/{leaveBalance}', 'show');      // Get specific leave balance
+        Route::put('/{leaveBalance}', 'update');    // Update leave balance
+        Route::delete('/{leaveBalance}', 'destroy'); // Delete leave balance
+    });
+
+    // Employee leave-related routes
+    Route::prefix('api/employees/{employee}')->controller(LeaveController::class)->group(function () {
+        Route::get('/leave-balance', 'getLeaveBalance');         // Get leave balance, ?year=2026
+        Route::get('/leave-requests', 'getEmployeeLeaveRequests'); // Get employee's leave requests, ?status=approved&year=2026
+    });
+
+    // Remote Work Requests routes
+    Route::prefix('api/remote-work-requests')->controller(RemoteWorkController::class)->group(function () {
+        Route::get('/', 'index');      // List remote work requests, ?status=pending&employee_id=1&start_date=2026-05-01&end_date=2026-05-31
+        Route::post('/', 'store');      // Create remote work request
+        Route::get('/{remoteWorkRequest}', 'show');     // Get specific remote work request
+        Route::put('/{remoteWorkRequest}', 'update');   // Update remote work request (only if pending)
+        Route::delete('/{remoteWorkRequest}', 'destroy'); // Cancel remote work request
+        Route::post('/{remoteWorkRequest}/approve', 'approve'); // Approve remote work request
+        Route::post('/{remoteWorkRequest}/reject', 'reject');   // Reject remote work request
+    });
+
+    // Remote Work Assignments routes (admin-direct) - MOVED TO WEB.PHP
+    // The read-only GET /api/remote-work-assignments is still available for API access
+    Route::prefix('api/remote-work-assignments')->controller(RemoteWorkAssignmentController::class)->group(function () {
+        Route::get('/', 'index');      // List remote work assignments, ?employee_id=1
+    });
+
+    // Field Work Requests routes (employee-requested)
+    Route::prefix('api/field-work-requests')->controller(FieldWorkRequestController::class)->group(function () {
+        Route::get('/', 'index');      // List field work requests, ?status=pending&employee_id=1
+        Route::post('/', 'store');      // Create field work request
+        Route::get('/{fieldWorkRequest}', 'show');     // Get specific field work request
+        Route::put('/{fieldWorkRequest}', 'update');   // Update field work request (only if pending)
+        Route::delete('/{fieldWorkRequest}', 'destroy'); // Cancel field work request (only if pending)
+        Route::post('/{fieldWorkRequest}/approve', 'approve'); // Approve field work request
+        Route::post('/{fieldWorkRequest}/reject', 'reject');   // Reject field work request
+    });
+
+    // Field Work Assignments routes (admin-direct) - MOVED TO WEB.PHP
+    // The read-only GET routes are still available for API access
+    Route::prefix('api/field-work-assignments')->controller(FieldWorkController::class)->group(function () {
+        Route::get('/', 'index');      // List field work assignments, ?employee_id=1&active_only=true&location=site
+        Route::get('/{fieldWorkAssignment}', 'show');     // Get specific field work assignment
+    });
+
+    // Holiday Work Records routes
+    Route::prefix('api/holiday-work-records')->controller(HolidayWorkController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{holidayWorkRecord}', 'show');
+        Route::post('/{holidayWorkRecord}/approve', 'approve');
+        Route::post('/{holidayWorkRecord}/reject', 'reject');
+        Route::post('/{holidayWorkRecord}/compensatory-off', 'createCompensatoryOff');
+    });
+
+    // Employee remote work, field work, holiday work, and compensatory off routes
+    Route::prefix('api/employees/{employee}')->group(function () {
+        Route::get('/remote-work-requests', [RemoteWorkController::class, 'getEmployeeRemoteWorkRequests']); // Get employee's remote work requests, ?status=approved&year=2026
+        Route::get('/remote-work-assignments', [RemoteWorkAssignmentController::class, 'getEmployeeRemoteWorkAssignments']); // Get employee's remote work assignments, ?year=2026
+        Route::get('/field-work-assignments', [FieldWorkController::class, 'getEmployeeFieldWorkAssignments']); // Get employee's field work assignments, ?year=2026&active_only=true
+        Route::get('/field-work-requests', [FieldWorkRequestController::class, 'getEmployeeFieldWorkRequests']); // Get employee's field work requests, ?status=approved&year=2026
+        Route::get('/holiday-work-records', [HolidayWorkController::class, 'getEmployeeHolidayWork']); // Get employee's holiday work records, ?status=approved&year=2026
+        Route::get('/compensatory-offs', [HolidayWorkController::class, 'getCompensatoryOffs']); // Get employee's compensatory off records, ?status=available
+        Route::post('/change-shift', [ShiftController::class, 'changeShift']); // Admin change shift for employee
+    });
+
+    Route::prefix('api')->group(function () {
+        Route::get('/my/attendance', [AttendanceController::class, 'getEmployeeAttendance'])->name('api.my.attendance');
+        Route::post('/my/attendance/punch', [AttendanceController::class, 'punchEntry'])->name('api.my.attendance.punch');
+
+        Route::get('/my/attendance/today', [AttendanceController::class, 'getTodaysAttendance']);
+        Route::get('/my/leaves', [AttendanceController::class, 'getLeaveRequests']);
+        Route::post('/my/leaves', [AttendanceController::class, 'storeLeaveRequest']);
+        Route::get('/my/leave-balances', [AttendanceController::class, 'getLeaveBalances']);
+        Route::get('/my/remote-work', [AttendanceController::class, 'getRemoteWorkRequests']);
+        Route::post('/my/remote-work', [AttendanceController::class, 'storeRemoteWorkRequest']);
+        Route::get('/my/field-work', [FieldWorkRequestController::class, 'myIndex']);
+        Route::post('/my/field-work', [FieldWorkRequestController::class, 'myStore']);
+        Route::put('/my/field-work/{fieldWorkRequest}', [FieldWorkRequestController::class, 'myUpdate']);
+        Route::delete('/my/field-work/{fieldWorkRequest}', [FieldWorkRequestController::class, 'myDestroy']);
+    });
+
 });
 
 require __DIR__.'/settings.php';

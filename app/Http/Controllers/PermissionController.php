@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Permission;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class PermissionController extends Controller
@@ -73,8 +73,8 @@ class PermissionController extends Controller
     public function update(Request $request, Permission $permission): JsonResponse
     {
         $request->validate([
-            'name' => 'required|string|max:255|unique:permissions,name,' . $permission->id,
-            'slug' => 'required|string|max:255|unique:permissions,slug,' . $permission->id,
+            'name' => 'required|string|max:255|unique:permissions,name,'.$permission->id,
+            'slug' => 'required|string|max:255|unique:permissions,slug,'.$permission->id,
             'module' => 'required|string|max:255',
             'action' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -93,7 +93,7 @@ class PermissionController extends Controller
         // Check if permission is assigned to any roles
         if ($permission->roles()->exists()) {
             return response()->json([
-                'message' => 'Cannot delete permission that is assigned to roles'
+                'message' => 'Cannot delete permission that is assigned to roles',
             ], 422);
         }
 

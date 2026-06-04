@@ -6,7 +6,10 @@ use App\Http\Requests\AttendanceOverrideRequest;
 use App\Http\Requests\AttendanceUploadRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\LeaveBalance;
+use App\Models\LeaveRequest;
 use App\Models\Punch;
+use App\Models\RemoteWorkRequest;
 use App\Models\Visitor;
 use App\Models\VisitorPunch;
 use App\Services\AttendanceCalculationService;
@@ -28,6 +31,269 @@ class AttendanceController extends Controller
     private const MACHINE_ID_PUNCH_OUT = 1;
 
     private const MACHINE_ID_IN_OUT = 2;
+
+    public function getTodaysAttendance(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $employee = $user->employee;
+        $today = Carbon::today()->toDateString();
+
+        if (! $employee->code) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee code is required for attendance entry. Please contact admin to generate biometric employee ID.',
+            ], 404);
+        }
+
+        $attendance = Attendance::where('employee_id', $employee->code)
+            ->where('attendance_date', $today)
+            ->first();
+
+        $shiftMeta = app(AttendanceCalculationService::class)
+            ->resolveEffectiveShiftForEmployeeDate($employee->code, $today);
+
+        if ($attendance) {
+            $data = $this->decorateAttendanceWithShiftMetrics($attendance);
+            $data['status'] = app(AttendanceCalculationService::class)
+                ->determineAttendanceStatus($data);
+        } else {
+            $data = array_merge([
+                'attendance_date' => $today,
+                'punch_in' => null,
+                'punch_out' => null,
+                'mode' => 'office',
+            ], $shiftMeta);
+            $data['status'] = app(AttendanceCalculationService::class)
+                ->determineAttendanceStatus($data);
+        }
+
+        $shift = [
+            'shift_id' => $shiftMeta['shift_id'],
+            'start_time' => $shiftMeta['start_time'],
+            'end_time' => $shiftMeta['end_time'],
+            'grace_minutes' => $shiftMeta['grace_minutes'],
+            'is_half_day' => $shiftMeta['is_half_day'] ?? false,
+            'is_leave_day' => $shiftMeta['is_leave_day'] ?? false,
+            'is_holiday' => $shiftMeta['is_holiday'] ?? false,
+            'is_field_work' => $shiftMeta['is_field_work'] ?? false,
+            'is_remote_work' => $shiftMeta['is_remote_work'] ?? false,
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'data' => array_merge($data, ['shift' => $shift]),
+        ]);
+    }
+
+    public function getLeaveRequests(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $employee = $user->employee;
+
+        $validated = $request->validate([
+            'month' => ['nullable', 'integer', 'in:1,2,3,4,5,6,7,8,9,10,11,12'],
+            'year' => ['nullable', 'integer'],
+        ]);
+
+        $month = $validated['month'] ?? (int) now()->month;
+        $year = $validated['year'] ?? (int) now()->year;
+
+        $leaveRequests = LeaveRequest::query()
+            ->where('employee_id', $employee->id)
+            ->whereMonth('start_date', $month)
+            ->whereYear('start_date', $year)
+            ->with('leaveType:id,name')
+            ->orderBy('start_date', 'desc')
+            ->get()
+            ->map(fn ($request) => [
+                'id' => $request->id,
+                'leave_type' => $request->leaveType ? ['name' => $request->leaveType->name] : null,
+                'start_date' => $request->start_date->toDateString(),
+                'end_date' => $request->end_date->toDateString(),
+                'reason' => $request->reason,
+                'status' => $request->status,
+                'requested_at' => $request->created_at->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $leaveRequests,
+            'month' => $month,
+            'year' => $year,
+        ]);
+    }
+
+    public function storeLeaveRequest(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $employee = $user->employee;
+
+        $validated = $request->validate([
+            'leave_type_id' => ['required', 'exists:leave_types,id'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'reason' => ['required', 'string', 'min:10'],
+        ]);
+
+        $leaveRequest = LeaveRequest::create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $validated['leave_type_id'],
+            'start_date' => $validated['start_date'],
+            'end_date' => $validated['end_date'],
+            'reason' => $validated['reason'],
+            'status' => 'pending',
+            'requested_by_user_id' => $user->id,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Leave request submitted successfully.',
+            'data' => $leaveRequest,
+        ], 201);
+    }
+
+    public function getRemoteWorkRequests(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $employee = $user->employee;
+
+        $validated = $request->validate([
+            'month' => ['nullable', 'integer', 'in:1,2,3,4,5,6,7,8,9,10,11,12'],
+            'year' => ['nullable', 'integer'],
+        ]);
+
+        $month = $validated['month'] ?? (int) now()->month;
+        $year = $validated['year'] ?? (int) now()->year;
+
+        $remoteWorkRequests = RemoteWorkRequest::query()
+            ->where('employee_id', $employee->id)
+            ->whereMonth('start_date', $month)
+            ->whereYear('start_date', $year)
+            ->orderBy('start_date', 'desc')
+            ->get()
+            ->map(fn ($request) => [
+                'id' => $request->id,
+                'start_date' => $request->start_date->toDateString(),
+                'end_date' => $request->end_date->toDateString(),
+                'reason' => $request->reason,
+                'status' => $request->status,
+                'requested_at' => $request->created_at->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $remoteWorkRequests,
+            'month' => $month,
+            'year' => $year,
+        ]);
+    }
+
+    public function storeRemoteWorkRequest(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $employee = $user->employee;
+
+        $validated = $request->validate([
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'reason' => ['required', 'string', 'min:10'],
+        ]);
+
+        $remoteWorkRequest = RemoteWorkRequest::create([
+            'employee_id' => $employee->id,
+            'start_date' => $validated['start_date'],
+            'end_date' => $validated['end_date'],
+            'reason' => $validated['reason'],
+            'status' => 'pending',
+            'requested_by_user_id' => $user->id,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Remote work request submitted successfully.',
+            'data' => $remoteWorkRequest,
+        ], 201);
+    }
+
+    public function getLeaveBalances(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $employee = $user->employee;
+
+        $validated = $request->validate([
+            'year' => ['nullable', 'integer'],
+        ]);
+
+        $year = $validated['year'] ?? (int) now()->year;
+
+        $leaveBalances = LeaveBalance::query()
+            ->where('employee_id', $employee->id)
+            ->where('year', $year)
+            ->with('leaveType:id,name')
+            ->get()
+            ->map(fn ($balance) => [
+                'leave_type' => $balance->leaveType ? ['id' => $balance->leaveType->id, 'name' => $balance->leaveType->name] : null,
+                'opening_balance' => $balance->opening_balance,
+                'allocated_hours' => $balance->allocated_hours,
+                'used_hours' => $balance->used_hours,
+                'closing_balance' => $balance->closing_balance,
+                'available_balance' => $balance->getAvailableBalance(),
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $leaveBalances,
+            'year' => $year,
+        ]);
+    }
 
     public function uploadPunchData(AttendanceUploadRequest $request): JsonResponse
     {
@@ -94,7 +360,6 @@ class AttendanceController extends Controller
             'message' => "Attendance recorded successfully. {$stored} punch(es) processed.",
         ]);
     }
-
 
     public function getDailyDetails(Request $request)
     {
@@ -862,7 +1127,7 @@ class AttendanceController extends Controller
             };
 
             $employee = Employee::with(['offices' => $officeQuery])
-                ->where('code', $punchData["EmployeeId"])
+                ->where('code', $punchData['EmployeeId'])
                 ->first();
 
             if (! $employee) {
@@ -876,9 +1141,9 @@ class AttendanceController extends Controller
                 $employee->load(['offices' => $officeQuery]);
             }
 
-            $employeeName = $employee->name ?? $punchData["EmployeeName"] ?? $punchData["EmployeeId"];
-            $punchTime = Carbon::parse($punchData["PunchTime"])->format('d M Y, h:i A');
-            $machineId = isset($punchData["MachineId"]) ? (int) $punchData["MachineId"] : null;
+            $employeeName = $employee->name ?? $punchData['EmployeeName'] ?? $punchData['EmployeeId'];
+            $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
+            $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
 
             if ($machineId === self::MACHINE_ID_PUNCH_IN) {
                 $message = "*{$employeeName}* has *PUNCHED IN* at {$punchTime}.";
@@ -898,13 +1163,13 @@ class AttendanceController extends Controller
                     $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
                 }
             }
-            Punch::where("EmployeeId", $punchData["EmployeeId"])
-                ->where("PunchTime", $punchData["PunchTime"])
+            Punch::where('EmployeeId', $punchData['EmployeeId'])
+                ->where('PunchTime', $punchData['PunchTime'])
                 ->update(['Islive' => false]);
 
         } catch (\Throwable $e) {
             Log::error('Failed to send live punch notification', [
-                'employee_id' => $punchData["EmployeeId"],
+                'employee_id' => $punchData['EmployeeId'],
                 'error' => $e->getMessage(),
             ]);
         }
@@ -913,15 +1178,15 @@ class AttendanceController extends Controller
     private function sendVisitorPunchNotification(array $punchData): void
     {
         try {
-            $visitor = Visitor::where('code', $punchData["EmployeeId"])->first();
+            $visitor = Visitor::where('code', $punchData['EmployeeId'])->first();
 
             if (! $visitor) {
                 return;
             }
 
-            $visitorName = $visitor->name ?? $punchData["EmployeeName"] ?? 'Visitor #'.$punchData["EmployeeId"];
-            $punchTime = Carbon::parse($punchData["PunchTime"])->format('d M Y, h:i A');
-            $machineId = isset($punchData["MachineId"]) ? (int) $punchData["MachineId"] : null;
+            $visitorName = $visitor->name ?? $punchData['EmployeeName'] ?? 'Visitor #'.$punchData['EmployeeId'];
+            $punchTime = Carbon::parse($punchData['PunchTime'])->format('d M Y, h:i A');
+            $machineId = isset($punchData['MachineId']) ? (int) $punchData['MachineId'] : null;
 
             if ($machineId === self::MACHINE_ID_PUNCH_IN) {
                 $message = "*{$visitorName}* (Visitor) has *PUNCHED IN* at {$punchTime}.";
@@ -937,84 +1202,83 @@ class AttendanceController extends Controller
             // Send to default office notification number
             $notificationService->sendWhatsApp('918811047292-1550922196@g.us', $message, true);
 
-            VisitorPunch::where('visitor_code', $punchData["EmployeeId"])
-                ->where('punch_time', $punchData["PunchTime"])
+            VisitorPunch::where('visitor_code', $punchData['EmployeeId'])
+                ->where('punch_time', $punchData['PunchTime'])
                 ->update(['is_live' => false]);
         } catch (\Throwable $e) {
             Log::error('Failed to send visitor punch notification', [
-                'visitor_code' => $punchData["EmployeeId"],
+                'visitor_code' => $punchData['EmployeeId'],
                 'error' => $e->getMessage(),
             ]);
         }
     }
 
-
     public function getAttendanceSummary(string $employeeId, Carbon $date): array
     {
         $emptyResult = [
-            "status"              => "success",
-            "employee_id"         => $employeeId,
-            "date"                => $date->toDateString(),
-            "shift_id"            => null,
-            "shift_start"         => null,
-            "shift_end"           => null,
-            "shift_grace_minutes" => 0,
-            "punch_in"            => null,
-            "punch_out"           => null,
-            "breaks"              => [],
-            "total_break_minutes" => 0,
-            "total_work_minutes"  => null,
-            "early_in_minutes"    => 0,
-            "late_in_minutes"     => 0,
-            "early_out_minutes"   => 0,
-            "late_out_minutes"    => 0,
-            "is_early_in"         => false,
-            "is_late_in"          => false,
-            "is_early_out"        => false,
-            "is_late_out"         => false,
-            "is_late"             => false,
-            "late_minutes"        => 0,
-            "overtime_minutes"    => 0,
+            'status' => 'success',
+            'employee_id' => $employeeId,
+            'date' => $date->toDateString(),
+            'shift_id' => null,
+            'shift_start' => null,
+            'shift_end' => null,
+            'shift_grace_minutes' => 0,
+            'punch_in' => null,
+            'punch_out' => null,
+            'breaks' => [],
+            'total_break_minutes' => 0,
+            'total_work_minutes' => null,
+            'early_in_minutes' => 0,
+            'late_in_minutes' => 0,
+            'early_out_minutes' => 0,
+            'late_out_minutes' => 0,
+            'is_early_in' => false,
+            'is_late_in' => false,
+            'is_early_out' => false,
+            'is_late_out' => false,
+            'is_late' => false,
+            'late_minutes' => 0,
+            'overtime_minutes' => 0,
         ];
-    
+
         // ── 1. Fetch raw punches ───────────────────────────────────────────────────
         // Keep as Eloquent Collection — do NOT call ->toArray().
         // Laravel's toArray() snake_cases PascalCase columns so $punch["PunchTime"]
         // would silently return null. Object syntax $punch->PunchTime is correct.
-        $rawPunches = Punch::where("EmployeeId", $employeeId)
-            ->whereDate("PunchTime", $date->toDateString())
-            ->orderBy("PunchTime")
-            ->get(["PunchTime", "MachineId"]);
-    
+        $rawPunches = Punch::where('EmployeeId', $employeeId)
+            ->whereDate('PunchTime', $date->toDateString())
+            ->orderBy('PunchTime')
+            ->get(['PunchTime', 'MachineId']);
+
         if ($rawPunches->isEmpty()) {
             return $emptyResult;
         }
-    
+
         // ── 2. Build a flat, typed event list ─────────────────────────────────────
-        $events     = [];    // [["time" => Carbon, "direction" => string], ...]
+        $events = [];    // [["time" => Carbon, "direction" => string], ...]
         $hasUnknown = false;
-    
+
         foreach ($rawPunches as $punch) {
-            $time      = Carbon::parse($punch->PunchTime);
+            $time = Carbon::parse($punch->PunchTime);
             $machineId = (int) $punch->MachineId;
-    
+
             if ($machineId === 3) {
-                $events[] = ["time" => $time, "direction" => "in"];
+                $events[] = ['time' => $time, 'direction' => 'in'];
             } elseif ($machineId === 1) {
-                $events[] = ["time" => $time, "direction" => "out"];
+                $events[] = ['time' => $time, 'direction' => 'out'];
             } elseif ($machineId === 2) {
                 // Position-resolved in step 4
-                $events[] = ["time" => $time, "direction" => "combined"];
+                $events[] = ['time' => $time, 'direction' => 'combined'];
             } else {
-                $events[]   = ["time" => $time, "direction" => "unknown"];
+                $events[] = ['time' => $time, 'direction' => 'unknown'];
                 $hasUnknown = true;
             }
         }
-    
+
         if ($hasUnknown) {
             return $this->getAttendanceSummaryByTimeHeuristic($employeeId, $date, $emptyResult);
         }
-    
+
         // ── 3. Collapse consecutive same-direction typed events (MachineId 1 & 3) ─
         //
         //  Consecutive INs  → keep the FIRST  (earliest entry)
@@ -1022,29 +1286,30 @@ class AttendanceController extends Controller
         //  "combined" events pass through untouched; position-resolved next.
         //
         $collapsed = [];
-        $lastDir   = null;
-    
+        $lastDir = null;
+
         foreach ($events as $event) {
-            $dir = $event["direction"];
-    
-            if ($dir === "combined") {
+            $dir = $event['direction'];
+
+            if ($dir === 'combined') {
                 $collapsed[] = $event;
-                $lastDir     = "combined";
+                $lastDir = 'combined';
+
                 continue;
             }
-    
+
             if ($dir === $lastDir) {
-                if ($dir === "out") {
+                if ($dir === 'out') {
                     // Replace last OUT with the later one
                     $collapsed[count($collapsed) - 1] = $event;
                 }
                 // Consecutive INs: keep first — do nothing
             } else {
                 $collapsed[] = $event;
-                $lastDir     = $dir;
+                $lastDir = $dir;
             }
         }
-    
+
         // ── 4. Position-resolve "combined" machine events ─────────────────────────
         //
         //  index 0     → in
@@ -1052,33 +1317,34 @@ class AttendanceController extends Controller
         //  middle odd  → out (break_out)
         //  middle even → in  (break_in)
         //
-        $total    = count($collapsed);
+        $total = count($collapsed);
         $resolved = [];
-    
+
         foreach ($collapsed as $idx => $event) {
-            if ($event["direction"] !== "combined") {
+            if ($event['direction'] !== 'combined') {
                 $resolved[] = $event;
+
                 continue;
             }
-    
+
             if ($idx === 0) {
-                $resolved[] = ["time" => $event["time"], "direction" => "in"];
+                $resolved[] = ['time' => $event['time'], 'direction' => 'in'];
             } elseif ($idx === $total - 1) {
-                $resolved[] = ["time" => $event["time"], "direction" => "out"];
+                $resolved[] = ['time' => $event['time'], 'direction' => 'out'];
             } else {
-                $middleIdx  = $idx - 1; // 0-based within the middle segment
+                $middleIdx = $idx - 1; // 0-based within the middle segment
                 $resolved[] = [
-                    "time"      => $event["time"],
-                    "direction" => ($middleIdx % 2 === 0) ? "out" : "in",
+                    'time' => $event['time'],
+                    'direction' => ($middleIdx % 2 === 0) ? 'out' : 'in',
                 ];
             }
         }
-    
+
         // Ensure sequence starts with an IN
-        if (empty($resolved) || $resolved[0]["direction"] !== "in") {
+        if (empty($resolved) || $resolved[0]['direction'] !== 'in') {
             return $emptyResult;
         }
-    
+
         // ── 5. Extract punch_in, punch_out, and breaks ────────────────────────────
         //
         //  index 0       → punch_in
@@ -1088,80 +1354,80 @@ class AttendanceController extends Controller
         //  N == 2 or N == 3: $breaks stays [] — no complete middle pair exists.
         //
         $resolvedCount = count($resolved);
-        $punchIn       = $resolved[0]["time"];
-        $punchOut      = null;
-        $breaks        = [];
-    
+        $punchIn = $resolved[0]['time'];
+        $punchOut = null;
+        $breaks = [];
+
         if ($resolvedCount >= 2) {
-            $punchOut = $resolved[$resolvedCount - 1]["time"];
-    
+            $punchOut = $resolved[$resolvedCount - 1]['time'];
+
             if ($resolvedCount >= 4) {
                 $middle = array_slice($resolved, 1, $resolvedCount - 2);
-    
+
                 for ($i = 0; $i + 1 < count($middle); $i += 2) {
                     $breakOutEvent = $middle[$i];
-                    $breakInEvent  = $middle[$i + 1];
-    
+                    $breakInEvent = $middle[$i + 1];
+
                     $breaks[] = [
-                        "break_out"        => $breakOutEvent["time"]->toDateTimeString(),
-                        "break_in"         => $breakInEvent["time"]->toDateTimeString(),
-                        "duration_minutes" => (int) $breakOutEvent["time"]->diffInMinutes($breakInEvent["time"]),
+                        'break_out' => $breakOutEvent['time']->toDateTimeString(),
+                        'break_in' => $breakInEvent['time']->toDateTimeString(),
+                        'duration_minutes' => (int) $breakOutEvent['time']->diffInMinutes($breakInEvent['time']),
                     ];
                 }
             }
         }
-    
+
         // ── 6. Compute totals and return ──────────────────────────────────────────
-        $totalBreakMinutes = collect($breaks)->sum("duration_minutes");
-    
+        $totalBreakMinutes = collect($breaks)->sum('duration_minutes');
+
         $totalWorkMinutes = $punchOut
             ? max(0, (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes)
             : null;
-    
-        $shiftMeta    = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
+
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
         $shiftMetrics = $this->buildShiftMetrics(
             $date->toDateString(),
-            $punchIn->format("H:i:s"),
-            $punchOut?->format("H:i:s"),
+            $punchIn->format('H:i:s'),
+            $punchOut?->format('H:i:s'),
             $shiftMeta
         );
-    
+
         $overtimeMinutes = $punchOut
             ? $this->calculateOvertimeMinutes(
                 $employeeId,
                 $date->toDateString(),
-                $punchOut->format("H:i:s"),
+                $punchOut->format('H:i:s'),
                 $totalWorkMinutes
             )
             : 0;
-    
+
         return [
-            "status"              => "success",
-            "employee_id"         => $employeeId,
-            "date"                => $date->toDateString(),
-            "shift_id"            => $shiftMeta["shift_id"],
-            "shift_start"         => $shiftMeta["start_time"],
-            "shift_end"           => $shiftMeta["end_time"],
-            "shift_grace_minutes" => $shiftMeta["grace_minutes"],
-            "punch_in"            => $punchIn->toDateTimeString(),
-            "punch_out"           => $punchOut?->toDateTimeString(),
-            "breaks"              => $breaks,
-            "total_break_minutes" => $totalBreakMinutes,
-            "total_work_minutes"  => $totalWorkMinutes,
-            "early_in_minutes"    => $shiftMetrics["early_in_minutes"],
-            "late_in_minutes"     => $shiftMetrics["late_in_minutes"],
-            "early_out_minutes"   => $shiftMetrics["early_out_minutes"],
-            "late_out_minutes"    => $shiftMetrics["late_out_minutes"],
-            "is_early_in"         => $shiftMetrics["is_early_in"],
-            "is_late_in"          => $shiftMetrics["is_late_in"],
-            "is_early_out"        => $shiftMetrics["is_early_out"],
-            "is_late_out"         => $shiftMetrics["is_late_out"],
-            "late_minutes"        => $shiftMetrics["late_in_minutes"],
-            "is_late"             => $shiftMetrics["is_late_in"],
-            "overtime_minutes"    => $overtimeMinutes,
+            'status' => 'success',
+            'employee_id' => $employeeId,
+            'date' => $date->toDateString(),
+            'shift_id' => $shiftMeta['shift_id'],
+            'shift_start' => $shiftMeta['start_time'],
+            'shift_end' => $shiftMeta['end_time'],
+            'shift_grace_minutes' => $shiftMeta['grace_minutes'],
+            'punch_in' => $punchIn->toDateTimeString(),
+            'punch_out' => $punchOut?->toDateTimeString(),
+            'breaks' => $breaks,
+            'total_break_minutes' => $totalBreakMinutes,
+            'total_work_minutes' => $totalWorkMinutes,
+            'early_in_minutes' => $shiftMetrics['early_in_minutes'],
+            'late_in_minutes' => $shiftMetrics['late_in_minutes'],
+            'early_out_minutes' => $shiftMetrics['early_out_minutes'],
+            'late_out_minutes' => $shiftMetrics['late_out_minutes'],
+            'is_early_in' => $shiftMetrics['is_early_in'],
+            'is_late_in' => $shiftMetrics['is_late_in'],
+            'is_early_out' => $shiftMetrics['is_early_out'],
+            'is_late_out' => $shiftMetrics['is_late_out'],
+            'late_minutes' => $shiftMetrics['late_in_minutes'],
+            'is_late' => $shiftMetrics['is_late_in'],
+            'overtime_minutes' => $overtimeMinutes,
         ];
     }
-    
+
     /**
      * Fallback: time-heuristic for punches with unknown MachineId.
      *
@@ -1174,100 +1440,98 @@ class AttendanceController extends Controller
     private function getAttendanceSummaryByTimeHeuristic(
         string $employeeId,
         Carbon $date,
-        array  $emptyResult,
-        int    $mergeGapMinutes = 2
+        array $emptyResult,
+        int $mergeGapMinutes = 2
     ): array {
-        $punches = Punch::where("EmployeeId", $employeeId)
-            ->whereDate("PunchTime", $date->toDateString())
-            ->orderBy("PunchTime")
-            ->pluck("PunchTime")
+        $punches = Punch::where('EmployeeId', $employeeId)
+            ->whereDate('PunchTime', $date->toDateString())
+            ->orderBy('PunchTime')
+            ->pluck('PunchTime')
             ->map(fn ($t) => Carbon::parse($t))
             ->values();
-    
+
         if ($punches->isEmpty()) {
             return $emptyResult;
         }
-    
+
         // Deduplicate: drop punches within the merge gap of the previous one
-        $merged   = [$punches[0]];
+        $merged = [$punches[0]];
         $lastTime = $punches[0];
-    
+
         for ($i = 1; $i < $punches->count(); $i++) {
             $current = $punches[$i];
             if ($current->diffInMinutes($lastTime) > $mergeGapMinutes) {
-                $merged[]  = $current;
-                $lastTime  = $current;
+                $merged[] = $current;
+                $lastTime = $current;
             }
         }
-    
+
         $mergedCount = count($merged);
-        $punchIn     = $merged[0];
-        $punchOut    = $mergedCount >= 2 ? $merged[$mergedCount - 1] : null;
-        $breaks      = [];
-    
+        $punchIn = $merged[0];
+        $punchOut = $mergedCount >= 2 ? $merged[$mergedCount - 1] : null;
+        $breaks = [];
+
         if ($mergedCount >= 4) {
             $middle = array_slice($merged, 1, $mergedCount - 2);
-    
+
             for ($i = 0; $i + 1 < count($middle); $i += 2) {
                 $breakOut = $middle[$i];
-                $breakIn  = $middle[$i + 1];
-    
+                $breakIn = $middle[$i + 1];
+
                 $breaks[] = [
-                    "break_out"        => $breakOut->toDateTimeString(),
-                    "break_in"         => $breakIn->toDateTimeString(),
-                    "duration_minutes" => (int) $breakOut->diffInMinutes($breakIn),
+                    'break_out' => $breakOut->toDateTimeString(),
+                    'break_in' => $breakIn->toDateTimeString(),
+                    'duration_minutes' => (int) $breakOut->diffInMinutes($breakIn),
                 ];
             }
         }
-    
-        $totalBreakMinutes = collect($breaks)->sum("duration_minutes");
-        $totalWorkMinutes  = $punchOut
+
+        $totalBreakMinutes = collect($breaks)->sum('duration_minutes');
+        $totalWorkMinutes = $punchOut
             ? max(0, (int) $punchIn->diffInMinutes($punchOut) - $totalBreakMinutes)
             : null;
-    
-        $shiftMeta    = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
+
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $date->toDateString());
         $shiftMetrics = $this->buildShiftMetrics(
             $date->toDateString(),
-            $punchIn->format("H:i:s"),
-            $punchOut?->format("H:i:s"),
+            $punchIn->format('H:i:s'),
+            $punchOut?->format('H:i:s'),
             $shiftMeta
         );
-    
+
         $overtimeMinutes = $punchOut
             ? $this->calculateOvertimeMinutes(
                 $employeeId,
                 $date->toDateString(),
-                $punchOut->format("H:i:s"),
+                $punchOut->format('H:i:s'),
                 $totalWorkMinutes
             )
             : 0;
-    
+
         return [
-            "status"              => "success",
-            "employee_id"         => $employeeId,
-            "date"                => $date->toDateString(),
-            "shift_id"            => $shiftMeta["shift_id"],
-            "shift_start"         => $shiftMeta["start_time"],
-            "shift_end"           => $shiftMeta["end_time"],
-            "shift_grace_minutes" => $shiftMeta["grace_minutes"],
-            "punch_in"            => $punchIn->toDateTimeString(),
-            "punch_out"           => $punchOut?->toDateTimeString(),
-            "breaks"              => $breaks,
-            "total_break_minutes" => $totalBreakMinutes,
-            "total_work_minutes"  => $totalWorkMinutes,
-            "early_in_minutes"    => $shiftMetrics["early_in_minutes"],
-            "late_in_minutes"     => $shiftMetrics["late_in_minutes"],
-            "early_out_minutes"   => $shiftMetrics["early_out_minutes"],
-            "late_out_minutes"    => $shiftMetrics["late_out_minutes"],
-            "is_early_in"         => $shiftMetrics["is_early_in"],
-            "is_late_in"          => $shiftMetrics["is_late_in"],
-            "is_early_out"        => $shiftMetrics["is_early_out"],
-            "is_late_out"         => $shiftMetrics["is_late_out"],
-            "late_minutes"        => $shiftMetrics["late_in_minutes"],
-            "is_late"             => $shiftMetrics["is_late_in"],
-            "overtime_minutes"    => $overtimeMinutes,
+            'status' => 'success',
+            'employee_id' => $employeeId,
+            'date' => $date->toDateString(),
+            'shift_id' => $shiftMeta['shift_id'],
+            'shift_start' => $shiftMeta['start_time'],
+            'shift_end' => $shiftMeta['end_time'],
+            'shift_grace_minutes' => $shiftMeta['grace_minutes'],
+            'punch_in' => $punchIn->toDateTimeString(),
+            'punch_out' => $punchOut?->toDateTimeString(),
+            'breaks' => $breaks,
+            'total_break_minutes' => $totalBreakMinutes,
+            'total_work_minutes' => $totalWorkMinutes,
+            'early_in_minutes' => $shiftMetrics['early_in_minutes'],
+            'late_in_minutes' => $shiftMetrics['late_in_minutes'],
+            'early_out_minutes' => $shiftMetrics['early_out_minutes'],
+            'late_out_minutes' => $shiftMetrics['late_out_minutes'],
+            'is_early_in' => $shiftMetrics['is_early_in'],
+            'is_late_in' => $shiftMetrics['is_late_in'],
+            'is_early_out' => $shiftMetrics['is_early_out'],
+            'is_late_out' => $shiftMetrics['is_late_out'],
+            'late_minutes' => $shiftMetrics['late_in_minutes'],
+            'is_late' => $shiftMetrics['is_late_in'],
+            'overtime_minutes' => $overtimeMinutes,
         ];
     }
-
-
 }

@@ -17,10 +17,12 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import VisitorFormModal from '@/components/admin/employees/VisitorFormModal';
+import ShiftChangePanel from '@/components/admin/employees/ShiftChangePanel';
 import axios from 'axios';
 import { Tabs } from '@mantine/core';
 import { AttendanceCalendar } from '@/components/attendance';
 import { LeavePanel } from '@/components/admin/employees/LeavePanel';
+import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -495,7 +497,7 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                             <Tabs.Tab value="attendance">Attendance</Tabs.Tab>
                             <Tabs.Tab value="leaves">Leaves</Tabs.Tab>
                             <Tabs.Tab value="shifts">Shifts</Tabs.Tab>
-                            <Tabs.Tab value="tasks">Tasks</Tabs.Tab>
+                            <Tabs.Tab value="works">Works</Tabs.Tab>
                         </Tabs.List>
 
                         <Tabs.Panel value="details" className="space-y-4">
@@ -578,36 +580,10 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                             </div>
                         </Tabs.Panel>
                         <Tabs.Panel value="shifts" className="space-y-4">
-                            <div className="rounded-lg border p-4 space-y-4">
-                                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                                    <Building className="h-4 w-4" />
-                                    Current Shift
-                                </div>
-                                {employee.currentShiftAssignment?.shift ? (
-                                    <div className="space-y-2">
-                                        <p className="text-xs text-muted-foreground">Shift name</p>
-                                        <p className="text-sm font-medium">{employee.currentShiftAssignment.shift.name}</p>
-                                        <p className="text-xs text-muted-foreground">Time</p>
-                                        <p className="text-sm">{employee.currentShiftAssignment.shift.start_time} — {employee.currentShiftAssignment.shift.end_time}</p>
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">No active shift assignment available.</p>
-                                )}
-                            </div>
-
-                            {employee.shiftAssignmentHistory && employee.shiftAssignmentHistory.length > 0 && (
-                                <div className="rounded-lg border p-4">
-                                    <h4 className="text-sm font-semibold">Recent shift history</h4>
-                                    <div className="mt-3 space-y-3">
-                                        {employee.shiftAssignmentHistory.map((assignment) => (
-                                            <div key={assignment.id} className="rounded-lg border p-3 bg-muted/50">
-                                                <p className="text-sm font-medium">{assignment.shift?.name || 'Unnamed shift'}</p>
-                                                <p className="text-xs text-muted-foreground">{assignment.effective_from} → {assignment.effective_to || 'Present'}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            <ShiftChangePanel employees={[]} selectedId={employee.id} />
+                        </Tabs.Panel>
+                        <Tabs.Panel value="works" className="space-y-4">
+                            <EmployeeTaskProgress employeeId={employee.id} />
                         </Tabs.Panel>
                     </Tabs>
                 )}

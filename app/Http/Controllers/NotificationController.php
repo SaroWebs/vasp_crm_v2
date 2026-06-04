@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -68,7 +69,7 @@ class NotificationController extends Controller
         return Inertia::render('notifications/Index', [
             'notifications' => $notifications,
             'filters' => $request->only(['status', 'type']),
-            'counts' => $counts
+            'counts' => $counts,
         ]);
     }
 
@@ -79,7 +80,7 @@ class NotificationController extends Controller
     {
         $userId = Auth::id();
 
-        if (!$notification->isOwnedByUser($userId)) {
+        if (! $notification->isOwnedByUser($userId)) {
             abort(403, 'Unauthorized');
         }
 
@@ -173,7 +174,6 @@ class NotificationController extends Controller
         ]);
     }
 
-
     /**
      * Delete a notification.
      */
@@ -181,13 +181,13 @@ class NotificationController extends Controller
     {
         $userId = Auth::id();
 
-        if (!$notification->isOwnedByUser($userId)) {
+        if (! $notification->isOwnedByUser($userId)) {
             abort(403, 'Unauthorized');
         }
 
         $notification->users()->detach($userId);
 
-        if (!$notification->users()->exists()) {
+        if (! $notification->users()->exists()) {
             $notification->delete();
         }
 
@@ -207,7 +207,7 @@ class NotificationController extends Controller
 
         $validated = $request->validate([
             'notification_ids' => 'required|array',
-            'notification_ids.*' => 'exists:notifications,id'
+            'notification_ids.*' => 'exists:notifications,id',
         ]);
 
         $notifications = Notification::query()
@@ -218,7 +218,7 @@ class NotificationController extends Controller
         $notifications->each(function (Notification $notification) use ($user) {
             $notification->users()->detach($user->id);
 
-            if (!$notification->users()->exists()) {
+            if (! $notification->users()->exists()) {
                 $notification->delete();
             }
         });
@@ -235,7 +235,7 @@ class NotificationController extends Controller
 
         $validated = $request->validate([
             'notification_ids' => 'required|array',
-            'notification_ids.*' => 'exists:notifications,id'
+            'notification_ids.*' => 'exists:notifications,id',
         ]);
 
         Notification::query()
@@ -262,10 +262,13 @@ class NotificationController extends Controller
      */
     public static function notifyDepartment($departmentId, $type, $title, $message, $data = [])
     {
-        $department = \App\Models\Department::find($departmentId);
-        if (!$department) return [];
+        $department = Department::find($departmentId);
+        if (! $department) {
+            return [];
+        }
 
         $userIds = $department->users()->pluck('users.id')->toArray();
+
         return Notification::notifyUsers($userIds, $type, $title, $message, $data);
     }
 
@@ -274,10 +277,13 @@ class NotificationController extends Controller
      */
     public static function notifyDepartmentManagers($departmentId, $type, $title, $message, $data = [])
     {
-        $department = \App\Models\Department::find($departmentId);
-        if (!$department) return [];
+        $department = Department::find($departmentId);
+        if (! $department) {
+            return [];
+        }
 
         $managerIds = $department->getManagers()->pluck('id')->toArray();
+
         return Notification::notifyUsers($managerIds, $type, $title, $message, $data);
     }
 }

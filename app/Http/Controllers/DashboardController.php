@@ -21,13 +21,13 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user = User::find(Auth::user()->id);
-        
+
         // Get role-specific dashboard data
         $dashboardData = $this->dashboardService->getDashboardData($user);
-        
+
         // Always include user permissions
         $dashboardData['userPermissions'] = $user->getAllPermissions()->pluck('slug');
-        
+
         return Inertia::render('dashboard', $dashboardData);
     }
 
@@ -38,7 +38,7 @@ class DashboardController extends Controller
     {
         $user = User::find(Auth::user()->id);
 
-        if (!$user->hasPermission('department.read')) {
+        if (! $user->hasPermission('department.read')) {
             abort(403, 'Insufficient permissions');
         }
 
@@ -47,7 +47,7 @@ class DashboardController extends Controller
                 'users.roles',
                 'assignedTasks' => function ($query) {
                     $query->where('status', '!=', 'completed');
-                }
+                },
             ])
             ->get()
             ->map(function ($department) {
@@ -88,8 +88,9 @@ class DashboardController extends Controller
             ->whereMonth('updated_at', now()->month)
             ->count();
 
-        if ($totalTasks === 0)
+        if ($totalTasks === 0) {
             return 0;
+        }
 
         $completionRate = ($completedTasks / $totalTasks) * 100;
 

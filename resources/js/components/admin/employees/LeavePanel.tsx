@@ -124,6 +124,11 @@ function unpack<T>(res: unknown): T[] {
     const r = res as Record<string, unknown>;
     if (Array.isArray(r)) return r as unknown as T[];
     if (Array.isArray(r.data)) return r.data as T[];
+    if (Array.isArray(r.leave_balances)) return r.leave_balances as T[];
+    if (Array.isArray(r.leave_requests)) return r.leave_requests as T[];
+    if (Array.isArray(r.remote_work_assignments)) return r.remote_work_assignments as T[];
+    if (Array.isArray(r.field_work_assignments)) return r.field_work_assignments as T[];
+    if (Array.isArray(r.field_work_requests)) return r.field_work_requests as T[];
     return [];
 }
 function apiErr(e: unknown): string {
@@ -311,7 +316,7 @@ function LeaveRow({ req, onAction }: { req: LeaveRequest; onAction: () => void }
         setActLoading(true);
         try {
             // POST /api/leave-requests/{id}/reject
-            await axios.post(`/api/leave-requests/${req.id}/reject`, { notes });
+            await axios.post(`/api/leave-requests/${req.id}/reject`, { notes: notes || 'Rejected by admin.' });
             onAction();
         } catch { /* error handled globally */ }
         finally { setActLoading(false); }
@@ -376,7 +381,7 @@ function RemoteRow({ req, onAction }: { req: RemoteWorkRequest; onAction: () => 
         setActLoading(true);
         try {
             // POST /api/remote-work-requests/{id}/reject
-            await axios.post(`/api/remote-work-requests/${req.id}/reject`, { notes });
+            await axios.post(`/api/remote-work-requests/${req.id}/reject`, { notes: notes || 'Rejected by admin.' });
             onAction();
         } catch { /* */ }
         finally { setActLoading(false); }
@@ -472,7 +477,7 @@ function FieldRow({ fw, onEdit, onAction, onDelete }: {
     async function reject(notes: string) {
         setLoading(true);
         try {
-            await axios.post(`/admin/field-work-assignments/${fw.id}/reject`, { notes });
+            await axios.post(`/admin/field-work-assignments/${fw.id}/reject`, { notes: notes || 'Rejected by admin.' });
             onAction?.();
         } catch { /* */ } finally { setLoading(false); }
     }
@@ -595,71 +600,6 @@ function AssignLeaveDialog({ open, onOpenChange, employeeId, leaveTypes, onSucce
                     <Button size="sm" onClick={submit} disabled={saving}>
                         {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                         Assign Leave
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-// ─── Assign Remote Work Dialog ────────────────────────────────────────────────
-
-function AssignRemoteDialog({ open, onOpenChange, employeeId, onSuccess }: {
-    open: boolean; onOpenChange: (o: boolean) => void;
-    employeeId: number | string; onSuccess: () => void;
-}) {
-    const id = useId();
-    const [form, setForm] = useState({ start_date: '', end_date: '', reason: '' });
-    const [saving, setSaving] = useState(false);
-    const [err, setErr] = useState('');
-
-    function reset() { setForm({ start_date: '', end_date: '', reason: '' }); setErr(''); }
-
-    async function submit() {
-        if (!form.start_date || !form.end_date) { setErr('Start date and end date are required.'); return; }
-        setSaving(true); setErr('');
-        try {
-            // POST /api/remote-work-requests
-            await axios.post('/api/remote-work-requests', {
-                employee_id: employeeId,
-                start_date: form.start_date,
-                end_date: form.end_date,
-                reason: form.reason || null,
-            });
-            reset(); onOpenChange(false); onSuccess();
-        } catch (e) { setErr(apiErr(e)); }
-        finally { setSaving(false); }
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-            <DialogContent className="max-w-sm">
-                <DialogHeader><DialogTitle>Request Remote Work</DialogTitle></DialogHeader>
-                <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                            <Label htmlFor={`${id}-sd`} className="text-xs">Start Date *</Label>
-                            <Input id={`${id}-sd`} type="date" className="h-8 text-xs"
-                                value={form.start_date} onChange={(e) => setForm((p) => ({ ...p, start_date: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor={`${id}-ed`} className="text-xs">End Date *</Label>
-                            <Input id={`${id}-ed`} type="date" className="h-8 text-xs"
-                                value={form.end_date} onChange={(e) => setForm((p) => ({ ...p, end_date: e.target.value }))} />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor={`${id}-rs`} className="text-xs">Reason</Label>
-                        <Textarea id={`${id}-rs`} placeholder="Optional reason…" className="min-h-[64px] resize-none text-xs"
-                            value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} />
-                    </div>
-                    {err && <p className="text-xs text-red-600">{err}</p>}
-                </div>
-                <DialogFooter className="gap-2">
-                    <Button variant="outline" size="sm" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
-                    <Button size="sm" onClick={submit} disabled={saving}>
-                        {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                        Submit Request
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -946,7 +886,6 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
 
     // Dialog state
     const [leaveOpen, setLeaveOpen] = useState(false);
-    const [remoteOpen, setRemoteOpen] = useState(false);
     const [remoteAssignOpen, setRemoteAssignOpen] = useState(false);
     const [fieldOpen, setFieldOpen] = useState(false);
     const [editingFw, setEditingFw] = useState<FieldWorkAssignment | null>(null);
@@ -998,7 +937,9 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
         try {
             // GET /api/leave-types?active_only=true
             const { data } = await axios.get('/api/leave-types', { params: { active_only: true } });
-            setLeaveTypes(unpack<LeaveType>(data));
+            if(data.total){
+                setLeaveTypes(unpack<LeaveType>(data.leave_types));
+            }
         } catch { /* non-critical */ }
     }, []);
 
@@ -1088,6 +1029,13 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                 {/* ══ LEAVE VIEW ══ */}
                 {view === 'leaves' && (
                     <div className="space-y-5">
+                        <div className="flex justify-end">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                                <Link href="/admin/leave-types">
+                                    <ExternalLink className="mr-1 h-3 w-3" />Leave Management
+                                </Link>
+                            </Button>
+                        </div>
                         {/* Balances */}
                         <section className="space-y-2.5">
                             <SectionHead icon={TrendingUp} title={`Balances — ${year}`} />
@@ -1106,11 +1054,6 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                                         {!reqL && leaveReqs.length > 0 && (
                                             <FilterPills value={filter} onChange={setFilter} pendingCount={pendingLeave} />
                                         )}
-                                        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
-                                            <Link href="/admin/leave-types">
-                                                <ExternalLink className="mr-1 h-3 w-3" />Manage
-                                            </Link>
-                                        </Button>
                                         <Button size="sm" variant="outline" className="h-7 text-xs"
                                             onClick={() => setLeaveOpen(true)}>
                                             <Plus className="mr-1 h-3 w-3" />Assign
@@ -1140,7 +1083,7 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                                     <div className="flex items-center gap-2">
 
                                         <Button size="sm" variant="outline" className="h-7 text-xs"
-                                            onClick={() => setRemoteAssignOpen(true)}>
+                                            onClick={() => { setEditingRemoteAssign(null); setRemoteAssignOpen(true); }}>
                                             <Plus className="mr-1 h-3 w-3" />Assign
                                         </Button>
                                     </div>
@@ -1154,6 +1097,7 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                                 />
                             ))}
                         </section>
+
                         <section className="space-y-2.5">
                             <SectionHead icon={Laptop} title="Remote Work Requests"
                                 action={
@@ -1161,10 +1105,6 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                                         {!remL && remoteReqs.length > 0 && (
                                             <FilterPills value={filter} onChange={setFilter} pendingCount={pendingRemote} />
                                         )}
-                                        <Button size="sm" variant="outline" className="h-7 text-xs"
-                                            onClick={() => setRemoteOpen(true)}>
-                                            <Plus className="mr-1 h-3 w-3" />Request
-                                        </Button>
                                     </div>
                                 }
                             />
@@ -1215,13 +1155,9 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
             {/* ── Dialogs ── */}
             <AssignLeaveDialog
                 open={leaveOpen} onOpenChange={setLeaveOpen}
-                employeeId={employeeId} leaveTypes={leaveTypes}
-                onSuccess={() => { fetchLeaveReqs(year); fetchBalances(year); }}
-            />
-            <AssignRemoteDialog
-                open={remoteOpen} onOpenChange={setRemoteOpen}
                 employeeId={employeeId}
-                onSuccess={() => fetchRemote(year)}
+                leaveTypes={leaveTypes}
+                onSuccess={() => { fetchLeaveReqs(year); fetchBalances(year); }}
             />
             <AssignRemoteAssignmentDialog
                 open={remoteAssignOpen} onOpenChange={setRemoteAssignOpen}

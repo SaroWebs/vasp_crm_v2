@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreFieldWorkRequest;
+use App\Http\Requests\StoreMyFieldWorkRequest;
+use App\Http\Requests\UpdateFieldWorkRequest;
 use App\Models\Employee;
 use App\Models\FieldWorkAssignment;
 use App\Models\FieldWorkRequest;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -46,17 +50,9 @@ class FieldWorkRequestController extends Controller
      * POST /api/field-work-requests
      * Employee request for field work
      */
-    public function store(Request $request)
+    public function store(StoreFieldWorkRequest $request)
     {
-        $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'start_date' => 'required|date_format:Y-m-d',
-            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
-            'location' => 'required|string|max:255',
-            'description' => 'nullable|string|max:500',
-            'custom_start_time' => 'nullable|date_format:H:i',
-            'custom_end_time' => 'nullable|date_format:H:i',
-        ]);
+        $validated = $request->validated();
 
         // Check for overlapping requests (pending or approved)
         $overlapping = FieldWorkRequest::forEmployee($validated['employee_id'])
@@ -93,7 +89,7 @@ class FieldWorkRequestController extends Controller
      * PUT /api/field-work-requests/{id}
      * Update field work request (only if pending)
      */
-    public function update(Request $request, FieldWorkRequest $fieldWorkRequest)
+    public function update(UpdateFieldWorkRequest $request, FieldWorkRequest $fieldWorkRequest)
     {
         if ($fieldWorkRequest->status !== 'pending') {
             return response()->json([
@@ -101,14 +97,7 @@ class FieldWorkRequestController extends Controller
             ], 422);
         }
 
-        $validated = $request->validate([
-            'start_date' => 'sometimes|date_format:Y-m-d',
-            'end_date' => 'sometimes|date_format:Y-m-d|after_or_equal:start_date',
-            'location' => 'sometimes|string|max:255',
-            'description' => 'nullable|string|max:500',
-            'custom_start_time' => 'nullable|date_format:H:i',
-            'custom_end_time' => 'nullable|date_format:H:i',
-        ]);
+        $validated = $request->validated();
 
         $fieldWorkRequest->update($validated);
         $fieldWorkRequest->load(['employee', 'requestedByUser']);
@@ -228,7 +217,136 @@ class FieldWorkRequestController extends Controller
         return response()->json([
             'employee_id' => $employee->id,
             'employee_name' => $employee->name,
+            'data' => $requests,
             'field_work_requests' => $requests,
+        ]);
+    }
+
+    public function myIndex(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+        ]);
+
+        $month = $validated['month'] ?? (int) now()->month;
+        $year = $validated['year'] ?? (int) now()->year;
+
+        $requests = FieldWorkRequest::query()
+            ->where('employee_id', $user->employee->id)
+            ->whereMonth('start_date', $month)
+            ->whereYear('start_date', $year)
+            ->orderByDesc('start_date')
+            ->get()
+            ->map(fn (FieldWorkRequest $request) => [
+                'id' => $request->id,
+                'start_date' => $request->start_date->toDateString(),
+                'end_date' => $request->end_date->toDateString(),
+                'location' => $request->location,
+                'description' => $request->description,
+                'custom_start_time' => $request->custom_start_time,
+                'custom_end_time' => $request->custom_end_time,
+                'status' => $request->status,
+                'approval_notes' => $request->approval_notes,
+                'requested_at' => $request->created_at->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $requests,
+            'month' => $month,
+            'year' => $year,
+        ]);
+    }
+
+    public function myStore(StoreMyFieldWorkRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->employee) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Employee record not found for this user.',
+            ], 404);
+        }
+
+        $validated = $request->validated();
+        $validated['employee_id'] = $user->employee->id;
+
+        $overlapping = FieldWorkRequest::forEmployee($validated['employee_id'])
+            ->whereIn('status', ['pending', 'approved'])
+            ->forDateRange($validated['start_date'], $validated['end_date'])
+            ->exists();
+
+        if ($overlapping) {
+            return response()->json([
+                'message' => 'You already have a field work request in this date range.',
+            ], 422);
+        }
+
+        $fieldWorkRequest = FieldWorkRequest::create(array_merge($validated, [
+            'status' => 'pending',
+            'requested_by_user_id' => $user->id,
+        ]));
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Field work request submitted successfully.',
+            'data' => $fieldWorkRequest,
+        ], 201);
+    }
+
+    public function myUpdate(UpdateFieldWorkRequest $request, FieldWorkRequest $fieldWorkRequest): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->employee || $fieldWorkRequest->employee_id !== $user->employee->id) {
+            return response()->json(['message' => 'Field work request not found.'], 404);
+        }
+
+        if ($fieldWorkRequest->status !== 'pending') {
+            return response()->json([
+                'message' => 'Can only update pending field work requests.',
+            ], 422);
+        }
+
+        $fieldWorkRequest->update($request->validated());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Field work request updated successfully.',
+            'data' => $fieldWorkRequest->fresh(),
+        ]);
+    }
+
+    public function myDestroy(Request $request, FieldWorkRequest $fieldWorkRequest): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->employee || $fieldWorkRequest->employee_id !== $user->employee->id) {
+            return response()->json(['message' => 'Field work request not found.'], 404);
+        }
+
+        if ($fieldWorkRequest->status !== 'pending') {
+            return response()->json([
+                'message' => 'Can only cancel pending field work requests.',
+            ], 422);
+        }
+
+        $fieldWorkRequest->update(['status' => 'cancelled']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Field work request cancelled successfully.',
         ]);
     }
 }

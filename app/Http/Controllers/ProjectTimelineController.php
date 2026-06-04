@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
-use App\Models\User;
 use App\Models\ProjectTimelineEvent;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -22,7 +22,7 @@ class ProjectTimelineController extends Controller
      */
     public function index(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project timeline.');
         }
 
@@ -39,7 +39,7 @@ class ProjectTimelineController extends Controller
      */
     public function store(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_timeline')) {
+        if (! $this->checkPermission('project.manage_timeline')) {
             abort(403, 'Insufficient permissions to manage project timeline.');
         }
 
@@ -79,7 +79,7 @@ class ProjectTimelineController extends Controller
      */
     public function show(Project $project, ProjectTimelineEvent $timelineEvent)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project timeline.');
         }
 
@@ -95,7 +95,7 @@ class ProjectTimelineController extends Controller
      */
     public function update(Request $request, Project $project, ProjectTimelineEvent $timelineEvent)
     {
-        if (!$this->checkPermission('project.manage_timeline')) {
+        if (! $this->checkPermission('project.manage_timeline')) {
             abort(403, 'Insufficient permissions to manage project timeline.');
         }
 
@@ -130,7 +130,7 @@ class ProjectTimelineController extends Controller
      */
     public function destroy(Project $project, ProjectTimelineEvent $timelineEvent)
     {
-        if (!$this->checkPermission('project.manage_timeline')) {
+        if (! $this->checkPermission('project.manage_timeline')) {
             abort(403, 'Insufficient permissions to manage project timeline.');
         }
 
@@ -150,7 +150,7 @@ class ProjectTimelineController extends Controller
      */
     public function complete(Project $project, ProjectTimelineEvent $timelineEvent)
     {
-        if (!$this->checkPermission('project.manage_timeline')) {
+        if (! $this->checkPermission('project.manage_timeline')) {
             abort(403, 'Insufficient permissions to manage project timeline.');
         }
 
@@ -171,7 +171,7 @@ class ProjectTimelineController extends Controller
      */
     public function milestones(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project timeline.');
         }
 
@@ -189,7 +189,7 @@ class ProjectTimelineController extends Controller
      */
     public function byType(Project $project, string $type)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project timeline.');
         }
 

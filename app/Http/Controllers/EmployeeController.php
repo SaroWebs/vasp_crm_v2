@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
-use App\Models\EmployeeShiftAssignment;
 use App\Models\Office;
 use App\Models\Permission;
 use App\Models\Role;
@@ -51,10 +50,12 @@ class EmployeeController extends Controller
 
         $query = Employee::with([
             'department',
+            'category',
             'user' => function ($q) {
                 $q->withoutGlobalScope('exclude_inactive')
                     ->with(['roles.permissions', 'permissions', 'deniedPermissions']);
             },
+            'currentShiftAssignment.shift',
         ]);
 
         // Apply filters
@@ -302,46 +303,47 @@ class EmployeeController extends Controller
     /**
      * Display the specified employee
      */
-    public function show(Employee $employee)
+    public function show(Request $request, Employee $employee)
     {
         if (! $this->checkPermission('employee.read')) {
             abort(403, 'Insufficient permissions to view employee.');
         }
 
+        // Eager load all required relationships
         $employee->load([
             'department',
             'category',
             'user' => function ($q) {
                 $q->withoutGlobalScope('exclude_inactive');
             },
+            'currentShiftAssignment.shift',
+            'recentShiftAssignments.shift',
         ]);
-
-        $activeShiftAssignment = EmployeeShiftAssignment::query()
-            ->with('shift')
-            ->where('employee_id', $employee->id)
-            ->where('is_active', true)
-            ->latest('effective_from')
-            ->first();
-
-        $recentShiftAssignments = EmployeeShiftAssignment::query()
-            ->with('shift')
-            ->where('employee_id', $employee->id)
-            ->orderByDesc('effective_from')
-            ->limit(5)
-            ->get();
 
         if ($request->expectsJson()) {
             return response()->json([
-                'employee' => $employee,
-                'currentShiftAssignment' => $activeShiftAssignment,
-                'shiftAssignmentHistory' => $recentShiftAssignments,
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $employee->name,
+                    'email' => $employee->email,
+                    'code' => $employee->code,
+                    'phone' => $employee->phone,
+                    'department_id' => $employee->department_id,
+                    'user_id' => $employee->user_id,
+                    'category_id' => $employee->category_id,
+                    'created_at' => $employee->created_at,
+                    'updated_at' => $employee->updated_at,
+                    'department' => $employee->department,
+                    'category' => $employee->category,
+                    'user' => $employee->user,
+                    'currentShiftAssignment' => $employee->currentShiftAssignment,
+                    'shiftAssignmentHistory' => $employee->recentShiftAssignments,
+                ],
             ], 200);
         }
 
         return Inertia::render('admin/employees/Show', [
             'employee' => $employee,
-            'currentShiftAssignment' => $activeShiftAssignment,
-            'shiftAssignmentHistory' => $recentShiftAssignments,
         ]);
     }
 

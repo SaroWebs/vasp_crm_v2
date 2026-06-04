@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreFieldWorkRequest;
+use App\Http\Requests\UpdateFieldWorkRequest;
 use App\Models\Employee;
 use App\Models\FieldWorkAssignment;
 use Illuminate\Http\Request;
@@ -49,18 +51,9 @@ class FieldWorkController extends Controller
      * POST /api/field-work-assignments
      * Create a new field work assignment
      */
-    public function store(Request $request)
+    public function store(StoreFieldWorkRequest $request)
     {
-        $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'start_date' => 'required|date_format:Y-m-d',
-            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
-            'location' => 'required|string|max:255',
-            'description' => 'nullable|string|max:500',
-            'custom_start_time' => 'nullable|date_format:H:i',
-            'custom_end_time' => 'nullable|date_format:H:i',
-            'notes' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         // Check for overlapping field work assignments
         $overlapping = FieldWorkAssignment::forEmployee($validated['employee_id'])
@@ -74,9 +67,12 @@ class FieldWorkController extends Controller
         }
 
         $validated['assigned_by_user_id'] = auth()->id();
+        $validated['approved_by_user_id'] = auth()->id();
+        $validated['status'] = 'approved';
+        $validated['decided_at'] = now();
 
         $fieldWorkAssignment = FieldWorkAssignment::create($validated);
-        $fieldWorkAssignment->load(['employee', 'assignedByUser']);
+        $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
 
         return response()->json($fieldWorkAssignment, 201);
     }
@@ -96,20 +92,12 @@ class FieldWorkController extends Controller
      * PUT /api/field-work-assignments/{id}
      * Update a field work assignment
      */
-    public function update(Request $request, FieldWorkAssignment $fieldWorkAssignment)
+    public function update(UpdateFieldWorkRequest $request, FieldWorkAssignment $fieldWorkAssignment)
     {
-        $validated = $request->validate([
-            'start_date' => 'sometimes|date_format:Y-m-d',
-            'end_date' => 'sometimes|date_format:Y-m-d|after_or_equal:start_date',
-            'location' => 'sometimes|string|max:255',
-            'description' => 'nullable|string|max:500',
-            'custom_start_time' => 'nullable|date_format:H:i',
-            'custom_end_time' => 'nullable|date_format:H:i',
-            'notes' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         $fieldWorkAssignment->update($validated);
-        $fieldWorkAssignment->load(['employee', 'assignedByUser']);
+        $fieldWorkAssignment->load(['employee', 'assignedByUser', 'approvedByUser']);
 
         return response()->json($fieldWorkAssignment);
     }
@@ -125,10 +113,10 @@ class FieldWorkController extends Controller
         return response()->json(['message' => 'Field work assignment deleted successfully.']);
     }
 
-/**
-      * GET /api/employees/{id}/field-work-assignments
-      * Get all field work assignments for an employee
-      */
+    /**
+     * GET /api/employees/{id}/field-work-assignments
+     * Get all field work assignments for an employee
+     */
     public function getEmployeeFieldWorkAssignments(Request $request, Employee $employee)
     {
         $query = $employee->fieldWorkAssignments()
@@ -148,14 +136,15 @@ class FieldWorkController extends Controller
         return response()->json([
             'employee_id' => $employee->id,
             'employee_name' => $employee->name,
+            'data' => $fieldWorkAssignments,
             'field_work_assignments' => $fieldWorkAssignments,
         ]);
     }
 
     /**
-      * POST /admin/field-work-assignments/{id}/approve
-      * Approve a field work assignment
-      */
+     * POST /admin/field-work-assignments/{id}/approve
+     * Approve a field work assignment
+     */
     public function approve(Request $request, FieldWorkAssignment $fieldWorkAssignment)
     {
         $fieldWorkAssignment->update([
@@ -170,9 +159,9 @@ class FieldWorkController extends Controller
     }
 
     /**
-      * POST /admin/field-work-assignments/{id}/reject
-      * Reject a field work assignment
-      */
+     * POST /admin/field-work-assignments/{id}/reject
+     * Reject a field work assignment
+     */
     public function reject(Request $request, FieldWorkAssignment $fieldWorkAssignment)
     {
         $fieldWorkAssignment->update([

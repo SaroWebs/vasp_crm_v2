@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreRemoteWorkAssignmentRequest;
+use App\Http\Requests\UpdateRemoteWorkAssignmentRequest;
 use App\Models\Employee;
 use App\Models\RemoteWorkAssignment;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -41,22 +44,21 @@ class RemoteWorkAssignmentController extends Controller
      * POST /api/remote-work-assignments
      * Create a direct remote work assignment (admin assigned)
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreRemoteWorkAssignmentRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'start_date' => 'required|date_format:Y-m-d',
-            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
-            'notes' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
         // $assigner is a type of User
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
 
-        if(!$user) return response()->json(['message' => 'Unauthorized'], 403);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
-        if(!$user->isAdmin())  return response()->json(['message' => 'Only admins can create remote work assignments.'], 403);
-        
+        if (! $user->isAdmin()) {
+            return response()->json(['message' => 'Only admins can create remote work assignments.'], 403);
+        }
+
         $validated['assigned_by_user_id'] = $user->id;
 
         // Check for overlapping assignments
@@ -71,11 +73,49 @@ class RemoteWorkAssignmentController extends Controller
             ], 422);
         }
 
-
         $assignment = RemoteWorkAssignment::create($validated);
         $assignment->load(['employee', 'assignedByUser']);
 
         return response()->json($assignment, 201);
+    }
+
+    /**
+     * PUT /admin/remote-work-assignments/{id}
+     * Update a direct remote work assignment.
+     */
+    public function update(UpdateRemoteWorkAssignmentRequest $request, RemoteWorkAssignment $remoteWorkAssignment): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (! $user->isAdmin()) {
+            return response()->json(['message' => 'Only admins can update remote work assignments.'], 403);
+        }
+
+        $validated = $request->validated();
+        $startDate = $validated['start_date'] ?? $remoteWorkAssignment->start_date->toDateString();
+        $endDate = $validated['end_date'] ?? $remoteWorkAssignment->end_date->toDateString();
+
+        $overlapping = RemoteWorkAssignment::forEmployee($remoteWorkAssignment->employee_id)
+            ->whereKeyNot($remoteWorkAssignment->id)
+            ->forDateRange($startDate, $endDate)
+            ->exists();
+
+        if ($overlapping) {
+            return response()->json([
+                'message' => 'Employee already has a remote work assignment in this date range.',
+                'error' => 'overlap',
+            ], 422);
+        }
+
+        $remoteWorkAssignment->update($validated);
+        $remoteWorkAssignment->load(['employee', 'assignedByUser']);
+
+        return response()->json($remoteWorkAssignment);
     }
 
     /**

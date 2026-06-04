@@ -29,7 +29,7 @@ class EmployeeCategoryController extends Controller
         if (! $category) {
             return response()->json(['error' => 'Category not found'], 404);
         }
-            
+
         $visitors = Visitor::query()->get();
         $employees = Employee::query()
             ->whereHas('user', function ($query) {

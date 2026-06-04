@@ -31,6 +31,21 @@ class LeaveBalance extends Model
         ];
     }
 
+    protected function appends(): array
+    {
+        return ['remaining_hours', 'carried_over_hours'];
+    }
+
+    public function getRemainingHoursAttribute(): float
+    {
+        return max(0, floatval($this->allocated_hours) - floatval($this->used_hours));
+    }
+
+    public function getCarriedOverHoursAttribute(): float
+    {
+        return floatval($this->opening_balance) ?? 0;
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);

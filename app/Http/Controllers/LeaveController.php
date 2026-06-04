@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreLeaveRequest;
+use App\Http\Requests\UpdateLeaveRequest;
 use App\Models\Employee;
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class LeaveController extends Controller
 {
@@ -45,15 +48,9 @@ class LeaveController extends Controller
      * POST /api/leave-requests
      * Create a new leave request
      */
-    public function store(Request $request)
+    public function store(StoreLeaveRequest $request)
     {
-        $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'leave_type_id' => 'required|exists:leave_types,id',
-            'start_date' => 'required|date_format:Y-m-d',
-            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
-            'reason' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         // Check for overlapping leave requests
         $overlapping = LeaveRequest::forEmployee($validated['employee_id'])
@@ -69,8 +66,28 @@ class LeaveController extends Controller
 
         $validated['requested_by_user_id'] = auth()->id();
 
-        $leaveRequest = LeaveRequest::create($validated);
-        $leaveRequest->load(['employee', 'leaveType', 'requestedByUser']);
+        $user = $request->user();
+        $isAdminCreated = $user?->isAdmin() ?? false;
+
+        $leaveRequest = DB::transaction(function () use ($validated, $isAdminCreated) {
+            $leaveRequest = LeaveRequest::create(array_merge($validated, [
+                'status' => $isAdminCreated ? 'approved' : 'pending',
+            ]));
+
+            if ($isAdminCreated) {
+                LeaveApproval::create([
+                    'leave_request_id' => $leaveRequest->id,
+                    'approved_by_user_id' => auth()->id(),
+                    'decision' => 'approved',
+                    'notes' => 'Assigned by admin.',
+                    'decided_at' => now(),
+                ]);
+            }
+
+            return $leaveRequest;
+        });
+
+        $leaveRequest->load(['employee', 'leaveType', 'requestedByUser', 'approvals.approvedByUser']);
 
         return response()->json($leaveRequest, 201);
     }
@@ -90,7 +107,7 @@ class LeaveController extends Controller
      * PUT /api/leave-requests/{id}
      * Update a leave request (only if pending)
      */
-    public function update(Request $request, LeaveRequest $leaveRequest)
+    public function update(UpdateLeaveRequest $request, LeaveRequest $leaveRequest)
     {
         if ($leaveRequest->status !== 'pending') {
             return response()->json([
@@ -98,11 +115,7 @@ class LeaveController extends Controller
             ], 422);
         }
 
-        $validated = $request->validate([
-            'start_date' => 'sometimes|date_format:Y-m-d',
-            'end_date' => 'sometimes|date_format:Y-m-d|after_or_equal:start_date',
-            'reason' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         $leaveRequest->update($validated);
         $leaveRequest->load(['employee', 'leaveType', 'requestedByUser']);
@@ -217,6 +230,7 @@ class LeaveController extends Controller
             'employee_id' => $employee->id,
             'employee_name' => $employee->name,
             'year' => $year,
+            'data' => $balances,
             'leave_balances' => $balances,
         ]);
     }
@@ -244,6 +258,7 @@ class LeaveController extends Controller
         return response()->json([
             'employee_id' => $employee->id,
             'employee_name' => $employee->name,
+            'data' => $leaveRequests,
             'leave_requests' => $leaveRequests,
         ]);
     }

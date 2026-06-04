@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Employee;
 use App\Models\RemoteWorkRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class RemoteWorkController extends Controller
 {
@@ -65,7 +66,7 @@ class RemoteWorkController extends Controller
             ], 422);
         }
 
-        $validated['requested_by_user_id'] = auth()->id();
+        $validated['requested_by_user_id'] = Auth::id();
 
         $remoteWorkRequest = RemoteWorkRequest::create($validated);
         $remoteWorkRequest->load(['employee', 'requestedByUser']);

@@ -2,38 +2,39 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use Inertia\Inertia;
+use App\Models\ActivityLog;
 use App\Models\Department;
-use App\Models\Notification;
-use Illuminate\Http\Request;
 use App\Models\DepartmentUser;
-use Illuminate\Support\Facades\DB;
+use App\Models\Notification;
+use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class DepartmentController extends Controller
 {
-  
     /**
      * Check if user has permission or is super admin
      */
     private function checkPermission($permission)
     {
         $user = User::find(Auth::user()->id);
+
         return $user->hasPermission($permission);
     }
 
-
-    public function getData(Request $request) {
+    public function getData(Request $request)
+    {
         // url params for pagination and filtering
         $per_page = $request->query('per_page', 10);
-        
+
         $query = Department::query();
         // filter query
         if ($request->has('search')) {
             $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                    ->orWhere('description', 'like', '%' . $request->search . '%');
+                $q->where('name', 'like', '%'.$request->search.'%')
+                    ->orWhere('description', 'like', '%'.$request->search.'%');
             });
         }
 
@@ -51,7 +52,7 @@ class DepartmentController extends Controller
     public function index(Request $request)
     {
         $user = User::find(Auth::user()->id);
-        if (!$this->checkPermission('department.read')) {
+        if (! $this->checkPermission('department.read')) {
             abort(403, 'Insufficient permissions to view departments.');
         }
 
@@ -67,7 +68,7 @@ class DepartmentController extends Controller
     public function create()
     {
 
-        if (!$this->checkPermission('department.create')) {
+        if (! $this->checkPermission('department.create')) {
             abort(403, 'Insufficient permissions to create departments.');
         }
 
@@ -80,7 +81,7 @@ class DepartmentController extends Controller
     public function store(Request $request)
     {
 
-        if (!$this->checkPermission('department.create')) {
+        if (! $this->checkPermission('department.create')) {
             abort(403, 'Insufficient permissions to create departments.');
         }
 
@@ -102,7 +103,7 @@ class DepartmentController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Department created successfully.',
-                'department' => $department
+                'department' => $department,
             ]);
         }
 
@@ -116,7 +117,7 @@ class DepartmentController extends Controller
     public function show(Department $department)
     {
 
-        if (!$this->checkPermission('department.read')) {
+        if (! $this->checkPermission('department.read')) {
             abort(403, 'Insufficient permissions to view department.');
         }
 
@@ -126,7 +127,7 @@ class DepartmentController extends Controller
         }]);
 
         return Inertia::render('departments/Show', [
-            'department' => $department
+            'department' => $department,
         ]);
     }
 
@@ -136,14 +137,14 @@ class DepartmentController extends Controller
     public function edit(Department $department)
     {
 
-        if (!$this->checkPermission('department.update')) {
+        if (! $this->checkPermission('department.update')) {
             abort(403, 'Insufficient permissions to edit department.');
         }
 
         $department->load(['users.roles']);
 
         return Inertia::render('departments/Edit', [
-            'department' => $department
+            'department' => $department,
         ]);
     }
 
@@ -153,12 +154,12 @@ class DepartmentController extends Controller
     public function update(Request $request, Department $department)
     {
 
-        if (!$this->checkPermission('department.update')) {
+        if (! $this->checkPermission('department.update')) {
             abort(403, 'Insufficient permissions to update department.');
         }
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:departments,name,' . $department->id,
+            'name' => 'required|string|max:255|unique:departments,name,'.$department->id,
             'description' => 'nullable|string|max:1000',
             'status' => 'required|in:active,inactive',
             'color' => 'nullable|string|regex:/^#[0-9A-F]{6}$/i',
@@ -172,14 +173,14 @@ class DepartmentController extends Controller
         ]);
 
         // Log activity using ActivityLog model
-        \App\Models\ActivityLog::log(
+        ActivityLog::log(
             'Department updated',
             $department,
-            \Illuminate\Support\Facades\Auth::user(),
+            Auth::user(),
             [
                 'action' => 'update',
                 'old_data' => $department->getOriginal(),
-                'new_data' => $department->getAttributes()
+                'new_data' => $department->getAttributes(),
             ],
             'department'
         );
@@ -189,7 +190,7 @@ class DepartmentController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Department updated successfully.',
-                'department' => $department->fresh()
+                'department' => $department->fresh(),
             ]);
         }
 
@@ -203,7 +204,7 @@ class DepartmentController extends Controller
     public function destroy(Department $department)
     {
 
-        if (!$this->checkPermission('department.delete')) {
+        if (! $this->checkPermission('department.delete')) {
             abort(403, 'Insufficient permissions to delete department.');
         }
 
@@ -213,6 +214,7 @@ class DepartmentController extends Controller
             if (request()->expectsJson() || request()->ajax()) {
                 return response()->json(['message' => $message], 422);
             }
+
             return back()->with('error', $message);
         }
 
@@ -222,19 +224,20 @@ class DepartmentController extends Controller
             if (request()->expectsJson() || request()->ajax()) {
                 return response()->json(['message' => $message], 422);
             }
+
             return back()->with('error', $message);
         }
 
         $department->delete();
 
         // Log activity using ActivityLog model
-        \App\Models\ActivityLog::log(
+        ActivityLog::log(
             'Department deleted',
             $department,
-            \Illuminate\Support\Facades\Auth::user(),
+            Auth::user(),
             [
                 'action' => 'delete',
-                'deleted_data' => $department->getAttributes()
+                'deleted_data' => $department->getAttributes(),
             ],
             'department'
         );
@@ -243,7 +246,7 @@ class DepartmentController extends Controller
         if (request()->expectsJson() || request()->ajax()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Department deleted successfully.'
+                'message' => 'Department deleted successfully.',
             ]);
         }
 
@@ -258,14 +261,14 @@ class DepartmentController extends Controller
     {
         $user = Auth::user();
 
-        if (!$this->checkPermission('department.update')) {
+        if (! $this->checkPermission('department.update')) {
             abort(403, 'Insufficient permissions to assign users to departments.');
         }
 
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
             'role_ids' => 'required|array',
-            'role_ids.*' => 'exists:roles,id'
+            'role_ids.*' => 'exists:roles,id',
         ]);
 
         // Check if user is already assigned to this department
@@ -285,19 +288,19 @@ class DepartmentController extends Controller
                 'user_id' => $validated['user_id'],
                 'department_id' => $department->id,
                 'assigned_by' => $user->id,
-                'assigned_at' => now()
+                'assigned_at' => now(),
             ]);
 
             // Assign roles to user
             $userToAssign = User::find($validated['user_id']);
             foreach ($validated['role_ids'] as $roleId) {
-                if (!$userToAssign->roles()->where('role_id', $roleId)->exists()) {
+                if (! $userToAssign->roles()->where('role_id', $roleId)->exists()) {
                     $userToAssign->roles()->attach($roleId);
                 }
             }
 
             // Log activity using ActivityLog model
-            \App\Models\ActivityLog::log(
+            ActivityLog::log(
                 'User assigned to department',
                 $department,
                 $user,
@@ -305,7 +308,7 @@ class DepartmentController extends Controller
                     'action' => 'assign_user',
                     'user_id' => $validated['user_id'],
                     'user_name' => $userToAssign->name,
-                    'role_ids' => $validated['role_ids']
+                    'role_ids' => $validated['role_ids'],
                 ],
                 'department'
             );
@@ -320,7 +323,7 @@ class DepartmentController extends Controller
                     'department_id' => $department->id,
                     'department_name' => $department->name,
                     'assigned_by' => $user->id,
-                    'assigned_by_name' => $user->name
+                    'assigned_by_name' => $user->name,
                 ]
             );
 
@@ -329,7 +332,8 @@ class DepartmentController extends Controller
             return back()->with('success', 'User assigned to department successfully.');
         } catch (\Exception $e) {
             DB::rollback();
-            return back()->with('error', 'Failed to assign user to department: ' . $e->getMessage());
+
+            return back()->with('error', 'Failed to assign user to department: '.$e->getMessage());
         }
     }
 
@@ -339,7 +343,7 @@ class DepartmentController extends Controller
     public function removeUser(Department $department, User $user)
     {
 
-        if (!$this->checkPermission('department.update')) {
+        if (! $this->checkPermission('department.update')) {
             abort(403, 'Insufficient permissions to remove users from departments.');
         }
 
@@ -351,21 +355,21 @@ class DepartmentController extends Controller
                 ->where('department_id', $department->id)
                 ->first();
 
-            if (!$assignment) {
+            if (! $assignment) {
                 throw new \Exception('User is not assigned to this department.');
             }
 
             $assignment->delete();
 
             // Log activity using ActivityLog model
-            \App\Models\ActivityLog::log(
+            ActivityLog::log(
                 'User removed from department',
                 $department,
-                \Illuminate\Support\Facades\Auth::user(),
+                Auth::user(),
                 [
                     'action' => 'remove_user',
                     'user_id' => $user->id,
-                    'user_name' => $user->name
+                    'user_name' => $user->name,
                 ],
                 'department'
             );
@@ -376,7 +380,7 @@ class DepartmentController extends Controller
             if (request()->expectsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'User removed from department successfully.'
+                    'message' => 'User removed from department successfully.',
                 ]);
             }
 
@@ -388,11 +392,11 @@ class DepartmentController extends Controller
             if (request()->expectsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to remove user from department: ' . $e->getMessage()
+                    'message' => 'Failed to remove user from department: '.$e->getMessage(),
                 ], 422);
             }
 
-            return back()->with('error', 'Failed to remove user from department: ' . $e->getMessage());
+            return back()->with('error', 'Failed to remove user from department: '.$e->getMessage());
         }
     }
 
@@ -402,7 +406,7 @@ class DepartmentController extends Controller
     public function getStatistics(Department $department)
     {
 
-        if (!$this->checkPermission('department.read')) {
+        if (! $this->checkPermission('department.read')) {
             abort(403, 'Insufficient permissions to view department statistics.');
         }
 
@@ -420,7 +424,7 @@ class DepartmentController extends Controller
                 'in_progress' => $department->assignedTasks()->where('status', 'in-progress')->count(),
                 'waiting' => $department->assignedTasks()->where('status', 'waiting')->count(),
                 'completed' => $department->assignedTasks()->where('status', 'completed')->count(),
-            ]
+            ],
         ];
 
         return response()->json($stats);
@@ -469,7 +473,7 @@ class DepartmentController extends Controller
     {
         $user = Auth::user();
 
-        if (!$this->checkPermission('department.update')) {
+        if (! $this->checkPermission('department.update')) {
             abort(403, 'Insufficient permissions to bulk assign users.');
         }
 
@@ -484,12 +488,12 @@ class DepartmentController extends Controller
             $assignedUsers = [];
             foreach ($validated['user_ids'] as $userId) {
                 // Check if user is already assigned
-                if (!DepartmentUser::where('user_id', $userId)->where('department_id', $department->id)->exists()) {
+                if (! DepartmentUser::where('user_id', $userId)->where('department_id', $department->id)->exists()) {
                     DepartmentUser::create([
                         'user_id' => $userId,
                         'department_id' => $department->id,
                         'assigned_by' => $user->id,
-                        'assigned_at' => now()
+                        'assigned_at' => now(),
                     ]);
 
                     $assignedUsers[] = $userId;
@@ -502,12 +506,12 @@ class DepartmentController extends Controller
             if (request()->expectsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => true,
-                    'message' => count($assignedUsers) . ' users assigned to department successfully.',
-                    'assigned_users' => $assignedUsers
+                    'message' => count($assignedUsers).' users assigned to department successfully.',
+                    'assigned_users' => $assignedUsers,
                 ]);
             }
 
-            return back()->with('success', count($assignedUsers) . ' users assigned to department successfully.');
+            return back()->with('success', count($assignedUsers).' users assigned to department successfully.');
         } catch (\Exception $e) {
             DB::rollback();
 
@@ -515,12 +519,11 @@ class DepartmentController extends Controller
             if (request()->expectsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to assign users: ' . $e->getMessage()
+                    'message' => 'Failed to assign users: '.$e->getMessage(),
                 ], 422);
             }
 
-            return back()->with('error', 'Failed to assign users: ' . $e->getMessage());
+            return back()->with('error', 'Failed to assign users: '.$e->getMessage());
         }
     }
-
 }

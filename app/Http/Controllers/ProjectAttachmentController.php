@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
-use App\Models\User;
 use App\Models\ProjectAttachment;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class ProjectAttachmentController extends Controller
 {
@@ -23,7 +23,7 @@ class ProjectAttachmentController extends Controller
      */
     public function index(Project $project)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project attachments.');
         }
 
@@ -40,7 +40,7 @@ class ProjectAttachmentController extends Controller
      */
     public function store(Request $request, Project $project)
     {
-        if (!$this->checkPermission('project.manage_attachments')) {
+        if (! $this->checkPermission('project.manage_attachments')) {
             abort(403, 'Insufficient permissions to manage project attachments.');
         }
 
@@ -50,7 +50,7 @@ class ProjectAttachmentController extends Controller
         ]);
 
         $file = $request->file('file');
-        $filename = uniqid() . '_' . $file->getClientOriginalName();
+        $filename = uniqid().'_'.$file->getClientOriginalName();
         $path = $file->storeAs("projects/{$project->id}/attachments", $filename, 'public');
 
         $attachment = $project->attachments()->create([
@@ -74,7 +74,7 @@ class ProjectAttachmentController extends Controller
      */
     public function show(Project $project, ProjectAttachment $attachment)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project attachments.');
         }
 
@@ -90,7 +90,7 @@ class ProjectAttachmentController extends Controller
      */
     public function download(Project $project, ProjectAttachment $attachment)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project attachments.');
         }
 
@@ -98,7 +98,7 @@ class ProjectAttachmentController extends Controller
             return response()->json(['message' => 'Attachment not found in this project.'], 404);
         }
 
-        if (!Storage::disk('public')->exists($attachment->path)) {
+        if (! Storage::disk('public')->exists($attachment->path)) {
             return response()->json(['message' => 'File not found.'], 404);
         }
 
@@ -110,7 +110,7 @@ class ProjectAttachmentController extends Controller
      */
     public function update(Request $request, Project $project, ProjectAttachment $attachment)
     {
-        if (!$this->checkPermission('project.manage_attachments')) {
+        if (! $this->checkPermission('project.manage_attachments')) {
             abort(403, 'Insufficient permissions to manage project attachments.');
         }
 
@@ -137,7 +137,7 @@ class ProjectAttachmentController extends Controller
      */
     public function destroy(Project $project, ProjectAttachment $attachment)
     {
-        if (!$this->checkPermission('project.manage_attachments')) {
+        if (! $this->checkPermission('project.manage_attachments')) {
             abort(403, 'Insufficient permissions to manage project attachments.');
         }
 
@@ -162,7 +162,7 @@ class ProjectAttachmentController extends Controller
      */
     public function preview(Project $project, ProjectAttachment $attachment)
     {
-        if (!$this->checkPermission('project.read')) {
+        if (! $this->checkPermission('project.read')) {
             abort(403, 'Insufficient permissions to view project attachments.');
         }
 
@@ -170,7 +170,7 @@ class ProjectAttachmentController extends Controller
             return response()->json(['message' => 'Attachment not found in this project.'], 404);
         }
 
-        if (!$attachment->isImage()) {
+        if (! $attachment->isImage()) {
             return response()->json(['message' => 'Preview only available for images.'], 400);
         }
 

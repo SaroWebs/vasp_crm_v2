@@ -66,12 +66,14 @@ class RemoteWorkRequest extends Model
 
     public function scopeForDateRange(Builder $query, $startDate, $endDate): Builder
     {
-        return $query->whereBetween('start_date', [$startDate, $endDate])
-            ->orWhereBetween('end_date', [$startDate, $endDate])
-            ->orWhere(function (Builder $q) use ($startDate, $endDate) {
-                $q->where('start_date', '<=', $startDate)
-                    ->where('end_date', '>=', $endDate);
-            });
+        return $query->where(function (Builder $query) use ($startDate, $endDate) {
+            $query->whereBetween('start_date', [$startDate, $endDate])
+                ->orWhereBetween('end_date', [$startDate, $endDate])
+                ->orWhere(function (Builder $q) use ($startDate, $endDate) {
+                    $q->where('start_date', '<=', $startDate)
+                        ->where('end_date', '>=', $endDate);
+                });
+        });
     }
 
     public function getDaysCount(): int

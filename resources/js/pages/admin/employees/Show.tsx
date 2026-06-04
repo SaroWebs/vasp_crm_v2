@@ -7,7 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Edit, User, Mail, Phone, Building } from 'lucide-react';
 import EmployeeTaskProgress from '@/components/admin/employees/EmployeeTaskProgress';
 import EmployeeShiftSummary from '@/components/admin/employees/EmployeeShiftSummary';
+import { LeavePanel } from '@/components/admin/employees/LeavePanel';
+import { AttendanceCalendar } from '@/components/attendance';
 import { Tabs } from '@mantine/core';
+import ShiftChangePanel from '@/components/admin/employees/ShiftChangePanel';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -240,21 +243,18 @@ export default function EmployeesShow(props: EmployeesShowProps) {
 
                         <Tabs.Panel value="attendance" className="pt-4">
                             <div className="min-h-[300px] w-full">
-                                <span>Coming soon...</span>
+                                <AttendanceCalendar auth={(auth ?? { user: { id: employee.user.id, name: employee.name } }) as any} employeeId={employee.id} />
                             </div>
                         </Tabs.Panel>
 
                         <Tabs.Panel value="leaves" className="pt-4">
                             <div className="min-h-[300px] w-full">
-                                <span>Coming soon...</span>
+                                <LeavePanel employeeId={employee.id} />
                             </div>
                         </Tabs.Panel>
 
                         <Tabs.Panel value="shifts" className="pt-4">
-                            <EmployeeShiftSummary
-                                currentShiftAssignment={props.currentShiftAssignment}
-                                shiftAssignmentHistory={props.shiftAssignmentHistory}
-                            />
+                            <ShiftChangePanel employees={[]} selectedId={employee.id} />
                         </Tabs.Panel>
                         <Tabs.Panel value="progress" className="pt-4">
                             {/* Employee Progress */}

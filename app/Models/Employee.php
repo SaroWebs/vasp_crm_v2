@@ -94,14 +94,22 @@ class Employee extends Model
         return $this->hasMany(CompensatoryOff::class);
     }
 
-    public function category()
+    public function category(): BelongsTo
     {
-        $cat_id = $this->category_id;
-        $cat = EmployeeCategory::find($cat_id);
-        if (! $cat) {
-            return null;
-        }
+        return $this->belongsTo(EmployeeCategory::class);
+    }
 
-        return $cat;
+    public function currentShiftAssignment()
+    {
+        return $this->hasOne(EmployeeShiftAssignment::class)
+            ->where('is_active', true)
+            ->latest('effective_from');
+    }
+
+    public function recentShiftAssignments()
+    {
+        return $this->hasMany(EmployeeShiftAssignment::class)
+            ->orderByDesc('effective_from')
+            ->limit(5);
     }
 }

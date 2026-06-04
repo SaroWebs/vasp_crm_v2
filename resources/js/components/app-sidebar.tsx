@@ -130,6 +130,22 @@ const adminNavGroups: NavGroup[] = [
                 roles: ['super-admin', 'admin', 'manager', 'team-lead'],
                 menuKey: 'organization.attendance',
             },
+            // leave management
+            {
+                title: 'Leave Management',
+                href: '/admin/leave-types',
+                icon: CalendarDays,
+                roles: ['super-admin', 'admin', 'manager', 'team-lead'],
+                menuKey: 'organization.leave-types',
+            },
+            // holiday management
+            {
+                title: 'Holidays',
+                href: '/admin/holidays',
+                icon: CalendarDays,
+                roles: ['super-admin', 'admin', 'manager', 'team-lead'],
+                menuKey: 'organization.holidays',
+            },
         ],
     },
     {
