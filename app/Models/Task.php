@@ -303,7 +303,7 @@ class Task extends Model
     public function assignedUsers()
     {
         return $this->belongsToMany(User::class, 'task_assignments', 'task_id', 'user_id')
-            ->withPivot('assigned_at', 'assigned_by', 'assignment_notes', 'is_active', 'accepted_at', 'completed_at', 'metadata')
+            ->withPivot('assigned_at', 'assigned_by', 'parent_assignment_id', 'assignment_notes', 'is_active', 'accepted_at', 'completed_at', 'unassigned_by', 'unassigned_at', 'metadata')
             ->wherePivot('is_active', true)
             ->withTimestamps();
     }
@@ -325,22 +325,43 @@ class Task extends Model
      * @param  string|null  $notes
      * @param  array|null  $metadata
      * @param  float|null  $estimatedTime
+     * @param  int|null  $parentAssignmentId
      * @return TaskAssignment
      */
-    public function assignUser($userId, $assignedBy = null, $notes = null, $metadata = null, $estimatedTime = null)
+    public function assignUser($userId, $assignedBy = null, $notes = null, $metadata = null, $estimatedTime = null, $parentAssignmentId = null)
     {
         $assignedById = $assignedBy ?? (app('auth')->check() ? app('auth')->user()->id : null);
 
-        return $this->taskAssignments()->create([
+        $assignmentData = [
             'user_id' => $userId,
             'assigned_by' => $assignedById,
+            'parent_assignment_id' => $parentAssignmentId,
             'assignment_notes' => $notes,
             'metadata' => $metadata ?? [],
             'estimated_time' => $estimatedTime,
             'assigned_at' => now(),
             'is_active' => true,
             'state' => 'pending',
-        ]);
+            'unassigned_by' => null,
+            'unassigned_at' => null,
+        ];
+
+        $existingAssignment = $this->taskAssignments()
+            ->withTrashed()
+            ->where('user_id', $userId)
+            ->first();
+
+        if ($existingAssignment) {
+            if ($existingAssignment->trashed()) {
+                $existingAssignment->restore();
+            }
+
+            $existingAssignment->update($assignmentData);
+
+            return $existingAssignment->fresh();
+        }
+
+        return $this->taskAssignments()->create($assignmentData);
     }
 
     /**

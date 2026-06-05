@@ -491,6 +491,7 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                     <Tabs
                         value={activeTab}
                         onChange={setActiveTab}
+                        keepMounted={false}
                     >
                         <Tabs.List className="grid grid-cols-3 gap-2 mb-6">
                             <Tabs.Tab value="details">Details</Tabs.Tab>
@@ -567,7 +568,9 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                         {/* Attendance, leaves, and shifts */}
                         <Tabs.Panel value="attendance" className="space-y-4">
                             <div className="">
-                                <AttendanceCalendar auth={auth} employeeId={employee.id} />
+                                {activeTab === 'attendance' && (
+                                    <AttendanceCalendar auth={auth} employeeId={employee.id} />
+                                )}
                             </div>
                         </Tabs.Panel>
                         <Tabs.Panel value="leaves" className="space-y-4">
@@ -576,14 +579,20 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                                     <Calendar className="h-4 w-4" />
                                     Leaves
                                 </div>
-                                <LeavePanel employeeId={employee.id} />
+                                {activeTab === 'leaves' && (
+                                    <LeavePanel employeeId={employee.id} />
+                                )}
                             </div>
                         </Tabs.Panel>
                         <Tabs.Panel value="shifts" className="space-y-4">
-                            <ShiftChangePanel employees={[]} selectedId={employee.id} />
+                            {activeTab === 'shifts' && (
+                                <ShiftChangePanel employees={[]} selectedId={employee.id} />
+                            )}
                         </Tabs.Panel>
                         <Tabs.Panel value="works" className="space-y-4">
-                            <EmployeeTaskProgress employeeId={employee.id} />
+                            {activeTab === 'works' && (
+                                <EmployeeTaskProgress employeeId={employee.id} />
+                            )}
                         </Tabs.Panel>
                     </Tabs>
                 )}

@@ -219,6 +219,7 @@ export interface Ticket {
     approvedBy?: User;
     attachments?: Attachment[];
     tasks?: Task[];
+    latest_status_history?: TicketHistory;
     work_status?: {
         status: 'no-tasks' | 'pending' | 'in-progress' |'closed' | 'partial' | 'blocked' | 'completed';
         label: string;
@@ -463,6 +464,17 @@ export interface TicketCommentAttachments {
     file_size?: number;
     uploaded_by_type: 'user' | 'organization_user';
     uploaded_by?: number | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TicketHistory {
+    id: number;
+    ticket_id: number;
+    old_status?: string | null;
+    new_status?: string | null;
+    action_type?: string | null;
+    changed_by?: number | null;
     created_at: string;
     updated_at: string;
 }

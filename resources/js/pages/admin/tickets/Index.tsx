@@ -223,6 +223,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
 
     // tickets.data is already server-filtered; use directly
     const filteredTickets = tickets.data;
+    console.log('Filtered Tickets:', filteredTickets);
 
     const getPriorityBadge = (priority: string) => {
         const variants: Record<
@@ -450,6 +451,14 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         );
     };
 
+    const getClosedOnLabel = (ticket: Ticket) => {
+        if (ticket.status !== 'closed' || !ticket.latest_status_history?.created_at) {
+            return null;
+        }
+
+        return new Date(ticket.latest_status_history.created_at).toLocaleDateString();
+    };
+
     const wizCards = [
         { title: "Total Open", text: "All active tickets", stats: stats.total_open, icon: TicketIcon, color: "orange", link: '/admin/tickets?status=open' },
         { title: "Open Today", text: "Today's opened tickets", stats: stats.open_today, icon: Clock, color: "blue", link: '/admin/tickets?status=open' },
@@ -675,7 +684,14 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {getTicketStatusBadge(ticket.status)}
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        {getTicketStatusBadge(ticket.status)}
+                                                        {getClosedOnLabel(ticket) && (
+                                                            <span className="text-xs text-muted-foreground">
+                                                                Closed on {getClosedOnLabel(ticket)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex flex-col gap-1">

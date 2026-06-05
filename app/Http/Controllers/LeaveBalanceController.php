@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class LeaveBalanceController extends Controller
 {
@@ -13,7 +16,7 @@ class LeaveBalanceController extends Controller
      * GET /api/leave-balances?employee_id=1&year=2026&leave_type_id=1&department_id=1
      * Get leave balances for employee(s)
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $query = LeaveBalance::with(['employee', 'employee.department', 'leaveType']);
 
@@ -40,6 +43,7 @@ class LeaveBalanceController extends Controller
         return response()->json([
             'total' => $balances->count(),
             'data' => $balances,
+            'employees' => $this->groupBalancesByEmployee($balances),
         ]);
     }
 
@@ -55,7 +59,7 @@ class LeaveBalanceController extends Controller
      *   "year": 2026
      * }
      */
-    public function bulkAssign(Request $request)
+    public function bulkAssign(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'leave_type_id' => 'required|exists:leave_types,id',
@@ -132,7 +136,7 @@ class LeaveBalanceController extends Controller
      * GET /api/leave-balances/{leaveBalance}
      * Get a specific leave balance
      */
-    public function show(LeaveBalance $leaveBalance)
+    public function show(LeaveBalance $leaveBalance): JsonResponse
     {
         return response()->json($leaveBalance->load(['employee', 'leaveType']));
     }
@@ -141,7 +145,7 @@ class LeaveBalanceController extends Controller
      * POST /api/leave-balances
      * Create a single leave balance
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
@@ -184,7 +188,7 @@ class LeaveBalanceController extends Controller
      * PUT /api/leave-balances/{leaveBalance}
      * Update a leave balance
      */
-    public function update(Request $request, LeaveBalance $leaveBalance)
+    public function update(Request $request, LeaveBalance $leaveBalance): JsonResponse
     {
         $validated = $request->validate([
             'number_of_leaves' => 'sometimes|integer|min:0',
@@ -209,10 +213,68 @@ class LeaveBalanceController extends Controller
     }
 
     /**
+     * @param  Collection<int, LeaveBalance>  $balances
+     * @return array<int, array{
+     *     employee: array{id: int, name: string, code: string|null, department: array{id: int, name: string}|null},
+     *     leaves: array<string, array{
+     *         id: int,
+     *         leave_type_id: int,
+     *         leave_type_name: string,
+     *         assigned: int,
+     *         used: int,
+     *         remaining: int,
+     *         carry_over: int,
+     *         year: int
+     *     }>
+     * }>
+     */
+    private function groupBalancesByEmployee(Collection $balances): array
+    {
+        return $balances
+            ->groupBy('employee_id')
+            ->map(function (Collection $employeeBalances): array {
+                /** @var LeaveBalance $firstBalance */
+                $firstBalance = $employeeBalances->first();
+                $employee = $firstBalance->employee;
+
+                return [
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => $employee->name,
+                        'code' => $employee->code,
+                        'department' => $employee->department ? [
+                            'id' => $employee->department->id,
+                            'name' => $employee->department->name,
+                        ] : null,
+                    ],
+                    'leaves' => $employeeBalances
+                        ->mapWithKeys(function (LeaveBalance $balance): array {
+                            $leaveTypeName = $balance->leaveType?->name ?? 'Unknown Leave';
+
+                            return [
+                                Str::slug($leaveTypeName, '_') => [
+                                    'id' => $balance->id,
+                                    'leave_type_id' => $balance->leave_type_id,
+                                    'leave_type_name' => $leaveTypeName,
+                                    'assigned' => $balance->assigned_leaves,
+                                    'used' => $balance->consumed_leaves,
+                                    'remaining' => $balance->remaining_leaves,
+                                    'carry_over' => $balance->carried_over_leaves,
+                                    'year' => $balance->year,
+                                ],
+                            ];
+                        })
+                        ->all(),
+                ];
+            })
+            ->all();
+    }
+
+    /**
      * DELETE /api/leave-balances/{leaveBalance}
      * Delete a leave balance
      */
-    public function destroy(LeaveBalance $leaveBalance)
+    public function destroy(LeaveBalance $leaveBalance): JsonResponse
     {
         $leaveBalance->delete();
 

@@ -11,6 +11,7 @@ import { LeavePanel } from '@/components/admin/employees/LeavePanel';
 import { AttendanceCalendar } from '@/components/attendance';
 import { Tabs } from '@mantine/core';
 import ShiftChangePanel from '@/components/admin/employees/ShiftChangePanel';
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -83,6 +84,7 @@ interface EmployeesShowProps {
 export default function EmployeesShow(props: EmployeesShowProps) {
     const { employee, userPermissions = [], auth } = props;
     const isAdmin = auth?.user?.roles.some(role => role.slug === 'super-admin');
+    const [activeTab, setActiveTab] = useState<string | null>('details');
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -119,7 +121,7 @@ export default function EmployeesShow(props: EmployeesShowProps) {
                 {/* Mantine tabs */}
                 {/* details, attendance, leaves, shift */}
                 <div className="p-4 rounded-lg border shadow-md">
-                    <Tabs defaultValue="details" className="flex-1">
+                    <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false} className="flex-1">
                         <Tabs.List className="bg-transparent border-b-2 mb-4">
                             <Tabs.Tab value="details">Details</Tabs.Tab>
                             <Tabs.Tab value="attendance">Attendance</Tabs.Tab>
@@ -243,22 +245,30 @@ export default function EmployeesShow(props: EmployeesShowProps) {
 
                         <Tabs.Panel value="attendance" className="pt-4">
                             <div className="min-h-[300px] w-full">
-                                <AttendanceCalendar auth={(auth ?? { user: { id: employee.user.id, name: employee.name } }) as any} employeeId={employee.id} />
+                                {activeTab === 'attendance' && (
+                                    <AttendanceCalendar auth={(auth ?? { user: { id: employee.user.id, name: employee.name } }) as any} employeeId={employee.id} />
+                                )}
                             </div>
                         </Tabs.Panel>
 
                         <Tabs.Panel value="leaves" className="pt-4">
                             <div className="min-h-[300px] w-full">
-                                <LeavePanel employeeId={employee.id} />
+                                {activeTab === 'leaves' && (
+                                    <LeavePanel employeeId={employee.id} />
+                                )}
                             </div>
                         </Tabs.Panel>
 
                         <Tabs.Panel value="shifts" className="pt-4">
-                            <ShiftChangePanel employees={[]} selectedId={employee.id} />
+                            {activeTab === 'shifts' && (
+                                <ShiftChangePanel employees={[]} selectedId={employee.id} />
+                            )}
                         </Tabs.Panel>
                         <Tabs.Panel value="progress" className="pt-4">
                             {/* Employee Progress */}
-                            <EmployeeTaskProgress employeeId={employee.id} />
+                            {activeTab === 'progress' && (
+                                <EmployeeTaskProgress employeeId={employee.id} />
+                            )}
                         </Tabs.Panel>
                     </Tabs>
                 </div>

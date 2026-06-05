@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Ticket extends Model
@@ -68,5 +69,17 @@ class Ticket extends Model
     public function comments()
     {
         return $this->hasMany(TicketComment::class);
+    }
+
+    public function histories()
+    {
+        return $this->hasMany(TicketHistory::class);
+    }
+
+    public function latestStatusHistory(): HasOne
+    {
+        return $this->hasOne(TicketHistory::class)
+            ->where('action_type', 'status')
+            ->latestOfMany();
     }
 }

@@ -112,6 +112,51 @@ class LeaveBalanceBulkAssignTest extends TestCase
         ]);
     }
 
+    public function test_index_returns_leave_balances_grouped_by_employee(): void
+    {
+        $employee = Employee::factory()->create([
+            'name' => 'Mr XYZ',
+            'department_id' => $this->department->id,
+        ]);
+        $sickLeaveType = LeaveType::factory()->create([
+            'name' => 'Sick Leave',
+            'is_active' => true,
+        ]);
+
+        LeaveBalance::create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $this->leaveType->id,
+            'year' => 2026,
+            'opening_leaves' => 2,
+            'assigned_leaves' => 18,
+            'consumed_leaves' => 11,
+            'remaining_leaves' => 9,
+        ]);
+
+        LeaveBalance::create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $sickLeaveType->id,
+            'year' => 2026,
+            'opening_leaves' => 0,
+            'assigned_leaves' => 6,
+            'consumed_leaves' => 2,
+            'remaining_leaves' => 4,
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->getJson('/api/leave-balances?year=2026');
+
+        $response->assertOk();
+        $response->assertJsonPath("employees.{$employee->id}.employee.name", 'Mr XYZ');
+        $response->assertJsonPath("employees.{$employee->id}.leaves.casual_leave.assigned", 18);
+        $response->assertJsonPath("employees.{$employee->id}.leaves.casual_leave.used", 11);
+        $response->assertJsonPath("employees.{$employee->id}.leaves.casual_leave.remaining", 9);
+        $response->assertJsonPath("employees.{$employee->id}.leaves.casual_leave.carry_over", 2);
+        $response->assertJsonPath("employees.{$employee->id}.leaves.sick_leave.assigned", 6);
+        $response->assertJsonPath("employees.{$employee->id}.leaves.sick_leave.used", 2);
+        $response->assertJsonCount(2, "employees.{$employee->id}.leaves");
+    }
+
     public function test_bulk_assign_validates_required_fields(): void
     {
         $response = $this->actingAs($this->admin)

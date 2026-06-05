@@ -116,7 +116,7 @@ class AdminTicketController extends Controller
     public function index(Request $request)
     {
         $query = Ticket::withTrashed()
-            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'createdBy', 'tasks']);
+            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'createdBy', 'latestStatusHistory', 'tasks']);
 
         // Apply filters if provided
         if ($request->has('status') && $request->status !== 'all') {
@@ -459,6 +459,10 @@ class AdminTicketController extends Controller
                 'approved_by' => $validated['approved_by'],
             ]);
 
+            if ($previousStatus !== $newStatus) {
+                $this->recordTicketStatusHistory($ticket, $previousStatus, $newStatus, $currentUser->id);
+            }
+
             if ($previousAssignedTo !== $validated['assigned_to']) {
                 $this->syncTicketAssignmentFromEdit(
                     $ticket->fresh(['tasks.taskAssignments']),
@@ -470,11 +474,11 @@ class AdminTicketController extends Controller
 
             DB::commit();
 
-            if ($previousStatus !== $validated['status']) {
+            if ($previousStatus !== $newStatus) {
                 $this->notificationService->sendTicketStatusChangeExternalNotification(
                     $ticket->id,
                     $ticket->title,
-                    $validated['status'],
+                    $newStatus,
                     $currentUser->id
                 );
             }
@@ -599,6 +603,18 @@ class AdminTicketController extends Controller
             $assignedUser->id,
             $currentUser->id
         );
+    }
+
+    private function recordTicketStatusHistory(Ticket $ticket, ?string $oldStatus, string $newStatus, ?int $changedBy): void
+    {
+        TicketHistory::create([
+            'ticket_id' => $ticket->id,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'action_type' => 'status',
+            'changed_by' => $changedBy,
+            'created_at' => Carbon::now(),
+        ]);
     }
 
     private function findMatchingSlaPolicyForTicket(Ticket $ticket): ?SlaPolicy
@@ -730,11 +746,15 @@ class AdminTicketController extends Controller
         }
 
         try {
+            $previousStatus = $ticket->status;
+
             $ticket->update([
                 'status' => 'approved',
                 'approved_by' => $user->id,
                 'approved_at' => now(),
             ]);
+
+            $this->recordTicketStatusHistory($ticket, $previousStatus, 'approved', $user->id);
 
             // Send notifications
             $this->sendApprovalNotifications($ticket, $user);
@@ -790,6 +810,8 @@ class AdminTicketController extends Controller
         ]);
 
         if ($previousStatus !== 'rejected') {
+            $this->recordTicketStatusHistory($ticket, $previousStatus, 'rejected', $user->id);
+
             $this->notificationService->sendTicketStatusChangeExternalNotification(
                 $ticket->id,
                 $ticket->title,
@@ -831,6 +853,8 @@ class AdminTicketController extends Controller
         ]);
 
         if ($previousStatus !== $validated['status']) {
+            $this->recordTicketStatusHistory($ticket, $previousStatus, $validated['status'], $user->id);
+
             $this->notificationService->sendTicketStatusChangeExternalNotification(
                 $ticket->id,
                 $ticket->title,
@@ -1107,6 +1131,10 @@ class AdminTicketController extends Controller
                 'assigned_at' => now(),
                 'status' => $newStatus,
             ]);
+
+            if ($previousStatus !== $newStatus) {
+                $this->recordTicketStatusHistory($ticket, $previousStatus, $newStatus, $currentUser->id);
+            }
 
             $terminalStates = ['Done', 'Cancelled', 'Rejected'];
 

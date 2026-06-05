@@ -18,11 +18,6 @@ use Inertia\Inertia;
 
 class EmployeeController extends Controller
 {
-    public function __construct()
-    {
-        // Using existing middleware approach
-    }
-
     /**
      * Check if user has permission or is super admin
      */
@@ -48,83 +43,31 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to view employees.');
         }
 
-        $query = Employee::with([
-            'department',
-            'category',
-            'user' => function ($q) {
-                $q->withoutGlobalScope('exclude_inactive')
-                    ->with(['roles.permissions', 'permissions', 'deniedPermissions']);
-            },
-            'currentShiftAssignment.shift',
-        ]);
+        if ($request->expectsJson()) {
+            $query = Employee::query()
+                ->select(['id', 'name', 'email', 'code', 'phone', 'department_id'])
+                ->with(['department:id,name,description']);
 
-        // Apply filters
-        if ($request->has('department_id') && $request->department_id !== 'all') {
-            $query->where('department_id', $request->department_id);
-        }
-
-        if ($request->has('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%'.$request->search.'%')
-                    ->orWhere('email', 'like', '%'.$request->search.'%');
-            });
-        }
-
-        $employees = $query->orderBy('name')
-            ->paginate(15)
-            ->withQueryString();
-
-        $employees->getCollection()->transform(function ($employee) {
-            $user = $employee->user;
-            if ($user) {
-                $rolePermissions = $user->roles->flatMap(function ($role) {
-                    return $role->permissions;
-                })->unique('id');
-
-                $additionalPermissions = $user->permissions;
-
-                $uniqueAdditionalPermissions = $additionalPermissions->filter(function ($additionalPerm) use ($rolePermissions) {
-                    return ! $rolePermissions->contains('id', $additionalPerm->id);
-                });
-
-                $restrictedPermissions = $user->deniedPermissions;
-
-                $effectiveRolePermissions = $rolePermissions->filter(function ($rolePerm) use ($restrictedPermissions) {
-                    return ! $restrictedPermissions->contains('id', $rolePerm->id);
-                });
-
-                $effectiveAdditionalPermissions = $uniqueAdditionalPermissions->filter(function ($additionalPerm) use ($restrictedPermissions) {
-                    return ! $restrictedPermissions->contains('id', $additionalPerm->id);
-                });
-
-                $effectiveRolePermissionsCount = $effectiveRolePermissions->count();
-                $effectiveAdditionalPermissionsCount = $effectiveAdditionalPermissions->count();
-                $totalEffectivePermissions = $effectiveRolePermissionsCount + $effectiveAdditionalPermissionsCount;
-
-                $employee->permission_counts = [
-                    'role' => $effectiveRolePermissionsCount,
-                    'additional' => $effectiveAdditionalPermissionsCount,
-                    'restricted' => $restrictedPermissions->count(),
-                    'total' => $totalEffectivePermissions,
-                ];
-            } else {
-                $employee->permission_counts = [
-                    'role' => 0,
-                    'additional' => 0,
-                    'restricted' => 0,
-                    'total' => 0,
-                ];
+            if ($request->has('department_id') && $request->department_id !== 'all') {
+                $query->where('department_id', $request->department_id);
             }
 
-            return $employee;
-        });
+            if ($request->has('search')) {
+                $query->where(function ($q) use ($request) {
+                    $q->where('name', 'like', '%'.$request->search.'%')
+                        ->orWhere('email', 'like', '%'.$request->search.'%');
+                });
+            }
+
+            return response()->json(
+                $query->orderBy('name')
+                    ->paginate(15)
+                    ->withQueryString(),
+                200
+            );
+        }
 
         $departments = Department::select('id', 'name')->get();
-
-        // if json expected
-        if ($request->expectsJson()) {
-            return response()->json($employees, 200);
-        }
 
         return Inertia::render('admin/employees/Index', [
             'departments' => $departments,
@@ -309,15 +252,12 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to view employee.');
         }
 
-        // Eager load all required relationships
         $employee->load([
             'department',
             'category',
             'user' => function ($q) {
                 $q->withoutGlobalScope('exclude_inactive');
             },
-            'currentShiftAssignment.shift',
-            'recentShiftAssignments.shift',
         ]);
 
         if ($request->expectsJson()) {
@@ -336,8 +276,6 @@ class EmployeeController extends Controller
                     'department' => $employee->department,
                     'category' => $employee->category,
                     'user' => $employee->user,
-                    'currentShiftAssignment' => $employee->currentShiftAssignment,
-                    'shiftAssignmentHistory' => $employee->recentShiftAssignments,
                 ],
             ], 200);
         }
