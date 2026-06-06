@@ -116,7 +116,7 @@ class AdminTicketController extends Controller
     public function index(Request $request)
     {
         $query = Ticket::withTrashed()
-            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'createdBy', 'latestStatusHistory', 'tasks']);
+            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'createdBy', 'latestClosedHistory', 'tasks']);
 
         // Apply filters if provided
         if ($request->has('status') && $request->status !== 'all') {
@@ -611,7 +611,7 @@ class AdminTicketController extends Controller
             'ticket_id' => $ticket->id,
             'old_status' => $oldStatus,
             'new_status' => $newStatus,
-            'action_type' => 'status',
+            'action_type' => $newStatus === 'closed' ? 'closed' : 'status',
             'changed_by' => $changedBy,
             'created_at' => Carbon::now(),
         ]);

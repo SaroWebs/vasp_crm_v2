@@ -219,7 +219,7 @@ export interface Ticket {
     approvedBy?: User;
     attachments?: Attachment[];
     tasks?: Task[];
-    latest_status_history?: TicketHistory;
+    latest_closed_history?: TicketHistory;
     work_status?: {
         status: 'no-tasks' | 'pending' | 'in-progress' |'closed' | 'partial' | 'blocked' | 'completed';
         label: string;

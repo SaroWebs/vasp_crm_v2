@@ -83,11 +83,15 @@ const MONTH_NAMES = [
 const LEGEND_ITEMS = [
     { label: 'Present', className: 'bg-emerald-100 border border-emerald-300' },
     { label: 'Late', className: 'bg-amber-100  border border-amber-300' },
+    { label: 'Early Out', className: 'bg-orange-100 border border-orange-300' },
+    { label: 'Incomplete', className: 'bg-blue-100 border border-blue-300' },
     { label: 'Half Day', className: 'bg-sky-100    border border-sky-300' },
     { label: 'Leave', className: 'bg-violet-100 border border-violet-300' },
     { label: 'Absent', className: 'bg-red-100    border border-red-300' },
     { label: 'Holiday', className: 'bg-purple-100 border border-purple-300' },
     { label: 'Weekend', className: 'bg-muted/60   border border-border' },
+    { label: 'Pending', className: 'bg-slate-100 border border-slate-300' },
+    { label: 'Upcoming', className: 'bg-background border border-dashed border-border' },
 ];
 
 function formatDateLabel(date: string): string {
@@ -99,12 +103,30 @@ function formatDateLabel(date: string): string {
     });
 }
 
-function formatTimeLabel(time: string | null | undefined): string {
+function formatTimeLabel(
+    time: string | null | undefined,
+    timezone: string,
+): string {
     if (!time) {
         return '--:--';
     }
 
-    return time.slice(0, 5);
+    const timeOnly = time.match(/^(\d{1,2}):(\d{2})/);
+    if (timeOnly) {
+        return `${timeOnly[1].padStart(2, '0')}:${timeOnly[2]}`;
+    }
+
+    const parsed = new Date(time);
+    if (Number.isNaN(parsed.getTime())) {
+        return time;
+    }
+
+    return new Intl.DateTimeFormat('en-IN', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    }).format(parsed);
 }
 
 function getStatusLabel(status: string | undefined): string {
@@ -113,6 +135,10 @@ function getStatusLabel(status: string | undefined): string {
             return 'Present';
         case 'late':
             return 'Late';
+        case 'early_out':
+            return 'Early Out';
+        case 'incomplete':
+            return 'Incomplete';
         case 'half_day':
             return 'Half Day';
         case 'leave':
@@ -127,6 +153,10 @@ function getStatusLabel(status: string | undefined): string {
             return 'Weekend';
         case 'absent':
             return 'Absent';
+        case 'pending':
+            return 'Pending';
+        case 'upcoming':
+            return 'Upcoming';
         default:
             return 'No Data';
     }
@@ -290,6 +320,7 @@ export function AttendanceCalendar({
 
     const isCurrentMonth =
         currentMonth === now.getMonth() + 1 && currentYear === now.getFullYear();
+    const timezone = calendarMeta?.working_hours.timezone ?? 'Asia/Calcutta';
 
     // ── Render ───────────────────────────────────────────────────────────────
 
@@ -404,7 +435,7 @@ export function AttendanceCalendar({
                             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Schedule</p>
                             <p className="mt-1 text-sm font-medium">
                                 {selectedDay.shift_start && selectedDay.shift_end
-                                    ? `${formatTimeLabel(selectedDay.shift_start)} - ${formatTimeLabel(selectedDay.shift_end)}`
+                                    ? `${formatTimeLabel(selectedDay.shift_start, timezone)} - ${formatTimeLabel(selectedDay.shift_end, timezone)}`
                                     : 'No fixed schedule'}
                             </p>
                         </div>
@@ -412,7 +443,7 @@ export function AttendanceCalendar({
                             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Punch</p>
                             <p className="mt-1 text-sm font-medium">
                                 {selectedDay.record?.punch_in || selectedDay.record?.punch_out
-                                    ? `${formatTimeLabel(selectedDay.record?.punch_in)} - ${formatTimeLabel(selectedDay.record?.punch_out)}`
+                                    ? `${formatTimeLabel(selectedDay.record?.punch_in, timezone)} - ${formatTimeLabel(selectedDay.record?.punch_out, timezone)}`
                                     : 'No punch recorded'}
                             </p>
                         </div>

@@ -115,7 +115,7 @@ class AdminTicketUpdateTest extends TestCase
             'ticket_id' => $ticket->id,
             'old_status' => 'open',
             'new_status' => 'closed',
-            'action_type' => 'status',
+            'action_type' => 'closed',
             'changed_by' => $user->id,
         ]);
     }
@@ -170,7 +170,7 @@ class AdminTicketUpdateTest extends TestCase
             'ticket_id' => $ticket->id,
             'old_status' => 'open',
             'new_status' => 'closed',
-            'action_type' => 'status',
+            'action_type' => 'closed',
             'changed_by' => $user->id,
         ]);
     }
@@ -220,6 +220,49 @@ class AdminTicketUpdateTest extends TestCase
         $response = $controller->updateStatus($request, $ticket->id);
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertSame(0, TicketHistory::where('ticket_id', $ticket->id)->where('action_type', 'status')->count());
+        $this->assertSame(0, TicketHistory::where('ticket_id', $ticket->id)->count());
+    }
+
+    public function test_latest_closed_history_returns_the_most_recent_closed_event(): void
+    {
+        $user = User::factory()->create();
+        $client = Client::create([
+            'name' => 'Acme Corporation',
+            'status' => 'active',
+        ]);
+
+        $ticket = Ticket::create([
+            'client_id' => $client->id,
+            'organization_user_id' => null,
+            'created_by' => $user->id,
+            'ticket_number' => 'ACME-005',
+            'title' => 'Repeated closure issue',
+            'description' => 'Original issue description',
+            'category' => 'technical',
+            'priority' => 'low',
+            'status' => 'closed',
+        ]);
+
+        TicketHistory::create([
+            'ticket_id' => $ticket->id,
+            'old_status' => 'in-progress',
+            'new_status' => 'closed',
+            'action_type' => 'closed',
+            'changed_by' => $user->id,
+            'created_at' => now()->subHour(),
+        ]);
+
+        $latestClosedHistory = TicketHistory::create([
+            'ticket_id' => $ticket->id,
+            'old_status' => 'in-progress',
+            'new_status' => 'closed',
+            'action_type' => 'closed',
+            'changed_by' => $user->id,
+            'created_at' => now(),
+        ]);
+
+        $ticket->load('latestClosedHistory');
+
+        $this->assertTrue($ticket->latestClosedHistory->is($latestClosedHistory));
     }
 }

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Employee;
+use App\Models\EmployeeShiftAssignment;
 use App\Models\LeaveType;
+use App\Models\Shift;
 use App\Models\User;
 use App\Services\AttendanceCalculationService;
 use App\Services\WorkingHoursService;
@@ -232,6 +234,54 @@ class AttendanceCalculationTest extends TestCase
         $this->assertEquals(5.0, $metrics['scheduled_hours']);
         $this->assertFalse($metrics['is_late_in']);
         $this->assertFalse($metrics['is_early_out']);
+    }
+
+    public function test_weekend_rules_override_an_assigned_shift(): void
+    {
+        $employee = Employee::factory()->create(['code' => 'WEEKEND01']);
+        $shift = Shift::create([
+            'name' => 'Every Day Shift',
+            'start_time' => '08:00:00',
+            'end_time' => '17:00:00',
+            'grace_minutes' => 10,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-05-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
+        $saturday = $this->service->resolveEffectiveShiftForEmployeeDate(
+            $employee->code,
+            '2026-05-30'
+        );
+        $sunday = $this->service->resolveEffectiveShiftForEmployeeDate(
+            $employee->code,
+            '2026-05-31'
+        );
+        $monday = $this->service->resolveEffectiveShiftForEmployeeDate(
+            $employee->code,
+            '2026-06-01'
+        );
+
+        $this->assertNull($saturday['shift_id']);
+        $this->assertSame('09:00:00', $saturday['start_time']);
+        $this->assertSame('14:00:00', $saturday['end_time']);
+        $this->assertTrue($saturday['is_half_day']);
+
+        $this->assertNull($sunday['shift_id']);
+        $this->assertNull($sunday['start_time']);
+        $this->assertNull($sunday['end_time']);
+        $this->assertFalse($sunday['is_half_day']);
+
+        $this->assertSame($shift->id, $monday['shift_id']);
+        $this->assertSame('08:00:00', $monday['start_time']);
+        $this->assertSame('17:00:00', $monday['end_time']);
+        $this->assertFalse($monday['is_half_day']);
     }
 
     /**

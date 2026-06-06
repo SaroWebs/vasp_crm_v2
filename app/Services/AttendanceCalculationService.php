@@ -169,22 +169,6 @@ class AttendanceCalculationService
             ];
         }
 
-        // First, try to get shift assignment
-        $shiftMeta = $this->resolveShiftForEmployeeDate($employeeCode, $attendanceDate);
-
-        if ($shiftMeta['start_time'] && $shiftMeta['end_time']) {
-            return array_merge($shiftMeta, [
-                'is_leave_day' => false,
-                'is_holiday' => false,
-                'is_field_work' => false,
-                'is_remote_work' => false,
-            ]);
-        }
-
-        // Fall back to working hours
-        $date = Carbon::parse($attendanceDate);
-
-        // Check if it's a holiday
         if ($this->workingHoursService->isHoliday($date)) {
             return [
                 'shift_id' => null,
@@ -199,8 +183,8 @@ class AttendanceCalculationService
             ];
         }
 
-        // Get working hours for the day (including Saturday half-day)
         $workingHours = $this->workingHoursService->getWorkingHoursForDate($date);
+        $dayName = strtolower($date->format('l'));
 
         if (! $workingHours['start'] || ! $workingHours['end']) {
             return [
@@ -216,16 +200,38 @@ class AttendanceCalculationService
             ];
         }
 
-        // Check if it's Saturday (half day)
-        $dayName = strtolower($date->format('l'));
-        $isHalfDay = $dayName === 'saturday';
+        if ($dayName === 'saturday') {
+            return [
+                'shift_id' => null,
+                'start_time' => $workingHours['start']->format('H:i:s'),
+                'end_time' => $workingHours['end']->format('H:i:s'),
+                'grace_minutes' => $this->resolveGraceMinutes(0),
+                'is_half_day' => true,
+                'is_leave_day' => false,
+                'is_holiday' => false,
+                'is_field_work' => false,
+                'is_remote_work' => false,
+            ];
+        }
+
+        // First, try to get shift assignment
+        $shiftMeta = $this->resolveShiftForEmployeeDate($employeeCode, $attendanceDate);
+
+        if ($shiftMeta['start_time'] && $shiftMeta['end_time']) {
+            return array_merge($shiftMeta, [
+                'is_leave_day' => false,
+                'is_holiday' => false,
+                'is_field_work' => false,
+                'is_remote_work' => false,
+            ]);
+        }
 
         return [
             'shift_id' => null,
             'start_time' => $workingHours['start']->format('H:i:s'),
             'end_time' => $workingHours['end']->format('H:i:s'),
             'grace_minutes' => $this->resolveGraceMinutes(0),
-            'is_half_day' => $isHalfDay,
+            'is_half_day' => false,
             'is_leave_day' => false,
             'is_holiday' => false,
             'is_field_work' => false,

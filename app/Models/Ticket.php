@@ -76,10 +76,11 @@ class Ticket extends Model
         return $this->hasMany(TicketHistory::class);
     }
 
-    public function latestStatusHistory(): HasOne
+    public function latestClosedHistory(): HasOne
     {
         return $this->hasOne(TicketHistory::class)
-            ->where('action_type', 'status')
+            ->where('action_type', 'closed')
+            ->where('new_status', 'closed')
             ->latestOfMany();
     }
 }

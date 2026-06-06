@@ -452,11 +452,23 @@ export default function TicketsIndex(props: TicketsIndexProps) {
     };
 
     const getClosedOnLabel = (ticket: Ticket) => {
-        if (ticket.status !== 'closed' || !ticket.latest_status_history?.created_at) {
+        if (
+            ticket.status !== 'closed' ||
+            !ticket.latest_closed_history?.created_at
+        ) {
             return null;
         }
 
-        return new Date(ticket.latest_status_history.created_at).toLocaleDateString();
+        return new Date(
+            ticket.latest_closed_history.created_at,
+        ).toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+        });
     };
 
     const wizCards = [
@@ -688,7 +700,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                         {getTicketStatusBadge(ticket.status)}
                                                         {getClosedOnLabel(ticket) && (
                                                             <span className="text-xs text-muted-foreground">
-                                                                Closed on {getClosedOnLabel(ticket)}
+                                                                {getClosedOnLabel(ticket)}
                                                             </span>
                                                         )}
                                                     </div>

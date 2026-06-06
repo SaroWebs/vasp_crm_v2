@@ -37,7 +37,7 @@ class AttendanceShiftMetricsTest extends TestCase
 
         $attendance = Attendance::create([
             'employee_id' => $employee->code,
-            'attendance_date' => '2026-05-16',
+            'attendance_date' => '2026-05-18',
             'punch_in' => '09:25:00',
             'punch_out' => '17:40:00',
             'employee_name' => $employee->name,
@@ -58,6 +58,49 @@ class AttendanceShiftMetricsTest extends TestCase
         $this->assertFalse($decorated['is_early_in']);
         $this->assertTrue($decorated['is_early_out']);
         $this->assertFalse($decorated['is_late_out']);
+    }
+
+    public function test_decorated_attendance_uses_date_only_and_local_clock_values(): void
+    {
+        $employee = Employee::factory()->create(['code' => 'DATE001']);
+        $attendance = Attendance::create([
+            'employee_id' => $employee->code,
+            'attendance_date' => '2026-05-16',
+            'punch_in' => '09:05:00',
+            'punch_out' => '18:10:00',
+            'employee_name' => $employee->name,
+            'mode' => 'office',
+        ]);
+
+        $method = new \ReflectionMethod(AttendanceController::class, 'decorateAttendanceWithShiftMetrics');
+        $method->setAccessible(true);
+        $decorated = $method->invoke(new AttendanceController, $attendance);
+
+        $this->assertSame('2026-05-16', $decorated['attendance_date']);
+        $this->assertSame('09:05:00', $decorated['punch_in']);
+        $this->assertSame('18:10:00', $decorated['punch_out']);
+    }
+
+    public function test_calendar_distinguishes_absent_pending_and_upcoming_days(): void
+    {
+        Carbon::setTestNow('2026-06-10 10:00:00');
+
+        $employee = Employee::factory()->create(['code' => 'CAL001']);
+        $method = new \ReflectionMethod(AttendanceController::class, 'buildAttendanceCalendarDays');
+        $method->setAccessible(true);
+
+        $days = collect($method->invoke(
+            new AttendanceController,
+            $employee,
+            collect(),
+            6,
+            2026
+        ))->keyBy('date');
+
+        $this->assertSame('absent', $days['2026-06-09']['status']);
+        $this->assertSame('pending', $days['2026-06-10']['status']);
+        $this->assertSame('upcoming', $days['2026-06-11']['status']);
+        $this->assertSame('weekend', $days['2026-06-14']['status']);
     }
 
     public function test_shift_metrics_fallback_to_working_hours_when_no_shift_is_assigned(): void
@@ -139,7 +182,7 @@ class AttendanceShiftMetricsTest extends TestCase
 
         $attendance = Attendance::create([
             'employee_id' => $employee->code,
-            'attendance_date' => '2026-05-16',
+            'attendance_date' => '2026-05-18',
             'punch_in' => '09:00:30',
             'punch_out' => '18:00:00',
             'employee_name' => $employee->name,
@@ -177,7 +220,7 @@ class AttendanceShiftMetricsTest extends TestCase
 
         $attendance = Attendance::create([
             'employee_id' => $employee->code,
-            'attendance_date' => '2026-05-16',
+            'attendance_date' => '2026-05-18',
             'punch_in' => '08:45:00',
             'punch_out' => '18:20:00',
             'employee_name' => $employee->name,
@@ -254,7 +297,7 @@ class AttendanceShiftMetricsTest extends TestCase
 
         Attendance::create([
             'employee_id' => $employee->code,
-            'attendance_date' => '2026-05-16',
+            'attendance_date' => '2026-05-18',
             'punch_in' => '09:12:00',
             'punch_out' => '18:00:00',
             'employee_name' => $employee->name,
@@ -263,7 +306,7 @@ class AttendanceShiftMetricsTest extends TestCase
 
         Attendance::create([
             'employee_id' => $employee->code,
-            'attendance_date' => '2026-05-17',
+            'attendance_date' => '2026-05-19',
             'punch_in' => '09:09:00',
             'punch_out' => '18:00:00',
             'employee_name' => $employee->name,

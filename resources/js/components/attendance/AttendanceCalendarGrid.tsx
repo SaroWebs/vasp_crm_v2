@@ -11,6 +11,7 @@ interface AttendanceRecord {
     punch_in: string | null;
     punch_out: string | null;
     mode: string;
+    status?: string;
     is_half_day?: boolean;
     late_minutes?: number;
     early_out_minutes?: number;
@@ -116,6 +117,10 @@ function normalizeTime(time: string | null | undefined): string | null {
  * date matches the calendar day the employee actually worked.
  */
 function normalizeAttendanceDate(isoDate: string, timezone = 'Asia/Calcutta'): string {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+        return isoDate;
+    }
+
     return new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
         year: 'numeric',
@@ -153,12 +158,19 @@ function getDayStatus(
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    if (date > today) return 'empty';
-
     if (record) {
         // ✅ FIX: Check half_day before late check
         if (record.is_half_day) {
             return 'half_day';
+        }
+        if (record.status === 'late_in' || record.status === 'late') {
+            return 'late';
+        }
+        if (record.status === 'early_out') {
+            return 'early_out';
+        }
+        if (record.status === 'incomplete') {
+            return 'incomplete';
         }
         if (
             record.punch_in &&
@@ -174,6 +186,9 @@ function getDayStatus(
 
     const isWorkingDay = Boolean(workingHours.start && workingHours.end);
     if (!isWorkingDay) return 'weekend';
+
+    if (date > today) return 'upcoming';
+    if (date.getTime() === today.getTime()) return 'pending';
 
     return 'absent';
 }
@@ -321,6 +336,7 @@ export function AttendanceCalendarGrid({
                                     : undefined
                             }
                             dayMeta={isRealDay ? item : undefined}
+                            timezone={timezone}
                             onClick={
                                 isRealDay && onDayClick
                                     ? () => onDayClick(item)

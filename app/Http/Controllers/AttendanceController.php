@@ -304,7 +304,7 @@ class AttendanceController extends Controller
         $stored = 0;
 
         foreach ($punches as $punchData) {
-            $punchDateTime = Carbon::parse($punchData['PunchTime']);
+            $punchDateTime = $this->parseAttendanceDateTime($punchData['PunchTime']);
             $employeeId = $punchData['EmployeeId'];
 
             // Check if this is a visitor code
@@ -418,7 +418,7 @@ class AttendanceController extends Controller
         }
 
         $punchDateTime = ! empty($validated['punch_time'])
-            ? Carbon::parse($validated['punch_time'])
+            ? $this->parseAttendanceDateTime($validated['punch_time'])
             : now();
 
         $attendanceDate = $punchDateTime->toDateString();
@@ -1098,11 +1098,44 @@ class AttendanceController extends Controller
     private function decorateAttendanceWithShiftMetrics(Attendance $attendance): array
     {
         $attendanceDate = Carbon::parse($attendance->attendance_date)->toDateString();
+        $punchIn = $this->normalizeAttendanceTime($attendance->punch_in);
+        $punchOut = $this->normalizeAttendanceTime($attendance->punch_out);
         $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $attendance->employee_id, $attendanceDate);
-        $metrics = $this->buildShiftMetrics($attendanceDate, $attendance->punch_in, $attendance->punch_out, $shiftMeta);
+        $metrics = $this->buildShiftMetrics($attendanceDate, $punchIn, $punchOut, $shiftMeta);
         $metrics['status'] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
 
-        return array_merge($attendance->toArray(), $metrics);
+        return array_merge($attendance->toArray(), [
+            'attendance_date' => $attendanceDate,
+            'punch_in' => $punchIn,
+            'punch_out' => $punchOut,
+        ], $metrics);
+    }
+
+    private function parseAttendanceDateTime(string $value): Carbon
+    {
+        $timezone = app(WorkingHoursService::class)->getWorkingHoursConfig()['timezone']
+            ?? config('app.timezone');
+
+        return Carbon::parse($value)->setTimezone($timezone);
+    }
+
+    private function normalizeAttendanceTime(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->format('H:i:s');
+        }
+
+        $time = trim((string) $value);
+
+        if (preg_match('/^\d{1,2}:\d{2}(?::\d{2})?$/', $time) === 1) {
+            return Carbon::parse($time)->format('H:i:s');
+        }
+
+        return $this->parseAttendanceDateTime($time)->format('H:i:s');
     }
 
     private function calculateOvertimeMinutes(string $employeeId, string $attendanceDate, string $punchOut, ?int $totalWorkMinutes = null): int
@@ -1565,13 +1598,16 @@ class AttendanceController extends Controller
         $days = [];
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
-            $date = Carbon::create($year, $month, $day)->toDateString();
+            $calendarDate = Carbon::create($year, $month, $day)->startOfDay();
+            $date = $calendarDate->toDateString();
             $record = $recordMap->get($date);
             $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $date);
             $holiday = $holidayMap->get($date);
-            $isCurrentMonthDay = Carbon::parse($date)->isToday();
+            $isCurrentMonthDay = $calendarDate->isToday();
 
-            $status = $this->normalizeCalendarStatus($record['status'] ?? $this->resolveCalendarStatus($shiftMeta));
+            $status = $record
+                ? $this->normalizeCalendarStatus((string) ($record['status'] ?? 'present'), $record)
+                : $this->resolveCalendarStatus($shiftMeta, $calendarDate);
 
             $days[] = [
                 'day' => $day,
@@ -1604,7 +1640,7 @@ class AttendanceController extends Controller
      *
      * @param  array{shift_id: ?int, start_time: ?string, end_time: ?string, grace_minutes: int, is_half_day?: bool, is_leave_day?: bool, is_holiday?: bool, is_field_work?: bool, is_remote_work?: bool}  $shiftMeta
      */
-    private function resolveCalendarStatus(array $shiftMeta): string
+    private function resolveCalendarStatus(array $shiftMeta, Carbon $date): string
     {
         if ($shiftMeta['is_leave_day'] ?? false) {
             return 'leave';
@@ -1626,13 +1662,35 @@ class AttendanceController extends Controller
             return 'weekend';
         }
 
+        if ($date->isFuture()) {
+            return 'upcoming';
+        }
+
+        if ($date->isToday()) {
+            $scheduledEnd = Carbon::parse($date->toDateString().' '.$shiftMeta['end_time']);
+
+            if (now()->lt($scheduledEnd)) {
+                return 'pending';
+            }
+        }
+
         return 'absent';
     }
 
-    private function normalizeCalendarStatus(string $status): string
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function normalizeCalendarStatus(string $status, array $record = []): string
     {
+        if ($record['is_half_day'] ?? false) {
+            return 'half_day';
+        }
+
         return match ($status) {
             'on_leave' => 'leave',
+            'late_in' => 'late',
+            'early_out' => 'early_out',
+            'incomplete' => 'incomplete',
             default => $status,
         };
     }

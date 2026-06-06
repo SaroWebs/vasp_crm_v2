@@ -11,12 +11,16 @@ export type DayStatus =
     | 'present'
     | 'absent'
     | 'late'
+    | 'early_out'
+    | 'incomplete'
     | 'half_day'
     | 'leave'
     | 'field_work'
     | 'remote_work'
     | 'weekend'
     | 'holiday'
+    | 'pending'
+    | 'upcoming'
     | 'empty'
     | 'today';
 
@@ -60,6 +64,7 @@ interface DayCellProps {
         status?: DayStatus | 'leave' | 'field_work' | 'remote_work';
     };
     onClick?: () => void;
+    timezone?: string;
 }
 
 const statusStyles: Record<DayStatus, string> = {
@@ -68,6 +73,10 @@ const statusStyles: Record<DayStatus, string> = {
     absent:
         'bg-red-50 text-red-900 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900',
     late: 'bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900',
+    early_out:
+        'bg-orange-50 text-orange-900 border-orange-200 dark:bg-orange-950/40 dark:text-orange-200 dark:border-orange-900',
+    incomplete:
+        'bg-blue-50 text-blue-900 border-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-900',
     half_day:
         'bg-sky-50 text-sky-900 border-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-900',
     leave:
@@ -79,6 +88,10 @@ const statusStyles: Record<DayStatus, string> = {
     weekend: 'bg-muted/40 text-muted-foreground border-border/60',
     holiday:
         'bg-purple-50 text-purple-900 border-purple-200 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-900',
+    pending:
+        'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-200 dark:border-slate-800',
+    upcoming:
+        'bg-background text-muted-foreground border-dashed border-border/70',
     empty: 'bg-transparent border-transparent',
     today: '',
 };
@@ -87,12 +100,16 @@ const dotStyles: Record<DayStatus, string> = {
     present: 'bg-emerald-500',
     absent: 'bg-red-500',
     late: 'bg-amber-500',
+    early_out: 'bg-orange-500',
+    incomplete: 'bg-blue-500',
     half_day: 'bg-sky-500',
     leave: 'bg-violet-500',
     field_work: 'bg-cyan-500',
     remote_work: 'bg-indigo-500',
     weekend: 'bg-muted-foreground/40',
     holiday: 'bg-purple-500',
+    pending: 'bg-slate-400',
+    upcoming: 'bg-transparent',
     empty: 'bg-transparent',
     today: 'bg-primary',
 };
@@ -101,16 +118,35 @@ const statusBadge: Partial<Record<DayStatus, string>> = {
     present: 'P',
     absent: 'A',
     late: 'L',
+    early_out: 'EO',
+    incomplete: 'I',
     half_day: '½',
     leave: 'Lv',
     field_work: 'FW',
     remote_work: 'RW',
     holiday: 'H',
+    pending: '...',
 };
 
-function formatTime(time: string | null): string | null {
+function formatTime(time: string | null, timezone: string): string | null {
     if (!time) return null;
-    return time.slice(0, 5);
+
+    const timeOnly = time.match(/^(\d{1,2}):(\d{2})/);
+    if (timeOnly) {
+        return `${timeOnly[1].padStart(2, '0')}:${timeOnly[2]}`;
+    }
+
+    const parsed = new Date(time);
+    if (Number.isNaN(parsed.getTime())) {
+        return time;
+    }
+
+    return new Intl.DateTimeFormat('en-IN', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    }).format(parsed);
 }
 
 function getStatusLabel(status: DayStatus): string {
@@ -121,6 +157,10 @@ function getStatusLabel(status: DayStatus): string {
             return 'Absent';
         case 'late':
             return 'Late';
+        case 'early_out':
+            return 'Early Out';
+        case 'incomplete':
+            return 'Incomplete';
         case 'half_day':
             return 'Half Day';
         case 'leave':
@@ -133,6 +173,10 @@ function getStatusLabel(status: DayStatus): string {
             return 'Non-working day';
         case 'holiday':
             return 'Holiday';
+        case 'pending':
+            return 'Pending';
+        case 'upcoming':
+            return 'Upcoming';
         case 'today':
             return 'Today';
         case 'empty':
@@ -152,6 +196,7 @@ export function DayCell({
     workingHours,
     dayMeta,
     onClick,
+    timezone = 'Asia/Calcutta',
 }: DayCellProps) {
     // ✅ FIX: All hooks must be called unconditionally before any early returns
     const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -178,8 +223,8 @@ export function DayCell({
         return <div className="aspect-square w-full" />;
     }
 
-    const punchIn = formatTime(record?.punch_in ?? null);
-    const punchOut = formatTime(record?.punch_out ?? null);
+    const punchIn = formatTime(record?.punch_in ?? null, timezone);
+    const punchOut = formatTime(record?.punch_out ?? null, timezone);
     const scheduleStart = dayMeta?.shift_start ?? workingHours?.start ?? null;
     const scheduleEnd = dayMeta?.shift_end ?? workingHours?.end ?? null;
     const workingHoursLabel =
