@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -367,6 +368,14 @@ class User extends Authenticatable
     }
 
     /**
+     * The sales leads owned by the user.
+     */
+    public function salesLeads(): HasMany
+    {
+        return $this->hasMany(SalesLead::class, 'owner_user_id');
+    }
+
+    /**
      * The department user assignments for this user.
      */
     public function departmentUsers()
@@ -381,6 +390,7 @@ class User extends Authenticatable
     {
         return $this->hasRole('super-admin');
     }
+
     /**
      * Check if user is admin (has admin role).
      */

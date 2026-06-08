@@ -39,6 +39,7 @@ use App\Http\Controllers\RemoteWorkAssignmentController;
 use App\Http\Controllers\RemoteWorkController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SalesLeadController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\TaskAssignmentController;
 use App\Http\Controllers\TaskAttachmentController;
@@ -131,6 +132,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
 
     Route::middleware(['admin'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/sales-leads', [SalesLeadController::class, 'adminIndex'])->name('sales-leads.index');
 
         // Dashboard API endpoints
         Route::get('/api/dashboard/stats', [AdminDashboardController::class, 'getStats'])->name('api.dashboard.stats');
@@ -551,6 +553,7 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
 
     // My Attendance routes
     Route::get('/my/attendance', [AttendanceController::class, 'myAttendancePage'])->name('my.attendance');
+    Route::get('/my/sales-leads', [SalesLeadController::class, 'myIndex'])->name('my.sales-leads.index');
 
     // My Task View route
     Route::get('/my/tasks/{task}', function ($taskId) {

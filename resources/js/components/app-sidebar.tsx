@@ -28,6 +28,7 @@ import {
     ListChecks,
     CalendarDays,
     CalendarCheck,
+    Handshake,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -124,6 +125,13 @@ const adminNavGroups: NavGroup[] = [
                 menuKey: 'organization.clients',
             },
             {
+                title: 'Sales CRM',
+                href: '/admin/sales-leads',
+                icon: Handshake,
+                roles: ['super-admin', 'admin', 'manager'],
+                menuKey: 'organization.sales-leads',
+            },
+            {
                 title: 'Attendance',
                 href: '/admin/attendance',
                 icon: CalendarCheck,
@@ -190,6 +198,13 @@ const adminNavGroups: NavGroup[] = [
                 href: '/my/attendance',
                 icon: CalendarDays,
                 menuKey: 'tasks.my-attendance',
+            },
+            {
+                title: 'Sales CRM',
+                href: '/my/sales-leads',
+                icon: Handshake,
+                roles: ['sales', 'admin'],
+                menuKey: 'tasks.my-sales-leads',
             },
         ],
     },
