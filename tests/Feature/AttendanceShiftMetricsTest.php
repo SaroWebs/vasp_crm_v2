@@ -103,6 +103,51 @@ class AttendanceShiftMetricsTest extends TestCase
         $this->assertSame('weekend', $days['2026-06-14']['status']);
     }
 
+    public function test_calendar_record_uses_first_punch_in_and_last_punch_out_for_split_attendance(): void
+    {
+        $employee = Employee::factory()->create(['code' => '85']);
+        $method = new \ReflectionMethod(AttendanceController::class, 'buildAttendanceCalendarDays');
+        $method->setAccessible(true);
+
+        $records = collect([
+            [
+                'id' => 3724,
+                'employee_id' => '85',
+                'attendance_date' => '2026-06-01',
+                'punch_in' => '09:00:48',
+                'punch_out' => '11:25:37',
+                'status' => 'present',
+            ],
+            [
+                'id' => 3725,
+                'employee_id' => '85',
+                'attendance_date' => '2026-06-01',
+                'punch_in' => '11:38:42',
+                'punch_out' => '13:47:25',
+                'status' => 'present',
+            ],
+            [
+                'id' => 3726,
+                'employee_id' => '85',
+                'attendance_date' => '2026-06-01',
+                'punch_in' => '14:20:18',
+                'punch_out' => '18:21:17',
+                'status' => 'present',
+            ],
+        ]);
+
+        $days = collect($method->invoke(
+            new AttendanceController,
+            $employee,
+            $records,
+            6,
+            2026
+        ))->keyBy('date');
+
+        $this->assertSame('09:00:48', $days['2026-06-01']['record']['punch_in']);
+        $this->assertSame('18:21:17', $days['2026-06-01']['record']['punch_out']);
+    }
+
     public function test_shift_metrics_fallback_to_working_hours_when_no_shift_is_assigned(): void
     {
         $employee = Employee::factory()->create(['code' => '9020']);

@@ -1103,6 +1103,8 @@ class AttendanceController extends Controller
         $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $attendance->employee_id, $attendanceDate);
         $metrics = $this->buildShiftMetrics($attendanceDate, $punchIn, $punchOut, $shiftMeta);
         $metrics['status'] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
+        $metrics['late_minutes'] = $metrics['late_in_minutes'];
+        $metrics['is_late'] = $metrics['is_late_in'];
 
         return array_merge($attendance->toArray(), [
             'attendance_date' => $attendanceDate,
@@ -1588,11 +1590,11 @@ class AttendanceController extends Controller
     {
         $workingHoursService = app(WorkingHoursService::class);
         $holidayMap = collect($workingHoursService->getHolidaysForYear($year))->keyBy('date');
-        $recordMap = $records->mapWithKeys(function (array $record): array {
+        $recordMap = $records->groupBy(function (array $record): string {
             $date = Carbon::parse($record['attendance_date'])->toDateString();
 
-            return [$date => $record];
-        });
+            return $date;
+        })->map(fn (Collection $dailyRecords, string $date): array => $this->combineDailyCalendarRecords($employee, $dailyRecords, $date));
 
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
         $days = [];
@@ -1635,6 +1637,34 @@ class AttendanceController extends Controller
         return $days;
     }
 
+    /**
+     * @param  Collection<int, array<string, mixed>>  $records
+     * @return array<string, mixed>
+     */
+    private function combineDailyCalendarRecords(Employee $employee, Collection $records, string $date): array
+    {
+        $orderedRecords = $records->sortBy('punch_in')->values();
+        $punchIn = $orderedRecords->pluck('punch_in')->filter()->sort()->first();
+        $punchOut = $orderedRecords->pluck('punch_out')->filter()->sort()->last();
+        $baseRecord = $punchIn
+            ? $orderedRecords->first(fn (array $record): bool => ($record['punch_in'] ?? null) === $punchIn)
+            : $orderedRecords->first();
+
+        $combinedRecord = array_merge($baseRecord, [
+            'attendance_date' => $date,
+            'punch_in' => $punchIn,
+            'punch_out' => $punchOut,
+        ]);
+
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $date);
+        $metrics = $this->buildShiftMetrics($date, $punchIn, $punchOut, $shiftMeta);
+        $metrics['status'] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
+        $metrics['late_minutes'] = $metrics['late_in_minutes'];
+        $metrics['is_late'] = $metrics['is_late_in'];
+
+        return array_merge($combinedRecord, $metrics);
+    }
+ 
     /**
      * Normalize the calendar status for days that do not have a punch record.
      *
