@@ -10,10 +10,10 @@ import TaskTimeline from '@/components/admin/TaskTimeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from '@inertiajs/react';
-import { type Task } from '@/types';
+import { Auth, type Task } from '@/types';
 
 interface EmployeeDashboardProps {
-    auth: { user?: { id?: number } } | null;
+    auth?: Auth | null;
 }
 
 export default function EmployeeDashboard({ auth }: EmployeeDashboardProps) {

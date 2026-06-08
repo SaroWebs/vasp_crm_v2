@@ -62,7 +62,7 @@ interface AttendanceApiResponse {
 }
 
 interface AttendanceCalendarProps {
-    auth: Auth;
+    auth?: Auth | null;
     /** Override the API base URL. Defaults to /api/attendance */
     employeeId?: number;
     axiosInstance?: AxiosInstance;
@@ -223,8 +223,8 @@ export function AttendanceCalendar({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const empId = employeeId ? employeeId : auth.user?.employee?.id ?? auth.user.id;
-    const employeeName = auth.user.name;
+    const empId = employeeId ? employeeId : auth?.user?.employee?.id ?? auth?.user?.id;
+    const employeeName = auth?.user?.name;
     const url = employeeId
         ? `/admin/employee-attendance/${employeeId}`
         : `/api/my/attendance`;
@@ -240,7 +240,7 @@ export function AttendanceCalendar({
                 const http = axiosInstance ?? axios;
 
                 // Resolve the bearer token from auth
-                const token = auth.token ?? auth.user.token;
+                const token = auth?.token ?? auth?.user?.token;
 
                 const { data } = await http.get<AttendanceApiResponse>(url, {
                     params: { employee_id: empId, month, year },

@@ -7,9 +7,10 @@ import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
 import { useDashboardStats } from '@/hooks/use-dashboard-stats';
 import { CheckCircle, Clock, TicketIcon } from 'lucide-react';
 import DailyAttendancePanel from '../admin/employees/DailyAttendancePanel';
+import { Auth } from '@/types';
 
 interface AdminDashboardProps {
-    auth: { user?: { id?: number } } | null;
+    auth: Auth | null;
     ticketStats?: Record<string, number>;
     taskStats?: Record<string, number>;
 }

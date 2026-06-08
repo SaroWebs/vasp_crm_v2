@@ -277,7 +277,7 @@ export default function MyTasks() {
                 <Overview tasks={tasks?.data || []} loadTasks={loadTasks} />
 
                 {/* Board Component - uses separate endpoint for recent tasks */}
-                <Board tasks={boardTasks} loadTasks={loadBoardTasks} />
+                <Board tasks={boardTasks} loadTasks={loadBoardTasks} isLoading={boardLoading} />
 
                 {/* Tasks Table */}
                 <Card>

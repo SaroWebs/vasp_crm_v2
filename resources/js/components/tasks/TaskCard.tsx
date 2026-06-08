@@ -1,17 +1,15 @@
-import { Task, TaskHistory } from "@/types";
+import { Task } from "@/types";
 import { useDisclosure } from "@mantine/hooks";
 import { useDrag } from "react-dnd";
 import TaskTimeTracker from "./TaskTimeTracker";
-import { Modal, Menu, MenuTarget, MenuDropdown, MenuItem, Badge } from "@mantine/core";
+import { Modal, Menu, MenuTarget, MenuDropdown, MenuItem } from "@mantine/core";
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { Eye, Forward, MessageSquare, History, AlertTriangle, GitBranch } from "lucide-react";
 import { Link } from "@inertiajs/react";
 import { useTimeTracking } from "@/context/TimeTrackingContext";
 import TaskComments from "./task-comments";
-import { HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from "@/utils/workingHours";
+import { fetchWorkingHoursConfig, HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from "@/utils/workingHours";
 import { isTaskForwarded } from "@/lib/taskForwarding";
-import { toast } from "sonner";
 import TaskForwarding from "./TaskForwarding";
 import TaskHistories from "./TaskHistories";
 
@@ -72,35 +70,20 @@ const TaskCard: React.FC<{
     const [holidaysConfig, setHolidaysConfig] = useState<HolidaysConfig | null>(null);
     const [configLoaded, setConfigLoaded] = useState(false);
 
-    // Fetch working hours and holidays configuration
     useEffect(() => {
-        const fetchConfig = async () => {
-            try {
-                const response = await axios.get('/api/working-hours-config');
-                setWorkingHoursConfig(response.data.data.working_hours);
-                setHolidaysConfig(response.data.data.holidays);
-                setConfigLoaded(true);
-            } catch (err) {
-                console.error('Failed to fetch working hours configuration:', err);
-                // Fallback to default config if API fails
-                setWorkingHoursConfig({
-                    workdays: [
-                        { day: 'monday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-                        { day: 'tuesday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-                        { day: 'wednesday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-                        { day: 'thursday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-                        { day: 'friday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-                        { day: 'saturday', start: '09:00', end: '14:00', break_start: '', break_end: '' },
-                        { day: 'sunday', start: '', end: '', break_start: '', break_end: '' }
-                    ],
-                    timezone: 'Asia/Calcutta'
-                });
-                setHolidaysConfig({ holidays: [], year: new Date().getFullYear() });
+        let isMounted = true;
+
+        fetchWorkingHoursConfig().then((config) => {
+            if (isMounted) {
+                setWorkingHoursConfig(config.working_hours);
+                setHolidaysConfig(config.holidays);
                 setConfigLoaded(true);
             }
-        };
+        });
 
-        fetchConfig();
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     const isWorkingTime = () => {
@@ -117,7 +100,7 @@ const TaskCard: React.FC<{
         canDrag: isWorkingTime,
         end: (item, monitor) => {
             const dropResult = monitor.getDropResult<{ status: string }>();
-            if (item && dropResult) {
+            if (item && dropResult && item.status !== dropResult.status) {
                 moveTask(item.id, dropResult.status);
             }
         },
@@ -162,7 +145,9 @@ const TaskCard: React.FC<{
                     <div
                         id={id}
                         onClick={handleCardClick}
-                        ref={drag as any}
+                        ref={(node) => {
+                            drag(node);
+                        }}
                         className={`${isActive ? 'bg-green-200' : 'bg-white'} p-3 mb-2 rounded-lg shadow-sm border relative cursor-pointer ${isDragging ? 'opacity-50' : ''}`}
                     >
                         <div className="flex justify-between">

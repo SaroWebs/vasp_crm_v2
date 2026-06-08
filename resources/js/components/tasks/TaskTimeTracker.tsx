@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Text, Paper, Loader, Progress, Tooltip, ActionIcon } from '@mantine/core';
 import { Play, Pause, Square, SkipForward } from 'lucide-react';
-import { TimeEntry } from '@/types';
 import { useTimeTracking } from '@/context/TimeTrackingContext';
 import { OverdueWarningDialog } from './OverdueWarningDialog';
-import axios from 'axios';
-import { HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from '@/utils/workingHours';
+import { fetchWorkingHoursConfig, HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from '@/utils/workingHours';
 
 interface TaskTimeTrackerProps {
   taskId: number;
   taskState?: string;
   onTimeUpdate: () => void;
   onTaskAction?: (action: 'start' | 'resume' | 'pause' | 'end', taskId: number) => void;
+}
+
+interface WorkingTimeData {
+  total_working_time_spent?: number;
+  total_working_time_spent_hours?: number | string;
 }
 
 const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, onTimeUpdate, onTaskAction }) => {
@@ -42,7 +45,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     isActive: false
   });
 
-  const [workingTimeData, setWorkingTimeData] = useState<any>(null);
+  const [workingTimeData, setWorkingTimeData] = useState<WorkingTimeData | null>(null);
   const [localSecondsElapsed, setLocalSecondsElapsed] = useState(0);
   const [workingHoursConfig, setWorkingHoursConfig] = useState<WorkingHoursConfig | null>(null);
   const [holidaysConfig, setHolidaysConfig] = useState<HolidaysConfig | null>(null);
@@ -61,35 +64,20 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
   const taskTimeEntries = timeEntries.get(taskId) || [];
   const isMyTracking = Boolean(task?.my_is_tracking);
 
-  // Fetch working hours and holidays configuration
   useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await axios.get('/api/working-hours-config');
-        setWorkingHoursConfig(response.data.data.working_hours);
-        setHolidaysConfig(response.data.data.holidays);
-        setConfigLoaded(true);
-      } catch (err) {
-        console.error('Failed to fetch working hours configuration:', err);
-        // Fallback to default config if API fails
-        setWorkingHoursConfig({
-          workdays: [
-            { day: 'monday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-            { day: 'tuesday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-            { day: 'wednesday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-            { day: 'thursday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-            { day: 'friday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
-            { day: 'saturday', start: '09:00', end: '14:00', break_start: '', break_end: '' },
-            { day: 'sunday', start: '', end: '', break_start: '', break_end: '' }
-          ],
-          timezone: 'Asia/Calcutta'
-        });
-        setHolidaysConfig({ holidays: [], year: new Date().getFullYear() });
+    let isMounted = true;
+
+    fetchWorkingHoursConfig().then((config) => {
+      if (isMounted) {
+        setWorkingHoursConfig(config.working_hours);
+        setHolidaysConfig(config.holidays);
         setConfigLoaded(true);
       }
-    };
+    });
 
-    fetchConfig();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const isWorkingTime = () => {

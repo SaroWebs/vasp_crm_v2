@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 export interface WorkingHoursDayConfig {
     day: string;
     start: string;
@@ -19,6 +21,58 @@ export interface HolidaysConfig {
     }>;
     year: number;
 }
+
+export interface WorkingHoursConfigPayload {
+    working_hours: WorkingHoursConfig;
+    holidays: HolidaysConfig;
+}
+
+let cachedWorkingHoursConfig: WorkingHoursConfigPayload | null = null;
+let pendingWorkingHoursConfigRequest: Promise<WorkingHoursConfigPayload> | null = null;
+
+export const getDefaultWorkingHoursConfigPayload = (): WorkingHoursConfigPayload => ({
+    working_hours: {
+        workdays: [
+            { day: 'monday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
+            { day: 'tuesday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
+            { day: 'wednesday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
+            { day: 'thursday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
+            { day: 'friday', start: '09:00', end: '19:00', break_start: '', break_end: '' },
+            { day: 'saturday', start: '09:00', end: '14:00', break_start: '', break_end: '' },
+            { day: 'sunday', start: '', end: '', break_start: '', break_end: '' },
+        ],
+        timezone: 'Asia/Calcutta',
+    },
+    holidays: { holidays: [], year: new Date().getFullYear() },
+});
+
+export const fetchWorkingHoursConfig = async (): Promise<WorkingHoursConfigPayload> => {
+    if (cachedWorkingHoursConfig) {
+        return cachedWorkingHoursConfig;
+    }
+
+    if (pendingWorkingHoursConfigRequest) {
+        return pendingWorkingHoursConfigRequest;
+    }
+
+    pendingWorkingHoursConfigRequest = axios
+        .get('/api/working-hours-config')
+        .then((response) => {
+            cachedWorkingHoursConfig = response.data.data;
+
+            return cachedWorkingHoursConfig as WorkingHoursConfigPayload;
+        })
+        .catch(() => {
+            cachedWorkingHoursConfig = getDefaultWorkingHoursConfigPayload();
+
+            return cachedWorkingHoursConfig;
+        })
+        .finally(() => {
+            pendingWorkingHoursConfigRequest = null;
+        });
+
+    return pendingWorkingHoursConfigRequest;
+};
 
 const getZonedDateParts = (date: Date, timeZone: string): {
     weekday: string;

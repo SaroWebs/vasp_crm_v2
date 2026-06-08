@@ -7,11 +7,29 @@ import { Task } from '@/types';
 import TaskCreateDrawer from './TaskCreateDrawer';
 import TaskCard from './TaskCard';
 import { useTimeTracking } from '@/context/TimeTrackingContext';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface BoardProps {
   tasks: Task[];
   loadTasks: () => void;
+  isLoading?: boolean;
 }
+
+const getBoardGroup = (status?: string | null) => {
+  if (status === 'Draft' || status === 'Assigned') {
+    return 'Pending';
+  }
+
+  if (status === 'InProgress' || status === 'Blocked' || status === 'InReview') {
+    return 'Active';
+  }
+
+  if (status === 'Done' || status === 'Cancelled' || status === 'Rejected') {
+    return 'Completed';
+  }
+
+  return status ?? '';
+};
 
 const TaskColumn: React.FC<{
   status: string;
@@ -68,7 +86,9 @@ const TaskColumn: React.FC<{
 
   return (
     <div
-      ref={drop as any}
+      ref={(node) => {
+        drop(node);
+      }}
       className={`${color} p-4 rounded-lg ${isOver ? 'bg-gray-100' : ''}`}
     >
       <h3 className="font-semibold mb-2">{displayName}</h3>
@@ -88,19 +108,66 @@ const TaskColumn: React.FC<{
   );
 };
 
-const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks }) => {
+function BoardSkeleton() {
+  const columns = ['Pending', 'Active', 'Completed'];
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md mt-6">
+      <div className="flex justify-between items-center mb-4">
+        <Skeleton className="h-7 w-32" />
+        <Skeleton className="h-10 w-36" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {columns.map((column) => (
+          <div key={column} className="rounded-lg bg-gray-100 p-4">
+            <Skeleton className="mb-3 h-5 w-24" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="rounded-lg border bg-white p-3 shadow-sm">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <Skeleton className="mb-2 h-2 w-full" />
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-24" />
+                    <div className="flex gap-2">
+                      <Skeleton className="h-9 w-9 rounded-md" />
+                      <Skeleton className="h-9 w-9 rounded-md" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = false }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { activeTaskId, handleTaskStatusChange } = useTimeTracking();
 
   const moveTask = (taskId: number, newStatus: string) => {
+    const task = tasks.find((task) => task.id === taskId);
+
+    if (!task || getBoardGroup(task.state) === getBoardGroup(newStatus)) {
+      return;
+    }
+
     setLoading(true);
     axios.patch(`/data/tasks/${taskId}/status`, { state: newStatus })
       .then(async () => {
         await handleTaskStatusChange(taskId, newStatus);
         loadTasks();
       })
-      .catch((e) => {
+      .catch(() => {
         setError('Failed to update task status');
       })
       .finally(() => {
@@ -108,7 +175,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks }) => {
       });
   };
 
-  const handleTaskAction = async (action: 'start' | 'resume' | 'pause' | 'end', taskId: number) => {
+  const handleTaskAction = async () => {
     loadTasks();
   };
 
@@ -139,8 +206,8 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks }) => {
     loadTasks();
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (loading || isLoading) {
+    return <BoardSkeleton />;
   }
 
   if (error) {
@@ -190,5 +257,3 @@ const Board: React.FC<BoardProps> = (props) => {
 };
 
 export default Board;
-
-

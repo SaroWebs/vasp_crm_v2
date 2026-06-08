@@ -1,5 +1,5 @@
 ﻿import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { Auth, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import AdminDashboard from '@/components/dashboard/AdminDashboard';
 import EmployeeDashboard from '@/components/dashboard/EmployeeDashboard';
@@ -12,26 +12,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 interface DashboardProps {
-    dashboard_type: 'admin' | 'manager' | 'employee';
-    auth: { user?: { id?: number } } | null;
-    employees?: Array<{
-        id: number;
-        name: string;
-        email?: string;
-    }>;
-    unreadNotifications?: number;
+    dashboard_type?: 'admin' | 'manager' | 'employee';
+    auth?: Auth;
     ticketStats?: Record<string, number>;
     taskStats?: Record<string, number>;
-    userPermissions?: string[];
-    // Manager specific
-    myDepartmentTasks?: Array<Record<string, unknown>>;
-    teamWorkload?: Array<Record<string, unknown>>;
-    departmentStats?: Array<Record<string, unknown>>;
-    // Employee specific
-    myTaskStats?: Record<string, number>;
-    forwardedTasks?: Array<Record<string, unknown>>;
-    upcomingDeadlines?: Array<Record<string, unknown>>;
-    unreadNotificationsList?: Array<Record<string, unknown>>;
 }
 
 export default function Dashboard(props: DashboardProps) {
@@ -39,7 +23,7 @@ export default function Dashboard(props: DashboardProps) {
         dashboard_type,
         ticketStats,
         taskStats,
-        auth,
+        auth=null,
     } = props;
 
     return (
