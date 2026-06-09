@@ -534,6 +534,7 @@ class AttendanceController extends Controller
         $employees = Employee::query()
             ->select(['id', 'name', 'code', 'department_id'])
             ->with('department:id,name')
+            ->where('status', 'active')
             ->orderBy('name')
             ->get();
 
@@ -1325,11 +1326,7 @@ class AttendanceController extends Controller
         }
 
         // ── 3. Collapse consecutive same-direction typed events (MachineId 1 & 3) ─
-        //
-        //  Consecutive INs  → keep the FIRST  (earliest entry)
-        //  Consecutive OUTs → keep the LAST   (latest exit)
-        //  "combined" events pass through untouched; position-resolved next.
-        //
+        
         $collapsed = [];
         $lastDir = null;
 
@@ -1356,12 +1353,7 @@ class AttendanceController extends Controller
         }
 
         // ── 4. Position-resolve "combined" machine events ─────────────────────────
-        //
-        //  index 0     → in
-        //  index N-1   → out
-        //  middle odd  → out (break_out)
-        //  middle even → in  (break_in)
-        //
+        
         $total = count($collapsed);
         $resolved = [];
 
@@ -1391,13 +1383,7 @@ class AttendanceController extends Controller
         }
 
         // ── 5. Extract punch_in, punch_out, and breaks ────────────────────────────
-        //
-        //  index 0       → punch_in
-        //  index N-1     → punch_out   (only when N >= 2)
-        //  index 1…N-2   → middle events → break pairs (only when N >= 4)
-        //
-        //  N == 2 or N == 3: $breaks stays [] — no complete middle pair exists.
-        //
+        
         $resolvedCount = count($resolved);
         $punchIn = $resolved[0]['time'];
         $punchOut = null;

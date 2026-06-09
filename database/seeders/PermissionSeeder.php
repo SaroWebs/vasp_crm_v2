@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Permission;
 use App\Models\Role;
+use Illuminate\Database\Seeder;
 
 class PermissionSeeder extends Seeder
 {
@@ -20,25 +20,25 @@ class PermissionSeeder extends Seeder
             ['name' => 'Read Task', 'slug' => 'task.read', 'module' => 'task', 'action' => 'read'],
             ['name' => 'Update Task', 'slug' => 'task.update', 'module' => 'task', 'action' => 'update'],
             ['name' => 'Delete Task', 'slug' => 'task.delete', 'module' => 'task', 'action' => 'delete'],
-            
+
             // Ticket permissions
             ['name' => 'Create Ticket', 'slug' => 'ticket.create', 'module' => 'ticket', 'action' => 'create'],
             ['name' => 'Read Ticket', 'slug' => 'ticket.read', 'module' => 'ticket', 'action' => 'read'],
             ['name' => 'Update Ticket', 'slug' => 'ticket.update', 'module' => 'ticket', 'action' => 'update'],
             ['name' => 'Delete Ticket', 'slug' => 'ticket.delete', 'module' => 'ticket', 'action' => 'delete'],
-            
+
             // User management permissions
             ['name' => 'Create User', 'slug' => 'user.create', 'module' => 'user', 'action' => 'create'],
             ['name' => 'Read User', 'slug' => 'user.read', 'module' => 'user', 'action' => 'read'],
             ['name' => 'Update User', 'slug' => 'user.update', 'module' => 'user', 'action' => 'update'],
             ['name' => 'Delete User', 'slug' => 'user.delete', 'module' => 'user', 'action' => 'delete'],
-            
+
             // Role management permissions
             ['name' => 'Create Role', 'slug' => 'role.create', 'module' => 'role', 'action' => 'create'],
             ['name' => 'Read Role', 'slug' => 'role.read', 'module' => 'role', 'action' => 'read'],
             ['name' => 'Update Role', 'slug' => 'role.update', 'module' => 'role', 'action' => 'update'],
             ['name' => 'Delete Role', 'slug' => 'role.delete', 'module' => 'role', 'action' => 'delete'],
-            
+
             // Department permissions
             ['name' => 'Create Department', 'slug' => 'department.create', 'module' => 'department', 'action' => 'create'],
             ['name' => 'Read Department', 'slug' => 'department.read', 'module' => 'department', 'action' => 'read'],
@@ -56,6 +56,16 @@ class PermissionSeeder extends Seeder
             ['name' => 'Read Client', 'slug' => 'client.read', 'module' => 'client', 'action' => 'read'],
             ['name' => 'Update Client', 'slug' => 'client.update', 'module' => 'client', 'action' => 'update'],
             ['name' => 'Delete Client', 'slug' => 'client.delete', 'module' => 'client', 'action' => 'delete'],
+
+            // Sales lead permissions
+            ['name' => 'Create Sales Lead', 'slug' => 'sales-lead.create', 'module' => 'sales-lead', 'action' => 'create'],
+            ['name' => 'Read Sales Lead', 'slug' => 'sales-lead.read', 'module' => 'sales-lead', 'action' => 'read'],
+            ['name' => 'Update Sales Lead', 'slug' => 'sales-lead.update', 'module' => 'sales-lead', 'action' => 'update'],
+            ['name' => 'Delete Sales Lead', 'slug' => 'sales-lead.delete', 'module' => 'sales-lead', 'action' => 'delete'],
+            ['name' => 'View All Sales Leads', 'slug' => 'sales-lead.view_all', 'module' => 'sales-lead', 'action' => 'view_all'],
+            ['name' => 'Assign Sales Lead', 'slug' => 'sales-lead.assign', 'module' => 'sales-lead', 'action' => 'assign'],
+            ['name' => 'Create Sales Lead Activity', 'slug' => 'sales-lead-activity.create', 'module' => 'sales-lead-activity', 'action' => 'create'],
+            ['name' => 'Read Sales Lead Activity', 'slug' => 'sales-lead-activity.read', 'module' => 'sales-lead-activity', 'action' => 'read'],
 
             // Employee permissions
             ['name' => 'Create Employee', 'slug' => 'employee.create', 'module' => 'employee', 'action' => 'create'],
@@ -309,11 +319,18 @@ class PermissionSeeder extends Seeder
                 'level' => 1,
                 'is_default' => true,
             ],
+            [
+                'name' => 'Sales',
+                'slug' => 'sales',
+                'description' => 'Sales employee with own lead generation and follow-up permissions',
+                'level' => 1,
+                'is_default' => false,
+            ],
         ];
 
         foreach ($roles as $roleData) {
             $role = Role::firstOrCreate(['slug' => $roleData['slug']], $roleData);
-            
+
             // Assign permissions to roles
             switch ($role->slug) {
                 case 'super-admin':
@@ -321,14 +338,14 @@ class PermissionSeeder extends Seeder
                     $allPermissions = Permission::all();
                     $role->permissions()->sync($allPermissions->pluck('id'));
                     break;
-                    
+
                 case 'manager':
                     // Manager gets all task and ticket permissions including route-specific ones
-                    $managerPermissions = Permission::whereIn('module', ['task', 'ticket', 'department', 'user', 'product', 'client', 'employee', 'task-history', 'task-dependency', 'task-forwarding', 'task-comment', 'task-attachment', 'comment-attachment', 'ticket-comment', 'ticket-attachment', 'ticket-history', 'timeline-event', 'activity-log', 'notification', 'dashboard', 'task-time-entry', 'task-audit-event', 'workload-metric', 'user-skill', 'sla-policy', 'project', 'project-team', 'task-type'])
-                        ->orWhere(function($query) {
+                    $managerPermissions = Permission::whereIn('module', ['task', 'ticket', 'department', 'user', 'product', 'client', 'sales-lead', 'sales-lead-activity', 'employee', 'task-history', 'task-dependency', 'task-forwarding', 'task-comment', 'task-attachment', 'comment-attachment', 'ticket-comment', 'ticket-attachment', 'ticket-history', 'timeline-event', 'activity-log', 'notification', 'dashboard', 'task-time-entry', 'task-audit-event', 'workload-metric', 'user-skill', 'sla-policy', 'project', 'project-team', 'task-type'])
+                        ->orWhere(function ($query) {
                             $query->where('module', 'role')->whereIn('action', ['read', 'update']);
                         })
-                        ->orWhere(function($query) {
+                        ->orWhere(function ($query) {
                             // Include route-specific permissions for managers
                             $query->whereIn('slug', [
                                 'client.restore',
@@ -358,7 +375,7 @@ class PermissionSeeder extends Seeder
                                 'user.bulk-manage-permissions',
                                 'employee.update-roles',
                                 'task.start',
-                                 'task.pause',
+                                'task.pause',
                                 'task.resume',
                                 'task.end',
                                 'task.calculate-time-spent',
@@ -414,13 +431,13 @@ class PermissionSeeder extends Seeder
                                 'timeline-event.get-statistics',
                                 'activity-log.get-statistics',
                                 'notification.get-statistics',
-                                'dashboard.get-statistics'
+                                'dashboard.get-statistics',
                             ]);
                         })
                         ->get();
                     $role->permissions()->sync($managerPermissions->pluck('id'));
                     break;
-                    
+
                 case 'employee':
                     // Employee gets basic task permissions including some route-specific ones and own task management
                     $employeePermissions = Permission::whereIn('slug', [
@@ -488,9 +505,22 @@ class PermissionSeeder extends Seeder
                         'task-dependency.update-own',
                         'task-forwarding.view-own',
                         'task-forwarding.accept-own',
-                        'task-forwarding.reject-own'
+                        'task-forwarding.reject-own',
                     ])->get();
                     $role->permissions()->sync($employeePermissions->pluck('id'));
+                    break;
+
+                case 'sales':
+                    $salesPermissions = Permission::whereIn('slug', [
+                        'dashboard.read',
+                        'product.read',
+                        'sales-lead.create',
+                        'sales-lead.read',
+                        'sales-lead.update',
+                        'sales-lead-activity.create',
+                        'sales-lead-activity.read',
+                    ])->get();
+                    $role->permissions()->sync($salesPermissions->pluck('id'));
                     break;
             }
         }

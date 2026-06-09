@@ -371,6 +371,7 @@ class Notification extends DatabaseNotification
             'report_id' => [Report::class, '/admin/reports/%s', 'report'],
             'user_id' => [User::class, '/admin/users/%s', 'user'],
             'employee_id' => [Employee::class, '/admin/employees/%s', 'employee'],
+            'sales_lead_id' => [SalesLead::class, '/admin/sales-leads/%s', 'sales_lead'],
         ];
     }
 

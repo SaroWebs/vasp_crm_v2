@@ -200,10 +200,10 @@ const adminNavGroups: NavGroup[] = [
                 menuKey: 'tasks.my-attendance',
             },
             {
-                title: 'Sales CRM',
+                title: 'Sales Leads',
                 href: '/my/sales-leads',
                 icon: Handshake,
-                roles: ['sales', 'admin'],
+                roles: ['sales', 'bda', 'admin', 'super-admin'],
                 menuKey: 'tasks.my-sales-leads',
             },
         ],

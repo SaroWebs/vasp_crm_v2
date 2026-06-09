@@ -133,6 +133,18 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
     Route::middleware(['admin'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/sales-leads', [SalesLeadController::class, 'adminIndex'])->name('sales-leads.index');
+        Route::get('/data/sales-leads', [SalesLeadController::class, 'adminData'])->name('sales-leads.data');
+        Route::get('/data/sales-leads/report', [SalesLeadController::class, 'adminReport'])->name('sales-leads.report');
+        Route::get('/sales-leads/export', [SalesLeadController::class, 'adminExport'])->name('sales-leads.export');
+        Route::post('/sales-leads', [SalesLeadController::class, 'adminStore'])->name('sales-leads.store');
+        Route::get('/sales-leads/{salesLead}', [SalesLeadController::class, 'adminShow'])->name('sales-leads.show');
+        Route::patch('/sales-leads/{salesLead}', [SalesLeadController::class, 'adminUpdate'])->name('sales-leads.update');
+        Route::delete('/sales-leads/{salesLead}', [SalesLeadController::class, 'adminDestroy'])->name('sales-leads.destroy');
+        Route::post('/sales-leads/{salesLead}/convert', [SalesLeadController::class, 'adminConvert'])->name('sales-leads.convert');
+        Route::post('/sales-leads/{salesLead}/activities', [SalesLeadController::class, 'adminStoreActivity'])->name('sales-leads.activities.store');
+        Route::post('/sales-leads/{salesLead}/complete-follow-up', [SalesLeadController::class, 'adminCompleteFollowUp'])->name('sales-leads.follow-up.complete');
+        Route::post('/sales-leads/{salesLead}/close-deal', [SalesLeadController::class, 'adminCloseDeal'])->name('sales-leads.close-deal');
+        Route::post('/sales-leads/reminders/send', [SalesLeadController::class, 'adminSendReminders'])->name('sales-leads.reminders.send');
 
         // Dashboard API endpoints
         Route::get('/api/dashboard/stats', [AdminDashboardController::class, 'getStats'])->name('api.dashboard.stats');
@@ -554,6 +566,13 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     // My Attendance routes
     Route::get('/my/attendance', [AttendanceController::class, 'myAttendancePage'])->name('my.attendance');
     Route::get('/my/sales-leads', [SalesLeadController::class, 'myIndex'])->name('my.sales-leads.index');
+    Route::get('/data/my/sales-leads', [SalesLeadController::class, 'myData'])->name('my.sales-leads.data');
+    Route::post('/my/sales-leads', [SalesLeadController::class, 'myStore'])->name('my.sales-leads.store');
+    Route::get('/my/sales-leads/{salesLead}', [SalesLeadController::class, 'myShow'])->name('my.sales-leads.show');
+    Route::patch('/my/sales-leads/{salesLead}', [SalesLeadController::class, 'myUpdate'])->name('my.sales-leads.update');
+    Route::post('/my/sales-leads/{salesLead}/activities', [SalesLeadController::class, 'myStoreActivity'])->name('my.sales-leads.activities.store');
+    Route::post('/my/sales-leads/{salesLead}/complete-follow-up', [SalesLeadController::class, 'myCompleteFollowUp'])->name('my.sales-leads.follow-up.complete');
+    Route::post('/my/sales-leads/{salesLead}/close-deal', [SalesLeadController::class, 'myCloseDeal'])->name('my.sales-leads.close-deal');
 
     // My Task View route
     Route::get('/my/tasks/{task}', function ($taskId) {

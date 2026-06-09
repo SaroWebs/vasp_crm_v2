@@ -79,7 +79,8 @@ class UserController extends Controller
         $employees = Employee::with('user')
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');
-            })
+            })->where('status', 'active')
+             ->orderBy('name')
             ->get();
 
         $users = $employees->map(function ($employee) use ($matrix) {

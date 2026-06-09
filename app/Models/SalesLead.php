@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SalesLead extends Model
@@ -19,6 +20,8 @@ class SalesLead extends Model
         'product_id',
         'created_by_user_id',
         'updated_by_user_id',
+        'converted_client_id',
+        'converted_at',
         'organization_name',
         'organization_type',
         'contact_person_name',
@@ -40,6 +43,7 @@ class SalesLead extends Model
         return [
             'last_contacted_at' => 'datetime',
             'next_follow_up_at' => 'datetime',
+            'converted_at' => 'datetime',
         ];
     }
 
@@ -63,9 +67,19 @@ class SalesLead extends Model
         return $this->belongsTo(User::class, 'updated_by_user_id');
     }
 
+    public function convertedClient(): BelongsTo
+    {
+        return $this->belongsTo(Client::class, 'converted_client_id');
+    }
+
     public function activities(): HasMany
     {
         return $this->hasMany(SalesLeadActivity::class);
+    }
+
+    public function latestActivity(): HasOne
+    {
+        return $this->hasOne(SalesLeadActivity::class)->latestOfMany('activity_at');
     }
 
     public function scopeForOwner(Builder $query, int|User $owner): Builder
