@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use App\Models\Employee;
 use App\Models\Permission;
+use App\Models\User;
 use App\Services\WorkloadMatrixService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
@@ -80,7 +80,7 @@ class UserController extends Controller
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');
             })->where('status', 'active')
-             ->orderBy('name')
+            ->orderBy('name')
             ->get();
 
         $users = $employees->map(function ($employee) use ($matrix) {
@@ -106,7 +106,7 @@ class UserController extends Controller
         ])->values();
 
         return response()->json([
-            'users' => $users
+            'users' => $users,
         ]);
     }
 
@@ -124,7 +124,7 @@ class UserController extends Controller
     public function edit(User $user)
     {
         $user->load(['roles', 'permissions', 'deniedPermissions']);
-        
+
         return Inertia::render('admin/users/Edit', [
             'user' => [
                 'id' => $user->id,
@@ -204,6 +204,7 @@ class UserController extends Controller
             return response()->json(['message' => 'User created successfully', 'user' => $user]);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to create user'], 500);
         }
     }
@@ -215,7 +216,7 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
+            'email' => 'required|string|email|max:255|unique:users,email,'.$user->id,
             'password' => 'nullable|string|min:8|confirmed',
         ]);
 
@@ -233,6 +234,7 @@ class UserController extends Controller
             return response()->json(['message' => 'User updated successfully']);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to update user'], 500);
         }
     }
@@ -275,6 +277,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Roles assigned successfully']);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to assign roles'], 500);
         }
     }
@@ -299,6 +302,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Permission granted successfully']);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to grant permission'], 500);
         }
     }
@@ -323,6 +327,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Permission denied successfully']);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to deny permission'], 500);
         }
     }
@@ -347,6 +352,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Permission revoked successfully']);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to revoke permission'], 500);
         }
     }
@@ -397,6 +403,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Permissions updated successfully']);
         } catch (\Exception $e) {
             DB::rollback();
+
             return response()->json(['message' => 'Failed to update permissions'], 500);
         }
     }

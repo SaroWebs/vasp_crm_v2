@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ExportTicketsRequest;
 use App\Models\Client;
 use App\Models\Notification;
 use App\Models\OrganizationUser;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminTicketController extends Controller
 {
@@ -200,6 +202,7 @@ class AdminTicketController extends Controller
             ],
             'clients' => $clients,
             'stats' => $stats,
+            'userPermissions' => Auth::user()?->getAllPermissions()->pluck('slug')->toArray() ?? [],
         ]);
     }
 
@@ -994,6 +997,147 @@ class AdminTicketController extends Controller
         $tickets = $query->latest('created_at')->paginate(15);
 
         return response()->json($tickets, 200);
+    }
+
+    /**
+     * Export tickets as CSV.
+     */
+    public function exportTickets(ExportTicketsRequest $request): StreamedResponse
+    {
+        $validated = $request->validated();
+        $startDate = Carbon::parse($validated['start_date'])->startOfDay();
+        $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+
+        $query = Ticket::withTrashed()
+            ->with([
+                'client:id,name',
+                'assignedTo:id,name',
+                'createdBy:id,name',
+            ])
+            ->withCount(['tasks', 'comments', 'attachments'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereIn('status', $validated['statuses']);
+
+        if (! empty($validated['client_id'])) {
+            $query->where('client_id', $validated['client_id']);
+        }
+
+        if (! empty($validated['priority'])) {
+            $query->where('priority', $validated['priority']);
+        }
+
+        if (! empty($validated['search'])) {
+            $searchTerm = $validated['search'];
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('title', 'like', "%{$searchTerm}%")
+                    ->orWhere('ticket_number', 'like', "%{$searchTerm}%")
+                    ->orWhere('description', 'like', "%{$searchTerm}%")
+                    ->orWhereHas('client', function ($clientQuery) use ($searchTerm) {
+                        $clientQuery->where('name', 'like', "%{$searchTerm}%");
+                    });
+            });
+        }
+
+        $tickets = $query
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $statusCounts = collect($validated['statuses'])
+            ->mapWithKeys(fn (string $status): array => [
+                $status => $tickets->where('status', $status)->count(),
+            ]);
+        $priorityCounts = collect(['low', 'medium', 'high', 'critical'])
+            ->mapWithKeys(fn (string $priority): array => [
+                $priority => $tickets->where('priority', $priority)->count(),
+            ]);
+        $summary = [
+            'total_tickets' => $tickets->count(),
+            'unique_clients' => $tickets->pluck('client_id')->filter()->unique()->count(),
+            'assigned_tickets' => $tickets->whereNotNull('assigned_to')->count(),
+            'unassigned_tickets' => $tickets->whereNull('assigned_to')->count(),
+        ];
+
+        $columnDefinitions = [
+            'ticket_number' => ['Ticket Number', fn (Ticket $ticket): string => $ticket->ticket_number],
+            'title' => ['Title', fn (Ticket $ticket): string => $ticket->title],
+            'client' => ['Client', fn (Ticket $ticket): string => $ticket->client?->name ?? 'Unknown'],
+            'description' => ['Description', fn (Ticket $ticket): string => $ticket->description ?? ''],
+            'category' => ['Category', fn (Ticket $ticket): string => Str::headline($ticket->category ?? '')],
+            'priority' => ['Priority', fn (Ticket $ticket): string => Str::headline($ticket->priority)],
+            'status' => ['Status', fn (Ticket $ticket): string => Str::headline($ticket->status)],
+            'assigned_to' => ['Assigned To', fn (Ticket $ticket): string => $ticket->assignedTo?->name ?? 'Unassigned'],
+            'created_by' => ['Created By', fn (Ticket $ticket): string => $ticket->createdBy?->name ?? 'Unknown'],
+            'created_at' => ['Created At', fn (Ticket $ticket): string => $ticket->created_at?->toDateTimeString() ?? ''],
+            'tasks_count' => ['Tasks Count', fn (Ticket $ticket): int => $ticket->tasks_count],
+            'comments_count' => ['Comments Count', fn (Ticket $ticket): int => $ticket->comments_count],
+            'attachments_count' => ['Attachments Count', fn (Ticket $ticket): int => $ticket->attachments_count],
+        ];
+        $selectedColumns = collect($validated['columns'])
+            ->mapWithKeys(fn (string $column): array => [$column => $columnDefinitions[$column]]);
+
+        $filename = sprintf('consolidated_tickets_%s_to_%s.csv', $validated['start_date'], $validated['end_date']);
+
+        $headers = [
+            'Content-type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0',
+        ];
+
+        $callback = function () use ($tickets, $validated, $summary, $statusCounts, $priorityCounts, $selectedColumns): void {
+            $file = fopen('php://output', 'w');
+
+            fputcsv($file, ['Consolidated Tickets Report']);
+            fputcsv($file, ['Start Date', $validated['start_date']]);
+            fputcsv($file, ['End Date', $validated['end_date']]);
+            fputcsv($file, ['Selected Statuses', collect($validated['statuses'])->map(fn (string $status): string => Str::headline($status))->implode(', ')]);
+            fputcsv($file, ['Total Tickets', $summary['total_tickets']]);
+            fputcsv($file, ['Unique Clients', $summary['unique_clients']]);
+            fputcsv($file, ['Assigned Tickets', $summary['assigned_tickets']]);
+            fputcsv($file, ['Unassigned Tickets', $summary['unassigned_tickets']]);
+            fputcsv($file, []);
+
+            fputcsv($file, ['Tickets by Status']);
+            fputcsv($file, ['Status', 'Count']);
+            foreach ($statusCounts as $status => $count) {
+                fputcsv($file, [Str::headline($status), $count]);
+            }
+
+            fputcsv($file, []);
+            fputcsv($file, ['Tickets by Priority']);
+            fputcsv($file, ['Priority', 'Count']);
+            foreach ($priorityCounts as $priority => $count) {
+                fputcsv($file, [Str::headline($priority), $count]);
+            }
+
+            fputcsv($file, []);
+            fputcsv($file, ['Ticket Details']);
+            fputcsv($file, $selectedColumns->pluck(0)->all());
+
+            foreach ($tickets as $ticket) {
+                $row = $selectedColumns
+                    ->map(fn (array $definition) => $definition[1]($ticket))
+                    ->map(fn (mixed $value): mixed => is_string($value) ? $this->sanitizeCsvValue($value) : $value)
+                    ->all();
+
+                fputcsv($file, $row);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function sanitizeCsvValue(string $value): string
+    {
+        if (preg_match('/^[=+\-@]/', ltrim($value)) === 1) {
+            return "'".$value;
+        }
+
+        return $value;
     }
 
     /**

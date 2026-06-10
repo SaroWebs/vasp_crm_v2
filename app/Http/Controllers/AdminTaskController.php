@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ExportTasksRequest;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectPhase;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminTaskController extends Controller
 {
@@ -60,6 +62,7 @@ class AdminTaskController extends Controller
             'filters' => $filters,
             'users' => $users,
             'departments' => $departments,
+            'userPermissions' => Auth::user()?->getAllPermissions()->pluck('slug')->toArray() ?? [],
         ]);
     }
 
@@ -1461,6 +1464,176 @@ class AdminTaskController extends Controller
         return response()->json([
             'tasks' => $tasks,
         ]);
+    }
+
+    /**
+     * Export tasks as CSV.
+     */
+    public function exportTasks(ExportTasksRequest $request): StreamedResponse
+    {
+        $validated = $request->validated();
+        $startDate = Carbon::parse($validated['start_date'])->startOfDay();
+        $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+
+        $query = Task::withTrashed()
+            ->with([
+                'ticket:id,ticket_number,title',
+                'ticket.client:id,name',
+                'taskType:id,name,code',
+                'slaPolicy:id,name,priority',
+                'assignedUsers:id,name,email',
+                'assignedDepartment:id,name',
+                'createdBy:id,name',
+            ])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereIn('state', $validated['states']);
+
+        if (! empty($validated['priority'])) {
+            $query->whereHas('slaPolicy', function ($q) use ($validated) {
+                $q->where('priority', $validated['priority']);
+            });
+        }
+
+        if (! empty($validated['assigned_to'])) {
+            $query->whereHas('assignedUsers', function ($q) use ($validated) {
+                $q->where('user_id', $validated['assigned_to']);
+            });
+        }
+
+        if (! empty($validated['search'])) {
+            $searchTerm = $validated['search'];
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('title', 'like', "%{$searchTerm}%")
+                    ->orWhere('task_code', 'like', "%{$searchTerm}%")
+                    ->orWhere('description', 'like', "%{$searchTerm}%")
+                    ->orWhereHas('createdBy', function ($userQuery) use ($searchTerm) {
+                        $userQuery->where('name', 'like', "%{$searchTerm}%");
+                    })
+                    ->orWhereHas('ticket', function ($ticketQuery) use ($searchTerm) {
+                        $ticketQuery->where('title', 'like', "%{$searchTerm}%")
+                            ->orWhere('ticket_number', 'like', "%{$searchTerm}%");
+                    })
+                    ->orWhereHas('taskType', function ($taskTypeQuery) use ($searchTerm) {
+                        $taskTypeQuery->where('name', 'like', "%{$searchTerm}%")
+                            ->orWhere('code', 'like', "%{$searchTerm}%");
+                    });
+            });
+        }
+
+        $tasks = $query
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $stateCounts = collect($validated['states'])
+            ->mapWithKeys(fn (string $state): array => [
+                $state => $tasks->where('state', $state)->count(),
+            ]);
+        $priorityCounts = collect(['P1', 'P2', 'P3', 'P4'])
+            ->mapWithKeys(fn (string $priority): array => [
+                $priority => $tasks->filter(
+                    fn (Task $task): bool => $task->slaPolicy?->priority === $priority
+                )->count(),
+            ]);
+        $summary = [
+            'total_tasks' => $tasks->count(),
+            'unique_assignees' => $tasks->flatMap(
+                fn (Task $task) => $task->assignedUsers->pluck('id')
+            )->unique()->count(),
+            'assigned_tasks' => $tasks->filter(
+                fn (Task $task): bool => $task->assignedUsers->isNotEmpty()
+            )->count(),
+            'unassigned_tasks' => $tasks->filter(
+                fn (Task $task): bool => $task->assignedUsers->isEmpty()
+            )->count(),
+            'estimated_hours' => round((float) $tasks->sum('estimate_hours'), 2),
+        ];
+
+        $columnDefinitions = [
+            'task_code' => ['Task Code', fn (Task $task): string => $task->task_code],
+            'title' => ['Title', fn (Task $task): string => $task->title ?? ''],
+            'ticket' => ['Ticket', fn (Task $task): string => $task->ticket?->ticket_number ?? ''],
+            'client' => ['Client', fn (Task $task): string => $task->ticket?->client?->name ?? ''],
+            'description' => ['Description', fn (Task $task): string => $task->description ?? ''],
+            'type' => ['Type', fn (Task $task): string => $task->taskType?->name ?? ''],
+            'priority' => ['Priority', fn (Task $task): string => $task->slaPolicy?->priority ?? ''],
+            'state' => ['State', fn (Task $task): string => Str::headline($task->state)],
+            'assigned_to' => ['Assigned To', fn (Task $task): string => $task->assignedUsers->pluck('name')->implode(', ') ?: 'Unassigned'],
+            'department' => ['Department', fn (Task $task): string => $task->assignedDepartment?->name ?? ''],
+            'start_at' => ['Start At', fn (Task $task): string => $task->start_at?->toDateTimeString() ?? ''],
+            'due_at' => ['Due At', fn (Task $task): string => $task->due_at?->toDateTimeString() ?? ''],
+            'completed_at' => ['Completed At', fn (Task $task): string => $task->completed_at?->toDateTimeString() ?? ''],
+            'estimate_hours' => ['Estimate Hours', fn (Task $task): string => $task->estimate_hours ?? ''],
+            'created_by' => ['Created By', fn (Task $task): string => $task->createdBy?->name ?? 'Unknown'],
+            'created_at' => ['Created At', fn (Task $task): string => $task->created_at?->toDateTimeString() ?? ''],
+            'completion_notes' => ['Completion Notes', fn (Task $task): string => $task->completion_notes ?? ''],
+        ];
+        $selectedColumns = collect($validated['columns'])
+            ->mapWithKeys(fn (string $column): array => [$column => $columnDefinitions[$column]]);
+
+        $filename = sprintf('consolidated_tasks_%s_to_%s.csv', $validated['start_date'], $validated['end_date']);
+
+        $headers = [
+            'Content-type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0',
+        ];
+
+        $callback = function () use ($tasks, $validated, $summary, $stateCounts, $priorityCounts, $selectedColumns): void {
+            $file = fopen('php://output', 'w');
+
+            fputcsv($file, ['Consolidated Tasks Report']);
+            fputcsv($file, ['Start Date', $validated['start_date']]);
+            fputcsv($file, ['End Date', $validated['end_date']]);
+            fputcsv($file, ['Selected States', collect($validated['states'])->map(fn (string $state): string => Str::headline($state))->implode(', ')]);
+            fputcsv($file, ['Total Tasks', $summary['total_tasks']]);
+            fputcsv($file, ['Unique Assignees', $summary['unique_assignees']]);
+            fputcsv($file, ['Assigned Tasks', $summary['assigned_tasks']]);
+            fputcsv($file, ['Unassigned Tasks', $summary['unassigned_tasks']]);
+            fputcsv($file, ['Total Estimated Hours', $summary['estimated_hours']]);
+            fputcsv($file, []);
+
+            fputcsv($file, ['Tasks by State']);
+            fputcsv($file, ['State', 'Count']);
+            foreach ($stateCounts as $state => $count) {
+                fputcsv($file, [Str::headline($state), $count]);
+            }
+
+            fputcsv($file, []);
+            fputcsv($file, ['Tasks by Priority']);
+            fputcsv($file, ['Priority', 'Count']);
+            foreach ($priorityCounts as $priority => $count) {
+                fputcsv($file, [$priority, $count]);
+            }
+
+            fputcsv($file, []);
+            fputcsv($file, ['Task Details']);
+            fputcsv($file, $selectedColumns->pluck(0)->all());
+
+            foreach ($tasks as $task) {
+                $row = $selectedColumns
+                    ->map(fn (array $definition) => $definition[1]($task))
+                    ->map(fn (mixed $value): mixed => is_string($value) ? $this->sanitizeTaskCsvValue($value) : $value)
+                    ->all();
+
+                fputcsv($file, $row);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function sanitizeTaskCsvValue(string $value): string
+    {
+        if (preg_match('/^[=+\-@]/', ltrim($value)) === 1) {
+            return "'".$value;
+        }
+
+        return $value;
     }
 
     /**

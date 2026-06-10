@@ -257,6 +257,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
 
         // Ticket routes (used in frontend)
         Route::get('/tickets', [AdminTicketController::class, 'index']);
+        Route::get('/tickets/export', [AdminTicketController::class, 'exportTickets'])->name('tickets.export');
         Route::get('/data/tickets/{ticket}', [AdminTicketController::class, 'getTicketData'])->name('tickets.data');
         Route::post('/tickets', [AdminTicketController::class, 'store']);
         Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('tickets.show');
@@ -287,6 +288,8 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::get('/tickets/approval-queue', [AdminTicketController::class, 'getTicketsForApproval']);
         Route::patch('/tickets/{ticket}/status', [AdminTicketController::class, 'updateStatus']);
         Route::get('/tickets/{ticket}/check-tasks', [AdminTicketController::class, 'checkTaskStatus']);
+
+        Route::get('/tasks/export', [AdminTaskController::class, 'exportTasks'])->name('tasks.export');
 
         // Admin Task management routes (web pages)
         Route::get('/tasks', [AdminTaskController::class, 'index'])->name('tasks.admin.index');

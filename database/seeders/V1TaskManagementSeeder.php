@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class V1TaskManagementSeeder extends Seeder
 {
@@ -16,28 +15,27 @@ class V1TaskManagementSeeder extends Seeder
     {
         // Seed task types
         $this->seedTaskTypes();
-         
+
         // Seed SLA policies
         $this->seedSLAPolicies();
-         
+
         // Seed permissions
         $this->seedPermissions();
-         
+
         // Seed roles
         $this->seedRoles();
-         
+
         // Seed role permissions
         $this->seedRolePermissions();
-         
+
         // Seed departments
         $this->seedDepartments();
-         
+
         // Seed products
         $this->seedProducts();
-         
+
         // Seed default admin user
         $this->seedAdminUser();
-
 
     }
 
@@ -61,8 +59,8 @@ class V1TaskManagementSeeder extends Seeder
                         'Blocked' => ['InProgress', 'Cancelled'],
                         'InReview' => ['InProgress', 'Done', 'Cancelled'],
                         'Done' => [],
-                        'Cancelled' => []
-                    ]
+                        'Cancelled' => [],
+                    ],
                 ]),
                 'is_active' => true,
             ],
@@ -83,8 +81,8 @@ class V1TaskManagementSeeder extends Seeder
                         'Blocked' => ['InProgress', 'Cancelled'],
                         'InReview' => ['InProgress', 'Done', 'Cancelled'],
                         'Done' => [],
-                        'Cancelled' => []
-                    ]
+                        'Cancelled' => [],
+                    ],
                 ]),
                 'is_active' => true,
             ],
@@ -105,8 +103,8 @@ class V1TaskManagementSeeder extends Seeder
                         'Blocked' => ['InProgress', 'Cancelled'],
                         'InReview' => ['InProgress', 'Done', 'Cancelled'],
                         'Done' => [],
-                        'Cancelled' => []
-                    ]
+                        'Cancelled' => [],
+                    ],
                 ]),
                 'is_active' => true,
             ],
@@ -127,8 +125,8 @@ class V1TaskManagementSeeder extends Seeder
                         'Blocked' => ['InProgress', 'Cancelled'],
                         'InReview' => ['InProgress', 'Done', 'Cancelled'],
                         'Done' => [],
-                        'Cancelled' => []
-                    ]
+                        'Cancelled' => [],
+                    ],
                 ]),
                 'is_active' => true,
             ],
@@ -149,11 +147,11 @@ class V1TaskManagementSeeder extends Seeder
                         'Blocked' => ['InProgress', 'Cancelled'],
                         'InReview' => ['InProgress', 'Done', 'Cancelled'],
                         'Done' => [],
-                        'Cancelled' => []
-                    ]
+                        'Cancelled' => [],
+                    ],
                 ]),
                 'is_active' => true,
-            ]
+            ],
         ];
 
         foreach ($taskTypes as $taskType) {
@@ -168,7 +166,7 @@ class V1TaskManagementSeeder extends Seeder
     {
         // Get task type IDs first
         $taskTypes = DB::table('task_types')->pluck('id', 'code')->toArray();
-        
+
         $slaPolicies = [
             // Bugfix SLA Policies
             [
@@ -181,7 +179,7 @@ class V1TaskManagementSeeder extends Seeder
                 'review_time_minutes' => 240,       // 4 hours
                 'escalation_steps' => json_encode([
                     ['after_minutes' => 120, 'notify' => 'Team Lead'],
-                    ['after_minutes' => 360, 'notify' => 'Manager']
+                    ['after_minutes' => 360, 'notify' => 'Manager'],
                 ]),
                 'is_active' => true,
             ],
@@ -194,7 +192,7 @@ class V1TaskManagementSeeder extends Seeder
                 'resolution_time_minutes' => 2880,   // 2 days
                 'review_time_minutes' => 1440,       // 1 day
                 'escalation_steps' => json_encode([
-                    ['after_minutes' => 1440, 'notify' => 'Team Lead']
+                    ['after_minutes' => 1440, 'notify' => 'Team Lead'],
                 ]),
                 'is_active' => true,
             ],
@@ -231,7 +229,7 @@ class V1TaskManagementSeeder extends Seeder
                 'resolution_time_minutes' => 2880,   // 2 days
                 'review_time_minutes' => 1440,       // 1 day
                 'escalation_steps' => json_encode([
-                    ['after_minutes' => 1440, 'notify' => 'Project Manager']
+                    ['after_minutes' => 1440, 'notify' => 'Project Manager'],
                 ]),
                 'is_active' => true,
             ],
@@ -268,7 +266,7 @@ class V1TaskManagementSeeder extends Seeder
                 'resolution_time_minutes' => 1440,   // 1 day
                 'review_time_minutes' => 720,        // 12 hours
                 'escalation_steps' => json_encode([
-                    ['after_minutes' => 240, 'notify' => 'Support Manager']
+                    ['after_minutes' => 240, 'notify' => 'Support Manager'],
                 ]),
                 'is_active' => true,
             ],
@@ -341,7 +339,7 @@ class V1TaskManagementSeeder extends Seeder
                 'review_time_minutes' => 2880,       // 2 days
                 'escalation_steps' => json_encode([]),
                 'is_active' => true,
-            ]
+            ],
         ];
 
         foreach ($slaPolicies as $policy) {
@@ -380,6 +378,7 @@ class V1TaskManagementSeeder extends Seeder
             ['name' => 'Task.ViewOwn', 'slug' => 'task.view_own', 'module' => 'task', 'action' => 'view_own', 'description' => 'View own tasks'],
             ['name' => 'Task.ViewDepartment', 'slug' => 'task.view_department', 'module' => 'task', 'action' => 'view_department', 'description' => 'View department tasks'],
             ['name' => 'Task.ManageOthers', 'slug' => 'task.manage_others', 'module' => 'task', 'action' => 'manage_others', 'description' => 'Manage other users tasks'],
+            ['name' => 'Task.Export', 'slug' => 'task.export', 'module' => 'task', 'action' => 'export', 'description' => 'Export consolidated task reports'],
 
             // Ticket permissions
             ['name' => 'Ticket.Create', 'slug' => 'ticket.create', 'module' => 'ticket', 'action' => 'create', 'description' => 'Create new tickets'],
@@ -392,6 +391,7 @@ class V1TaskManagementSeeder extends Seeder
             ['name' => 'Ticket.ViewAll', 'slug' => 'ticket.view_all', 'module' => 'ticket', 'action' => 'view_all', 'description' => 'View all tickets'],
             ['name' => 'Ticket.ViewOwn', 'slug' => 'ticket.view_own', 'module' => 'ticket', 'action' => 'view_own', 'description' => 'View own tickets'],
             ['name' => 'Ticket.Manage', 'slug' => 'ticket.manage', 'module' => 'ticket', 'action' => 'manage', 'description' => 'Manage tickets'],
+            ['name' => 'Ticket.Export', 'slug' => 'ticket.export', 'module' => 'ticket', 'action' => 'export', 'description' => 'Export consolidated ticket reports'],
 
             // User permissions
             ['name' => 'User.Create', 'slug' => 'user.create', 'module' => 'user', 'action' => 'create', 'description' => 'Create new users'],
@@ -538,7 +538,7 @@ class V1TaskManagementSeeder extends Seeder
                 'description' => 'Support agent with ticket management permissions',
                 'is_default' => false,
                 'level' => 2,
-            ]
+            ],
         ];
 
         foreach ($roles as $role) {
@@ -553,7 +553,7 @@ class V1TaskManagementSeeder extends Seeder
     {
         // Super Admin - All permissions
         $superAdminId = DB::table('roles')->where('slug', 'super-admin')->value('id');
-        if (!$superAdminId) {
+        if (! $superAdminId) {
             // Roles are required for seeding role_permissions; skip to avoid null role_id inserts
             return;
         }
@@ -571,9 +571,9 @@ class V1TaskManagementSeeder extends Seeder
             'task.create', 'task.read', 'task.update', 'task.assign', 'task.reassign', 'task.change_priority', 'task.change_sla',
             'task.start', 'task.update_progress', 'task.block', 'task.unblock', 'task.request_review',
             'task.review_approve', 'task.review_reject', 'task.complete', 'task.cancel', 'task.view_all',
-            'task.view_own', 'task.view_department', 'task.manage_others',
+            'task.view_own', 'task.view_department', 'task.manage_others', 'task.export',
             'ticket.create', 'ticket.read', 'ticket.update', 'ticket.delete', 'ticket.assign', 'ticket.approve',
-            'ticket.reject', 'ticket.view_all', 'ticket.view_own', 'ticket.manage',
+            'ticket.reject', 'ticket.view_all', 'ticket.view_own', 'ticket.manage', 'ticket.export',
             'user.create', 'user.read', 'user.update', 'user.delete', 'user.manage_roles', 'user.manage_permissions',
             'employee.create', 'employee.read', 'employee.update', 'employee.delete',
             'department.create', 'department.read', 'department.update', 'department.delete', 'department.manage_users',
@@ -588,7 +588,7 @@ class V1TaskManagementSeeder extends Seeder
             'task_forwarding.create', 'task_forwarding.read', 'task_forwarding.update', 'task_forwarding.delete',
             'task_assignment.create', 'task_assignment.read', 'task_assignment.update', 'task_assignment.delete',
             'notification.read', 'notification.update', 'notification.delete',
-            'system.settings', 'system.maintenance'
+            'system.settings', 'system.maintenance',
         ];
         foreach ($adminPermissions as $permissionSlug) {
             $permissionId = DB::table('permissions')->where('slug', $permissionSlug)->value('id');
@@ -606,9 +606,9 @@ class V1TaskManagementSeeder extends Seeder
             'task.create', 'task.read', 'task.update', 'task.assign', 'task.reassign', 'task.change_priority', 'task.change_sla',
             'task.start', 'task.update_progress', 'task.block', 'task.unblock', 'task.request_review',
             'task.review_approve', 'task.review_reject', 'task.complete', 'task.cancel', 'task.view_all',
-            'task.view_own', 'task.view_department', 'task.manage_others',
+            'task.view_own', 'task.view_department', 'task.manage_others', 'task.export',
             'ticket.create', 'ticket.read', 'ticket.update', 'ticket.assign', 'ticket.approve',
-            'ticket.reject', 'ticket.view_all', 'ticket.view_own', 'ticket.manage',
+            'ticket.reject', 'ticket.view_all', 'ticket.view_own', 'ticket.manage', 'ticket.export',
             'user.read', 'user.update', 'user.manage_roles',
             'employee.read', 'employee.update',
             'department.read', 'department.update', 'department.manage_users',
@@ -623,7 +623,7 @@ class V1TaskManagementSeeder extends Seeder
             'task_forwarding.read',
             'task_assignment.read',
             'notification.read', 'notification.update',
-            'system.settings'
+            'system.settings',
         ];
         foreach ($managerPermissions as $permissionSlug) {
             $permissionId = DB::table('permissions')->where('slug', $permissionSlug)->value('id');
@@ -656,7 +656,7 @@ class V1TaskManagementSeeder extends Seeder
             'task_dependency.read',
             'task_forwarding.read',
             'task_assignment.read',
-            'notification.read', 'notification.update'
+            'notification.read', 'notification.update',
         ];
         foreach ($teamLeadPermissions as $permissionSlug) {
             $permissionId = DB::table('permissions')->where('slug', $permissionSlug)->value('id');
@@ -686,7 +686,7 @@ class V1TaskManagementSeeder extends Seeder
             'task_dependency.read', 'task_dependency.create', 'task_dependency.update',
             'task_forwarding.read', 'task_forwarding.create', 'task_forwarding.update',
             'task_assignment.read', 'task_assignment.create', 'task_assignment.update',
-            'notification.read', 'notification.update'
+            'notification.read', 'notification.update',
         ];
         foreach ($developerPermissions as $permissionSlug) {
             $permissionId = DB::table('permissions')->where('slug', $permissionSlug)->value('id');
@@ -717,7 +717,7 @@ class V1TaskManagementSeeder extends Seeder
             'task_dependency.read',
             'task_forwarding.read', 'task_forwarding.create', 'task_forwarding.update',
             'task_assignment.read', 'task_assignment.create', 'task_assignment.update',
-            'notification.read', 'notification.update'
+            'notification.read', 'notification.update',
         ];
         foreach ($supportAgentPermissions as $permissionSlug) {
             $permissionId = DB::table('permissions')->where('slug', $permissionSlug)->value('id');
@@ -753,7 +753,7 @@ class V1TaskManagementSeeder extends Seeder
                 'color' => '#10B981',
                 'sort_order' => 2,
                 'status' => 'active',
-            ]
+            ],
         ];
 
         foreach ($departments as $department) {
@@ -775,7 +775,7 @@ class V1TaskManagementSeeder extends Seeder
                 'metadata' => json_encode([
                     'category' => 'Education',
                     'features' => ['attendance', 'fees', 'exams', 'timetable'],
-                    'supported_modules' => ['core', 'hr', 'finance']
+                    'supported_modules' => ['core', 'hr', 'finance'],
                 ]),
             ],
             [
@@ -786,7 +786,7 @@ class V1TaskManagementSeeder extends Seeder
                 'metadata' => json_encode([
                     'category' => 'Education',
                     'features' => ['attendance', 'fees', 'exams', 'timetable'],
-                    'supported_modules' => ['core', 'hr', 'finance']
+                    'supported_modules' => ['core', 'hr', 'finance'],
                 ]),
             ],
             [
@@ -797,7 +797,7 @@ class V1TaskManagementSeeder extends Seeder
                 'metadata' => json_encode([
                     'category' => 'Enterprise',
                     'features' => ['inventory', 'finance'],
-                    'supported_modules' => ['all']
+                    'supported_modules' => ['all'],
                 ]),
             ],
         ];
@@ -827,7 +827,7 @@ class V1TaskManagementSeeder extends Seeder
         if ($adminUserId) {
             $adminUserId = DB::table('users')->where('email', 'admin@example.com')->value('id');
             $adminRoleId = DB::table('roles')->where('slug', 'super-admin')->value('id');
-             
+
             DB::table('role_user')->updateOrInsert(
                 ['user_id' => $adminUserId, 'role_id' => $adminRoleId],
                 ['user_id' => $adminUserId, 'role_id' => $adminRoleId]

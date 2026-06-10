@@ -20,12 +20,14 @@ class PermissionSeeder extends Seeder
             ['name' => 'Read Task', 'slug' => 'task.read', 'module' => 'task', 'action' => 'read'],
             ['name' => 'Update Task', 'slug' => 'task.update', 'module' => 'task', 'action' => 'update'],
             ['name' => 'Delete Task', 'slug' => 'task.delete', 'module' => 'task', 'action' => 'delete'],
+            ['name' => 'Export Task Reports', 'slug' => 'task.export', 'module' => 'task', 'action' => 'export'],
 
             // Ticket permissions
             ['name' => 'Create Ticket', 'slug' => 'ticket.create', 'module' => 'ticket', 'action' => 'create'],
             ['name' => 'Read Ticket', 'slug' => 'ticket.read', 'module' => 'ticket', 'action' => 'read'],
             ['name' => 'Update Ticket', 'slug' => 'ticket.update', 'module' => 'ticket', 'action' => 'update'],
             ['name' => 'Delete Ticket', 'slug' => 'ticket.delete', 'module' => 'ticket', 'action' => 'delete'],
+            ['name' => 'Export Ticket Reports', 'slug' => 'ticket.export', 'module' => 'ticket', 'action' => 'export'],
 
             // User management permissions
             ['name' => 'Create User', 'slug' => 'user.create', 'module' => 'user', 'action' => 'create'],
