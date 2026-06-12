@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ExportTasksRequest;
+use App\Http\Requests\StoreAdminTaskRequest;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectPhase;
@@ -16,6 +17,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\DueDateCalculatorService;
 use App\Services\NotificationService;
+use App\Services\ProjectPhaseScheduleService;
 use App\Services\TaskActionAuthorizationService;
 use App\Services\TimeCalculatorService;
 use App\Services\WorkingHoursService;
@@ -28,6 +30,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -38,7 +41,8 @@ class AdminTaskController extends Controller
      */
     public function __construct(
         protected NotificationService $notificationService,
-        protected TaskActionAuthorizationService $taskActionAuthorizationService
+        protected TaskActionAuthorizationService $taskActionAuthorizationService,
+        protected ProjectPhaseScheduleService $projectPhaseScheduleService
     ) {}
 
     /**
@@ -442,79 +446,14 @@ class AdminTaskController extends Controller
     /**
      * Store a newly created task in storage.
      */
-    public function store(Request $request)
+    public function store(StoreAdminTaskRequest $request)
     {
         $user = User::find(Auth::id());
         if (! $user || ! $user->hasPermission('task.create')) {
             return response()->json(['message' => 'Insufficient permissions'], 403);
         }
 
-        // Parse JSON strings from FormData before validation
-        $requestData = $request->all();
-
-        // Parse tags if it's a JSON string
-        if ($request->has('tags') && is_string($request->input('tags'))) {
-            $tagsValue = $request->input('tags');
-            if (! empty($tagsValue)) {
-                $decodedTags = json_decode($tagsValue, true);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    $requestData['tags'] = $decodedTags;
-                } else {
-                    $requestData['tags'] = [];
-                }
-            } else {
-                $requestData['tags'] = [];
-            }
-        }
-
-        // Parse metadata if it's a JSON string
-        if ($request->has('metadata') && is_string($request->input('metadata'))) {
-            $metadataValue = $request->input('metadata');
-            if (! empty($metadataValue)) {
-                $decodedMetadata = json_decode($metadataValue, true);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    $requestData['metadata'] = $decodedMetadata;
-                } else {
-                    $requestData['metadata'] = [];
-                }
-            } else {
-                $requestData['metadata'] = [];
-            }
-        }
-
-        // Merge parsed data back into request
-        $request->merge($requestData);
-
-        $validated = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'task_code' => ['nullable', 'string', 'unique:tasks,task_code'],
-            'ticket_id' => ['nullable', 'exists:tickets,id'],
-            'parent_task_id' => ['nullable', 'exists:tasks,id'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'task_type_id' => ['nullable', 'exists:task_types,id'],
-            'sla_policy_id' => ['nullable', 'exists:sla_policies,id'],
-            'project_id' => ['nullable', 'exists:projects,id'],
-            'phase_id' => ['nullable', 'exists:project_phases,id'],
-            'start_at' => ['nullable', 'date'],
-            'due_at' => ['nullable', 'date'],
-            'completed_at' => ['nullable', 'date'],
-            'estimate_hours' => ['nullable', 'numeric'],
-            'tags' => ['nullable', 'array'],
-            'version' => ['nullable', 'integer'],
-            'metadata' => ['nullable', 'array'],
-            'completion_notes' => ['nullable', 'string'],
-            'attachments' => ['nullable', 'array'],
-            'attachments.*' => ['file', 'max:20480'], // 20MB max per file
-            'assignments' => ['nullable', 'array'],
-            'assignments.*.user_id' => ['required', 'exists:users,id'],
-            'assignments.*.assignment_notes' => ['nullable', 'string'],
-            'assignments.*.estimated_time' => ['nullable', 'numeric', 'min:0'],
-            'assignments' => ['nullable', 'array'],
-            'assignments.*.user_id' => ['required', 'exists:users,id'],
-            'assignments.*.assignment_notes' => ['nullable', 'string'],
-            'assignments.*.estimated_time' => ['nullable', 'numeric', 'min:0'],
-        ]);
+        $validated = $request->validated();
 
         // Set default assignment values since we're managing assignments separately
         $validated['current_owner_kind'] = 'UNASSIGNED';
@@ -547,6 +486,14 @@ class AdminTaskController extends Controller
 
                 if ($phase && empty($validated['project_id'])) {
                     $validated['project_id'] = $phase->project_id;
+                }
+
+                if ($phase) {
+                    $this->projectPhaseScheduleService->validate(
+                        $phase,
+                        $validated['start_at'] ?? null,
+                        $validated['due_at'] ?? null
+                    );
                 }
             }
 
@@ -584,6 +531,14 @@ class AdminTaskController extends Controller
             // Set created_by to current user
             $validated['created_by'] = Auth::user()->id;
             $validated = $this->prepareScheduleForCreation($validated);
+
+            if (isset($phase)) {
+                $this->projectPhaseScheduleService->validate(
+                    $phase,
+                    $validated['start_at'] ?? null,
+                    $validated['due_at'] ?? null
+                );
+            }
 
             // Start database transaction
             DB::beginTransaction();
@@ -683,6 +638,8 @@ class AdminTaskController extends Controller
                 ]),
             ], 201);
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             // Rollback the transaction on error
             DB::rollBack();

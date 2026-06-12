@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useMemo, useState } from 'react';
-import { GitBranch, Plus, UserPlus } from 'lucide-react';
+import { CalendarRange, Clock3, GitBranch, Plus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +25,30 @@ const taskGroupConfig = {
     pending: ['Draft', 'Assigned'],
     active: ['InProgress', 'Blocked', 'InReview'],
     completed: ['Done', 'Cancelled', 'Rejected'],
+};
+
+const getDatePart = (value?: string | null): string => (value ? String(value).slice(0, 10) : '');
+
+const toDateTimeInputValue = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const clampDateTime = (value: string, min: string, max: string): string => {
+    if (min && value < min) {
+        return min;
+    }
+
+    if (max && value > max) {
+        return max;
+    }
+
+    return value;
 };
 
 export default function ProjectTasksTab({
@@ -64,6 +88,56 @@ export default function ProjectTasksTab({
         phases.forEach((phase) => map.set(phase.id, phase));
         return map;
     }, [phases]);
+    const selectedPhase = useMemo(
+        () => phases.find((phase) => phase.id === Number(quickTaskForm.phase_id)) ?? null,
+        [phases, quickTaskForm.phase_id],
+    );
+    const selectedPhaseBounds = useMemo(() => {
+        if (!selectedPhase) {
+            return null;
+        }
+
+        const startDate = getDatePart(selectedPhase.start_date);
+        const endDate = getDatePart(selectedPhase.end_date);
+
+        return {
+            startDate,
+            endDate,
+            min: startDate ? `${startDate}T00:00` : '',
+            max: endDate ? `${endDate}T23:59` : '',
+        };
+    }, [selectedPhase]);
+    const scheduleError = useMemo(() => {
+        if (!selectedPhase) {
+            return null;
+        }
+
+        if (!selectedPhaseBounds?.min || !selectedPhaseBounds.max) {
+            return 'This phase needs both a start date and an end date before tasks can be scheduled.';
+        }
+
+        if (quickTaskForm.start_at && quickTaskForm.start_at < selectedPhaseBounds.min) {
+            return 'Start date and time must fall inside the selected phase.';
+        }
+
+        if (quickTaskForm.start_at && quickTaskForm.start_at > selectedPhaseBounds.max) {
+            return 'Start date and time must fall inside the selected phase.';
+        }
+
+        if (quickTaskForm.due_at && quickTaskForm.due_at < selectedPhaseBounds.min) {
+            return 'Due date and time must fall inside the selected phase.';
+        }
+
+        if (quickTaskForm.due_at && quickTaskForm.due_at > selectedPhaseBounds.max) {
+            return 'Due date and time must fall inside the selected phase.';
+        }
+
+        if (quickTaskForm.start_at && quickTaskForm.due_at && quickTaskForm.due_at < quickTaskForm.start_at) {
+            return 'Due date and time must be after the start date and time.';
+        }
+
+        return null;
+    }, [quickTaskForm.due_at, quickTaskForm.start_at, selectedPhase, selectedPhaseBounds]);
 
     const pendingTasks = tasks.filter((task) => taskGroupConfig.pending.includes(task.state));
     const activeTasks = tasks.filter((task) => taskGroupConfig.active.includes(task.state));
@@ -101,6 +175,11 @@ export default function ProjectTasksTab({
 
     const handleQuickCreateTask = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (scheduleError) {
+            onError(new Error(scheduleError), scheduleError);
+            return;
+        }
+
         try {
             await axios.post('/admin/tasks', {
                 title: quickTaskForm.title,
@@ -124,6 +203,41 @@ export default function ProjectTasksTab({
         } catch (error) {
             onError(error, 'Failed to create task in project.');
         }
+    };
+
+    const handlePhaseChange = (phaseId: string) => {
+        const phase = phases.find((item) => item.id === Number(phaseId));
+
+        if (!phase) {
+            setQuickTaskForm((current) => ({ ...current, phase_id: phaseId }));
+            return;
+        }
+
+        const phaseStartDate = getDatePart(phase.start_date);
+        const phaseEndDate = getDatePart(phase.end_date);
+        const min = phaseStartDate ? `${phaseStartDate}T00:00` : '';
+        const max = phaseEndDate ? `${phaseEndDate}T23:59` : '';
+        const now = new Date();
+        now.setSeconds(0, 0);
+        now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15);
+
+        setQuickTaskForm((current) => {
+            const startAt = clampDateTime(current.start_at || toDateTimeInputValue(now), min, max);
+            const defaultDue = new Date(startAt);
+            defaultDue.setHours(defaultDue.getHours() + 1);
+            const dueAt = clampDateTime(
+                current.due_at && current.due_at >= startAt ? current.due_at : toDateTimeInputValue(defaultDue),
+                startAt || min,
+                max,
+            );
+
+            return {
+                ...current,
+                phase_id: phaseId,
+                start_at: startAt,
+                due_at: dueAt,
+            };
+        });
     };
 
     const handleTaskMouseDown = (
@@ -264,7 +378,7 @@ export default function ProjectTasksTab({
                                 <select
                                     className="h-10 w-full rounded border bg-background px-3"
                                     value={quickTaskForm.phase_id}
-                                    onChange={(e) => setQuickTaskForm({ ...quickTaskForm, phase_id: e.target.value })}
+                                    onChange={(e) => handlePhaseChange(e.target.value)}
                                 >
                                     <option value="">Unassigned</option>
                                     {phases.map((phase) => (
@@ -274,6 +388,24 @@ export default function ProjectTasksTab({
                                     ))}
                                 </select>
                             </div>
+                            {selectedPhase && (
+                                <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 md:col-span-3 dark:border-blue-900 dark:bg-blue-950/30">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <CalendarRange className="h-4 w-4 text-blue-600" />
+                                            <p className="text-sm font-medium">{selectedPhase.name} schedule</p>
+                                        </div>
+                                        <Badge variant="outline">{selectedPhase.status}</Badge>
+                                    </div>
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                        Tasks in this phase must start and finish between{' '}
+                                        <span className="font-medium text-foreground">
+                                            {formatDate(selectedPhase.start_date)} and {formatDate(selectedPhase.end_date)}
+                                        </span>
+                                        .
+                                    </p>
+                                </div>
+                            )}
                             <div className="space-y-2 md:col-span-3">
                                 <Label>Description</Label>
                                 <Textarea
@@ -282,22 +414,61 @@ export default function ProjectTasksTab({
                                     placeholder="Optional description"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Start</Label>
+                            <div className="space-y-2 rounded-lg border p-3">
+                                <Label htmlFor="project-task-start" className="flex items-center gap-2">
+                                    <Clock3 className="h-4 w-4 text-muted-foreground" />
+                                    Start date and time
+                                </Label>
                                 <Input
+                                    id="project-task-start"
                                     type="datetime-local"
+                                    step={900}
+                                    min={selectedPhaseBounds?.min || undefined}
+                                    max={selectedPhaseBounds?.max || undefined}
                                     value={quickTaskForm.start_at}
-                                    onChange={(e) => setQuickTaskForm({ ...quickTaskForm, start_at: e.target.value })}
+                                    onChange={(e) => {
+                                        const startAt = e.target.value;
+                                        setQuickTaskForm((current) => ({
+                                            ...current,
+                                            start_at: startAt,
+                                            due_at:
+                                                current.due_at && current.due_at >= startAt
+                                                    ? current.due_at
+                                                    : startAt,
+                                        }));
+                                    }}
                                 />
+                                <p className="text-xs text-muted-foreground">
+                                    {selectedPhaseBounds?.min
+                                        ? `Earliest: ${formatDateTime(selectedPhaseBounds.min)}`
+                                        : 'Select a dated phase to apply schedule limits.'}
+                                </p>
                             </div>
-                            <div className="space-y-2">
-                                <Label>Due</Label>
+                            <div className="space-y-2 rounded-lg border p-3">
+                                <Label htmlFor="project-task-due" className="flex items-center gap-2">
+                                    <Clock3 className="h-4 w-4 text-muted-foreground" />
+                                    Due date and time
+                                </Label>
                                 <Input
+                                    id="project-task-due"
                                     type="datetime-local"
+                                    step={900}
+                                    min={quickTaskForm.start_at || selectedPhaseBounds?.min || undefined}
+                                    max={selectedPhaseBounds?.max || undefined}
                                     value={quickTaskForm.due_at}
                                     onChange={(e) => setQuickTaskForm({ ...quickTaskForm, due_at: e.target.value })}
                                 />
+                                <p className="text-xs text-muted-foreground">
+                                    {selectedPhaseBounds?.max
+                                        ? `Latest: ${formatDateTime(selectedPhaseBounds.max)}`
+                                        : 'Due time must be after the task starts.'}
+                                </p>
                             </div>
+                            {scheduleError && (
+                                <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 md:col-span-3">
+                                    {scheduleError}
+                                </div>
+                            )}
                             <div className="md:col-span-3">
                                 <TaskDurationPicker
                                     id="project-task-estimate-hours"
@@ -308,7 +479,7 @@ export default function ProjectTasksTab({
                                 />
                             </div>
                             <div className="flex flex-wrap gap-2 md:col-span-3">
-                                <Button type="submit">
+                                <Button type="submit" disabled={Boolean(scheduleError)}>
                                     <Plus className="mr-2 h-4 w-4" />
                                     Create Task
                                 </Button>
