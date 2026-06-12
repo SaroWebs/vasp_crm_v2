@@ -108,7 +108,22 @@ export interface Employee {
     department?: Department;
     user?: User;
     offices?: Office[];
+    status: 'active' | 'inactive' | 'on_leave' | 'terminated';
+    termination?: EmployeeTermination | null;
     created_at?: string;
+}
+
+export interface EmployeeTermination {
+    id: number;
+    employee_id: number;
+    status: 'inactive' | 'terminated';
+    termination_type: 'resignation' | 'termination' | 'retirement' | 'end_of_contract' | 'redundancy' | 'other';
+    effective_date: string;
+    reason: string;
+    notes?: string | null;
+    created_by_user_id?: number | null;
+    created_by?: Pick<User, 'id' | 'name'> | null;
+    created_at: string;
 }
 
 export interface Visitor {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
 use Illuminate\Http\JsonResponse;
@@ -9,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class LeaveBalanceController extends Controller
 {
@@ -64,7 +66,10 @@ class LeaveBalanceController extends Controller
         $validated = $request->validate([
             'leave_type_id' => 'required|exists:leave_types,id',
             'employee_ids' => 'required|array|min:1',
-            'employee_ids.*' => 'exists:employees,id',
+            'employee_ids.*' => [
+                Rule::exists('employees', 'id')
+                    ->where(fn ($query) => $query->where('status', Employee::STATUS_ACTIVE)),
+            ],
             'number_of_leaves' => 'required|integer|min:0',
             'year' => 'required|integer|min:2000|max:2100',
         ]);
@@ -148,7 +153,11 @@ class LeaveBalanceController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => [
+                'required',
+                Rule::exists('employees', 'id')
+                    ->where(fn ($query) => $query->where('status', Employee::STATUS_ACTIVE)),
+            ],
             'leave_type_id' => 'required|exists:leave_types,id',
             'year' => 'required|integer|min:2000|max:2100',
             'number_of_leaves' => 'required|integer|min:0',

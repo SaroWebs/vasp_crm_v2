@@ -32,6 +32,7 @@ class EmployeeCategoryController extends Controller
 
         $visitors = Visitor::query()->get();
         $employees = Employee::query()
+            ->assignable()
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');
             })

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Edit, Trash2, X, ExternalLink, User, Mail, Phone, Building, ChevronRight, Calendar } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, ExternalLink, User, Mail, Phone, Building, Calendar } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -41,6 +41,7 @@ interface EmployeesIndexProps {
     filters?: {
         department_id?: string;
         search?: string;
+        status?: string;
     };
     userPermissions: string[];
     isSuperAdmin: boolean;
@@ -72,6 +73,21 @@ type EmployeeDetail = Employee & {
     }>;
 };
 
+function statusBadge(status: Employee['status']) {
+    const variants = {
+        active: 'bg-green-50 text-green-700 border-green-200',
+        inactive: 'bg-slate-100 text-slate-700 border-slate-200',
+        on_leave: 'bg-amber-50 text-amber-700 border-amber-200',
+        terminated: 'bg-red-50 text-red-700 border-red-200',
+    };
+
+    return (
+        <Badge variant="outline" className={variants[status]}>
+            {status.replace('_', ' ')}
+        </Badge>
+    );
+}
+
 export default function EmployeesIndex(props: EmployeesIndexProps) {
     const {
         auth,
@@ -91,6 +107,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     const [localFilters, setLocalFilters] = useState({
         search: filters.search || '',
         department_id: filters.department_id || 'all',
+        status: filters.status || 'all',
     });
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -98,7 +115,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     const canEdit = userPermissions.includes('employee.update') || isSuperAdmin;
     const isPanelOpen = selectedEmployee !== null;
 
-    const updateBrowserUrl = (page: number, filters: { search: string; department_id: string }) => {
+    const updateBrowserUrl = (page: number, filters: { search: string; department_id: string; status: string }) => {
         const queryParams = new URLSearchParams();
 
         if (filters.search.trim()) {
@@ -106,6 +123,9 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
         }
         if (filters.department_id !== 'all') {
             queryParams.set('department_id', filters.department_id);
+        }
+        if (filters.status !== 'all') {
+            queryParams.set('status', filters.status);
         }
         if (page > 1) {
             queryParams.set('page', page.toString());
@@ -117,10 +137,11 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
 
     const loadEmployees = async (
         page = 1,
-        overrideFilters?: { search: string; department_id: string }
+        overrideFilters?: { search: string; department_id: string; status: string }
     ) => {
         const searchValue = overrideFilters?.search ?? localFilters.search;
         const departmentValue = overrideFilters?.department_id ?? localFilters.department_id;
+        const statusValue = overrideFilters?.status ?? localFilters.status;
 
         const params: Record<string, string | number> = { page };
         if (searchValue.trim()) {
@@ -128,6 +149,9 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
         }
         if (departmentValue !== 'all') {
             params.department_id = departmentValue;
+        }
+        if (statusValue !== 'all') {
+            params.status = statusValue;
         }
 
         setEmployeesLoading(true);
@@ -144,6 +168,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
             updateBrowserUrl(responseData.current_page, {
                 search: searchValue,
                 department_id: departmentValue,
+                status: statusValue,
             });
         } catch (error) {
             console.error('Error loading employees:', error);
@@ -205,12 +230,19 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
         loadEmployees(1, nextFilters);
     };
 
+    const handleStatusChange = (value: string | null) => {
+        const nextFilters = { ...localFilters, status: value ?? 'all' };
+        setLocalFilters(nextFilters);
+        setCurrentPage(1);
+        loadEmployees(1, nextFilters);
+    };
+
     const handleClearFilters = () => {
         if (searchTimeoutRef.current) {
             clearTimeout(searchTimeoutRef.current);
         }
 
-        const nextFilters = { search: '', department_id: 'all' };
+        const nextFilters = { search: '', department_id: 'all', status: 'all' };
         setLocalFilters(nextFilters);
         setCurrentPage(1);
         loadEmployees(1, nextFilters);
@@ -239,7 +271,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     };
 
     const detailEmployee = selectedEmployeeDetails ?? selectedEmployee;
-    const hasActiveFilters = localFilters.search.trim() || localFilters.department_id !== 'all';
+    const hasActiveFilters = localFilters.search.trim() || localFilters.department_id !== 'all' || localFilters.status !== 'all';
 
     const getInitials = (name: string) => {
         return name
@@ -300,22 +332,39 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                             </div>
                                         </div>
                                         {isPanelOpen ? null :
-                                            <div>
-                                                <label className="text-sm font-medium">Department</label>
-                                                <Select value={localFilters.department_id} onValueChange={handleDepartmentChange}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="All Departments" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">All Departments</SelectItem>
-                                                        {departments.map((department) => (
-                                                            <SelectItem key={department.id} value={department.id.toString()}>
-                                                                {department.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                            <>
+                                                <div>
+                                                    <label className="text-sm font-medium">Department</label>
+                                                    <Select value={localFilters.department_id} onValueChange={handleDepartmentChange}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="All Departments" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="all">All Departments</SelectItem>
+                                                            {departments.map((department) => (
+                                                                <SelectItem key={department.id} value={department.id.toString()}>
+                                                                    {department.name}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium">Status</label>
+                                                    <Select value={localFilters.status} onValueChange={handleStatusChange}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="All Statuses" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="all">All Statuses</SelectItem>
+                                                            <SelectItem value="active">Active</SelectItem>
+                                                            <SelectItem value="on_leave">On Leave</SelectItem>
+                                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                                            <SelectItem value="terminated">Terminated</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </>
                                         }
                                     </div>
 
@@ -365,6 +414,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                                             <th className="text-left p-4 font-semibold">Code</th>
                                                             <th className="text-left p-4 font-semibold">Email</th>
                                                             <th className="text-left p-4 font-semibold">Department</th>
+                                                            <th className="text-left p-4 font-semibold">Status</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -386,9 +436,10 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
                                                                 </td>
                                                                 <td className="p-4">
                                                                     <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                                                        {(employee as any).department?.name || 'No Department'}
+                                                                        {employee.department?.name || 'No Department'}
                                                                     </Badge>
                                                                 </td>
+                                                                <td className="p-4">{statusBadge(employee.status)}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
@@ -462,7 +513,10 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                         <CardTitle className="text-xl truncate">{employee.name}</CardTitle>
-                        <CardDescription className="truncate">{employee.email}</CardDescription>
+                        <CardDescription className="flex items-center gap-2">
+                            <span className="truncate">{employee.email}</span>
+                            {statusBadge(employee.status)}
+                        </CardDescription>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {canEdit && (
@@ -540,6 +594,31 @@ function EmployeeDetailPanel(props: EmployeeDetailPanelProps) {
                                     </div>
                                 </div>
                             </div>
+                            {employee.termination && (
+                                <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
+                                    <h3 className="text-sm font-semibold uppercase tracking-wide text-red-800">Separation record</h3>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <p className="text-xs text-red-700">Type</p>
+                                            <p className="text-sm font-medium capitalize">{employee.termination.termination_type.replaceAll('_', ' ')}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-red-700">Effective Date</p>
+                                            <p className="text-sm font-medium">{new Date(employee.termination.effective_date).toLocaleDateString()}</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-red-700">Reason</p>
+                                        <p className="text-sm">{employee.termination.reason}</p>
+                                    </div>
+                                    {employee.termination.notes && (
+                                        <div>
+                                            <p className="text-xs text-red-700">Notes</p>
+                                            <p className="text-sm">{employee.termination.notes}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <hr />
                             <div className="rounded-lg border p-4 space-y-3">
                                 <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

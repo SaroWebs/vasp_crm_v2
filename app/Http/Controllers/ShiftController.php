@@ -167,6 +167,7 @@ class ShiftController extends Controller
     public function employees(): JsonResponse
     {
         $employees = Employee::query()
+            ->assignable()
             ->select(['id', 'name', 'code'])
             ->orderBy('name')
             ->get();

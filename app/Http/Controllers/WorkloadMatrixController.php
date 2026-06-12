@@ -28,6 +28,7 @@ class WorkloadMatrixController extends Controller
             ->get();
 
         $employees = Employee::query()
+            ->assignable()
             ->with(['user:id,name,status'])
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');

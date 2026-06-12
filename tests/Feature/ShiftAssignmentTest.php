@@ -2,13 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\ValidateUserSession;
 use App\Models\Employee;
 use App\Models\EmployeeShiftAssignment;
 use App\Models\Role;
 use App\Models\Shift;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -28,6 +29,7 @@ class ShiftAssignmentTest extends TestCase
         $user->assignRole($role);
 
         $this->withoutMiddleware(VerifyCsrfToken::class);
+        $this->withoutMiddleware(ValidateUserSession::class);
         $this->actingAs($user, 'web');
 
         $shiftA = Shift::create([
@@ -79,8 +81,16 @@ class ShiftAssignmentTest extends TestCase
                 'employee_id' => $employee->id,
                 'shift_id' => $shiftA->id,
                 'is_active' => false,
-                'effective_to' => Carbon::today()->subDay()->toDateString(),
             ]);
+
+            $closedAssignment = EmployeeShiftAssignment::query()
+                ->where('employee_id', $employee->id)
+                ->where('shift_id', $shiftA->id)
+                ->firstOrFail();
+            $this->assertSame(
+                Carbon::today()->subDay()->toDateString(),
+                $closedAssignment->effective_to?->toDateString(),
+            );
         }
     }
 }

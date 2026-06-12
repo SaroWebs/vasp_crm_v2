@@ -588,6 +588,9 @@ class ReportController extends Controller
         }
 
         $employees = User::query()
+            ->whereHas('employee', function ($query) {
+                $query->assignable();
+            })
             ->select(['id', 'name'])
             ->orderBy('name')
             ->get();

@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Employee;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreRemoteWorkAssignmentRequest extends FormRequest
 {
@@ -23,7 +25,12 @@ class StoreRemoteWorkAssignmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'employee_id' => [
+                'required',
+                'integer',
+                Rule::exists('employees', 'id')
+                    ->where(fn ($query) => $query->where('status', Employee::STATUS_ACTIVE)),
+            ],
             'start_date' => ['required', 'date_format:Y-m-d'],
             'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
             'notes' => ['nullable', 'string', 'max:500'],

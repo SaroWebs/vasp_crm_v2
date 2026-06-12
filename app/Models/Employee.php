@@ -2,15 +2,32 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Employee extends Model
 {
     use HasFactory;
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_INACTIVE = 'inactive';
+
+    public const STATUS_ON_LEAVE = 'on_leave';
+
+    public const STATUS_TERMINATED = 'terminated';
+
+    public const STATUSES = [
+        self::STATUS_ACTIVE,
+        self::STATUS_INACTIVE,
+        self::STATUS_ON_LEAVE,
+        self::STATUS_TERMINATED,
+    ];
 
     protected $fillable = [
         'name',
@@ -20,6 +37,7 @@ class Employee extends Model
         'department_id',
         'user_id',
         'category_id',
+        'status',
     ];
 
     public function department(): BelongsTo
@@ -99,14 +117,64 @@ class Employee extends Model
         return $this->belongsTo(EmployeeCategory::class);
     }
 
-    public function currentShiftAssignment()
+    public function termination(): HasOne
+    {
+        return $this->hasOne(EmployeeTermination::class)->latestOfMany();
+    }
+
+    public function terminations(): HasMany
+    {
+        return $this->hasMany(EmployeeTermination::class);
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    public function scopeInactive(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_INACTIVE);
+    }
+
+    public function scopeAssignable(Builder $query): Builder
+    {
+        return $query->active();
+    }
+
+    public function scopeAvailableForActivity(Builder $query): Builder
+    {
+        return $query->assignable();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function isInactive(): bool
+    {
+        return $this->status === self::STATUS_INACTIVE;
+    }
+
+    public function isTerminated(): bool
+    {
+        return $this->status === self::STATUS_TERMINATED;
+    }
+
+    public function canReceiveFutureAssignments(): bool
+    {
+        return $this->isActive();
+    }
+
+    public function currentShiftAssignment(): HasOne
     {
         return $this->hasOne(EmployeeShiftAssignment::class)
             ->where('is_active', true)
             ->latest('effective_from');
     }
 
-    public function recentShiftAssignments()
+    public function recentShiftAssignments(): HasMany
     {
         return $this->hasMany(EmployeeShiftAssignment::class)
             ->orderByDesc('effective_from')

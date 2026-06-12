@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft } from 'lucide-react';
@@ -77,7 +78,13 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
         department_id: employee.department_id ? employee.department_id.toString() : (employee.department?.id?.toString() || ''),
         office_ids: employee.offices.map(o => o.id.toString()),
         active_office_id: employee.offices.find(o => o.pivot?.is_active)?.id.toString() || '',
+        status: employee.status,
+        termination_type: employee.termination?.termination_type ?? '',
+        effective_date: employee.termination?.effective_date.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+        reason: employee.termination?.reason ?? '',
+        notes: employee.termination?.notes ?? '',
     });
+    const requiresTerminationDetails = ['inactive', 'terminated'].includes(employeeForm.data.status);
 
     // User Roles & Permissions Form
     const [isUpdatingRoles, setIsUpdatingRoles] = useState(false);
@@ -263,7 +270,102 @@ export default function EmployeesEdit(props: EmployeesEditProps) {
                                         <p className="text-sm text-red-600">{employeeForm.errors.department_id}</p>
                                     )}
                                 </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="status">Employment Status *</Label>
+                                    <Select
+                                        value={employeeForm.data.status}
+                                        onValueChange={(value: typeof employeeForm.data.status) => employeeForm.setData('status', value)}
+                                    >
+                                        <SelectTrigger id="status">
+                                            <SelectValue placeholder="Select a status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="on_leave">On Leave</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                            <SelectItem value="terminated">Terminated</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        Only active employees appear in future activity and assignment selectors.
+                                    </p>
+                                    {employeeForm.errors.status && (
+                                        <p className="text-sm text-red-600">{employeeForm.errors.status}</p>
+                                    )}
+                                </div>
                             </div>
+
+                            {requiresTerminationDetails && (
+                                <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                    <div>
+                                        <h3 className="font-semibold text-amber-950">Separation details</h3>
+                                        <p className="text-sm text-amber-800">
+                                            Saving will disable login access, deactivate office assignments, and close the active shift.
+                                        </p>
+                                    </div>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="termination_type">Separation Type *</Label>
+                                            <Select
+                                                value={employeeForm.data.termination_type}
+                                                onValueChange={(value) => employeeForm.setData('termination_type', value)}
+                                            >
+                                                <SelectTrigger id="termination_type">
+                                                    <SelectValue placeholder="Select a type" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="resignation">Resignation</SelectItem>
+                                                    <SelectItem value="termination">Termination</SelectItem>
+                                                    <SelectItem value="retirement">Retirement</SelectItem>
+                                                    <SelectItem value="end_of_contract">End of Contract</SelectItem>
+                                                    <SelectItem value="redundancy">Redundancy</SelectItem>
+                                                    <SelectItem value="other">Other</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            {employeeForm.errors.termination_type && (
+                                                <p className="text-sm text-red-600">{employeeForm.errors.termination_type}</p>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="effective_date">Effective Date *</Label>
+                                            <Input
+                                                id="effective_date"
+                                                type="date"
+                                                max={new Date().toISOString().slice(0, 10)}
+                                                value={employeeForm.data.effective_date}
+                                                onChange={(e) => employeeForm.setData('effective_date', e.target.value)}
+                                            />
+                                            {employeeForm.errors.effective_date && (
+                                                <p className="text-sm text-red-600">{employeeForm.errors.effective_date}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="reason">Reason *</Label>
+                                        <Textarea
+                                            id="reason"
+                                            value={employeeForm.data.reason}
+                                            onChange={(e) => employeeForm.setData('reason', e.target.value)}
+                                            placeholder="Enter the reason for this status change"
+                                        />
+                                        {employeeForm.errors.reason && (
+                                            <p className="text-sm text-red-600">{employeeForm.errors.reason}</p>
+                                        )}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="notes">Internal Notes</Label>
+                                        <Textarea
+                                            id="notes"
+                                            value={employeeForm.data.notes}
+                                            onChange={(e) => employeeForm.setData('notes', e.target.value)}
+                                            placeholder="Optional internal notes"
+                                        />
+                                        {employeeForm.errors.notes && (
+                                            <p className="text-sm text-red-600">{employeeForm.errors.notes}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="grid gap-4 md:grid-cols-2">
                                 <div className="space-y-2">

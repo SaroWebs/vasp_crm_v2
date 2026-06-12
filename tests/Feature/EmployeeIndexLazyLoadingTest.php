@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\ValidateUserSession;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
 use App\Models\EmployeeShiftAssignment;
@@ -15,6 +16,13 @@ use Tests\TestCase;
 class EmployeeIndexLazyLoadingTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutMiddleware(ValidateUserSession::class);
+    }
 
     public function test_employee_index_json_returns_lightweight_employee_rows(): void
     {
@@ -47,6 +55,7 @@ class EmployeeIndexLazyLoadingTest extends TestCase
         $row = $response->json('data.0');
 
         $this->assertSame($employee->id, $row['id']);
+        $this->assertSame(Employee::STATUS_ACTIVE, $row['status']);
         $this->assertArrayHasKey('department', $row);
         $this->assertArrayNotHasKey('user', $row);
         $this->assertArrayNotHasKey('category', $row);

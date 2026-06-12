@@ -24,6 +24,7 @@ class WorkloadMatrixService
         [$periodStart, $periodEnd] = $this->resolveDateRange($filters);
 
         $employees = Employee::query()
+            ->assignable()
             ->with(['user:id,name,email,status', 'department:id,name'])
             ->whereHas('user', function ($query) {
                 $query->where('status', 'active');

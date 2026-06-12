@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateEmployeeRequest;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeCategory;
@@ -45,7 +46,7 @@ class EmployeeController extends Controller
 
         if ($request->expectsJson()) {
             $query = Employee::query()
-                ->select(['id', 'name', 'email', 'code', 'phone', 'department_id'])
+                ->select(['id', 'name', 'email', 'code', 'phone', 'department_id', 'status'])
                 ->with(['department:id,name,description']);
 
             if ($request->has('department_id') && $request->department_id !== 'all') {
@@ -57,6 +58,10 @@ class EmployeeController extends Controller
                     $q->where('name', 'like', '%'.$request->search.'%')
                         ->orWhere('email', 'like', '%'.$request->search.'%');
                 });
+            }
+
+            if (in_array($request->input('status'), Employee::STATUSES, true)) {
+                $query->where('status', $request->input('status'));
             }
 
             return response()->json(
@@ -71,7 +76,7 @@ class EmployeeController extends Controller
 
         return Inertia::render('admin/employees/Index', [
             'departments' => $departments,
-            'filters' => $request->only(['department_id', 'search']),
+            'filters' => $request->only(['department_id', 'search', 'status']),
             'userPermissions' => $user->getAllPermissions()->pluck('slug'),
             'isSuperAdmin' => $user->isSuperAdmin(),
         ]);
@@ -79,12 +84,14 @@ class EmployeeController extends Controller
 
     public function getList(Request $request)
     {
-        $query = Employee::with([
-            'department',
-            'user' => function ($q) {
-                $q->withoutGlobalScope('exclude_inactive');
-            },
-        ]);
+        $query = Employee::query()
+            ->assignable()
+            ->with([
+                'department',
+                'user' => function ($q) {
+                    $q->withoutGlobalScope('exclude_inactive');
+                },
+            ]);
 
         $employees = $query->orderBy('name')->get();
 
@@ -255,6 +262,7 @@ class EmployeeController extends Controller
         $employee->load([
             'department',
             'category',
+            'termination.createdBy:id,name',
             'user' => function ($q) {
                 $q->withoutGlobalScope('exclude_inactive');
             },
@@ -271,10 +279,12 @@ class EmployeeController extends Controller
                     'department_id' => $employee->department_id,
                     'user_id' => $employee->user_id,
                     'category_id' => $employee->category_id,
+                    'status' => $employee->status,
                     'created_at' => $employee->created_at,
                     'updated_at' => $employee->updated_at,
                     'department' => $employee->department,
                     'category' => $employee->category,
+                    'termination' => $employee->termination,
                     'user' => $employee->user,
                 ],
             ], 200);
@@ -294,7 +304,7 @@ class EmployeeController extends Controller
             abort(403, 'Insufficient permissions to edit employee.');
         }
 
-        $employee->load(['department', 'user' => function ($q) {
+        $employee->load(['department', 'termination.createdBy:id,name', 'user' => function ($q) {
             $q->withoutGlobalScope('exclude_inactive');
         }, 'offices']);
         $departments = Department::select('id', 'name')->get();
@@ -347,39 +357,69 @@ class EmployeeController extends Controller
     /**
      * Update the specified employee basic information
      */
-    public function update(Request $request, Employee $employee)
+    public function update(UpdateEmployeeRequest $request, Employee $employee)
     {
         if (! $this->checkPermission('employee.update')) {
             abort(403, 'Insufficient permissions to update employee.');
         }
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:employees,email,'.$employee->id,
-            'code' => 'nullable|string|max:50|unique:employees,code,'.$employee->id,
-            'phone' => 'nullable|string|max:20',
-            'department_id' => 'required|exists:departments,id',
-            'office_ids' => 'required|array|min:1',
-            'office_ids.*' => 'exists:offices,id',
-            'active_office_id' => 'required|exists:offices,id',
-        ]);
+        $validated = $request->validated();
+        $previousStatus = $employee->status;
 
-        $employee->update([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'code' => $validated['code'],
-            'phone' => $validated['phone'],
-            'department_id' => $validated['department_id'],
-        ]);
+        DB::transaction(function () use ($employee, $previousStatus, $request, $validated): void {
+            $linkedUser = $employee->user()
+                ->withoutGlobalScope('exclude_inactive')
+                ->first();
 
-        // Sync offices
-        $officeData = [];
-        foreach ($validated['office_ids'] as $officeId) {
-            $officeData[$officeId] = [
-                'is_active' => $officeId == $validated['active_office_id'],
-            ];
-        }
-        $employee->offices()->sync($officeData);
+            $employee->update([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'code' => $validated['code'],
+                'phone' => $validated['phone'],
+                'department_id' => $validated['department_id'],
+                'status' => $validated['status'],
+            ]);
+
+            $isUnavailable = in_array($validated['status'], [
+                Employee::STATUS_INACTIVE,
+                Employee::STATUS_TERMINATED,
+            ], true);
+
+            $officeData = [];
+            foreach ($validated['office_ids'] as $officeId) {
+                $officeData[$officeId] = [
+                    'is_active' => ! $isUnavailable && (int) $officeId === (int) $validated['active_office_id'],
+                ];
+            }
+            $employee->offices()->sync($officeData);
+
+            if ($isUnavailable) {
+                $linkedUser?->forceFill([
+                    'status' => 'inactive',
+                    'session_id' => null,
+                ])->save();
+
+                if ($previousStatus !== $validated['status']) {
+                    $employee->terminations()->create([
+                        'status' => $validated['status'],
+                        'termination_type' => $validated['termination_type'],
+                        'effective_date' => $validated['effective_date'],
+                        'reason' => $validated['reason'],
+                        'notes' => $validated['notes'] ?? null,
+                        'created_by_user_id' => $request->user()?->id,
+                    ]);
+                }
+
+                $employee->shiftAssignments()
+                    ->where('is_active', true)
+                    ->update([
+                        'effective_to' => $validated['effective_date'],
+                        'is_active' => false,
+                    ]);
+            } elseif ($validated['status'] === Employee::STATUS_ACTIVE) {
+                $linkedUser?->forceFill(['status' => 'active'])->save();
+            }
+        });
 
         return back()->with('success', 'Employee information updated successfully.');
     }

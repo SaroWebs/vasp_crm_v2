@@ -6,6 +6,7 @@ use App\Models\CompensatoryOff;
 use App\Models\Employee;
 use App\Models\HolidayWorkRecord;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class HolidayWorkController extends Controller
 {
@@ -34,7 +35,11 @@ class HolidayWorkController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => [
+                'required',
+                Rule::exists('employees', 'id')
+                    ->where(fn ($query) => $query->where('status', Employee::STATUS_ACTIVE)),
+            ],
             'holiday_id' => 'required|exists:holidays,id',
             'hours_worked' => 'required|numeric|min:0.25|max:24',
             'premium_multiplier' => 'nullable|numeric|min:1|max:3',

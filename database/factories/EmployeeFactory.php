@@ -26,6 +26,7 @@ class EmployeeFactory extends Factory
             'phone' => fake()->phoneNumber(),
             'department_id' => Department::factory(),
             'user_id' => User::factory(),
+            'status' => Employee::STATUS_ACTIVE,
         ];
     }
 }

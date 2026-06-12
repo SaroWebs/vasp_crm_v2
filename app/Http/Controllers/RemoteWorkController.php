@@ -8,6 +8,7 @@ use App\Services\AttendanceEffectService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class RemoteWorkController extends Controller
 {
@@ -50,7 +51,11 @@ class RemoteWorkController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => [
+                'required',
+                Rule::exists('employees', 'id')
+                    ->where(fn ($query) => $query->where('status', Employee::STATUS_ACTIVE)),
+            ],
             'start_date' => 'required|date_format:Y-m-d',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
             'reason' => 'nullable|string|max:500',

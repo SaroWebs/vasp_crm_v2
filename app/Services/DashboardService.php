@@ -185,7 +185,9 @@ class DashboardService
      */
     public function getEmployees(): array
     {
-        return User::whereHas('employee')
+        return User::whereHas('employee', function ($query) {
+            $query->assignable();
+        })
             ->select('id', 'name', 'email')
             ->get()
             ->toArray();
