@@ -1,13 +1,16 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft } from 'lucide-react';
+import {
+    TextInput,
+    Textarea,
+    Select,
+    Button,
+    Text,
+    Group,
+    Stack,
+} from '@mantine/core';
 
 interface EditProductProps {
     product: {
@@ -21,27 +24,24 @@ interface EditProductProps {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Admin',
-        href: '/admin/dashboard',
-    },
-    {
-        title: 'Products',
-        href: '/admin/products',
-    },
-    {
-        title: 'Edit',
-        href: '#',
-    },
+    { title: 'Admin',     href: '/admin/dashboard' },
+    { title: 'Products',  href: '/admin/products' },
+    { title: 'Edit',      href: '#' },
 ];
+
+const STATUS_COLORS: Record<string, string> = {
+    active:       '#0F6E56',
+    inactive:     '#854F0B',
+    discontinued: '#A32D2D',
+};
 
 export default function EditProduct({ product }: EditProductProps) {
     const { data, setData, put, processing, errors } = useForm({
-        name: product.name,
+        name:        product.name,
         description: product.description || '',
-        version: product.version || '',
-        status: product.status,
-        metadata: product.metadata || {},
+        version:     product.version || '',
+        status:      product.status,
+        metadata:    product.metadata || {},
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -53,104 +53,121 @@ export default function EditProduct({ product }: EditProductProps) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Edit ${product.name}`} />
 
-            <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
+            <div className="flex h-full flex-1 flex-col">
+
+                {/* ── Header ── */}
+                <div className="flex items-center justify-between gap-4 border-b bg-background px-6 py-5">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Edit Product</h1>
-                        <p className="text-muted-foreground">
-                            Update product information for {product.name}
-                        </p>
+                        <Text size="xs" fw={500} tt="uppercase" c="dimmed" style={{ letterSpacing: '0.12em' }}>
+                            Admin · Products
+                        </Text>
+                        <Text size="lg" fw={600} lh="xs">
+                            Edit product
+                        </Text>
+                        <Text size="sm" c="dimmed" mt={2}>
+                            {product.name}
+                        </Text>
                     </div>
-                    <Link href="/admin/products">
-                        <Button variant="outline">
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Back to Products
-                        </Button>
-                    </Link>
+                    <Button
+                        variant="default"
+                        size="sm"
+                        leftSection={<ArrowLeft size={14} />}
+                        component={Link}
+                        href="/admin/products"
+                    >
+                        Back to products
+                    </Button>
                 </div>
 
-                {/* Product Edit Form */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Product Information</CardTitle>
-                        <CardDescription>
-                            Update the details for this product
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* Name Field */}
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Product Name *</Label>
-                                <Input
-                                    id="name"
-                                    value={data.name}
-                                    onChange={(e) => setData('name', e.target.value)}
-                                    placeholder="Enter product name"
+                {/* ── Form ── */}
+                <div className="flex-1 overflow-auto p-6">
+                    <div className="mx-auto max-w-xl">
+                        <form onSubmit={handleSubmit}>
+                            <Stack gap="md">
+
+                                <TextInput
+                                    label="Product name"
+                                    placeholder="e.g. Inventory Pro"
                                     required
+                                    size="sm"
+                                    value={data.name}
+                                    onChange={e => setData('name', e.currentTarget.value)}
+                                    error={errors.name}
                                 />
-                                {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
-                            </div>
 
-                            {/* Description Field */}
-                            <div className="space-y-2">
-                                <Label htmlFor="description">Description</Label>
                                 <Textarea
-                                    id="description"
-                                    value={data.description}
-                                    onChange={(e) => setData('description', e.target.value)}
-                                    placeholder="Enter product description"
+                                    label="Description"
+                                    placeholder="What does this product do?"
+                                    size="sm"
                                     rows={4}
+                                    value={data.description}
+                                    onChange={e => setData('description', e.currentTarget.value)}
+                                    error={errors.description}
                                 />
-                                {errors.description && <p className="text-sm text-red-500">{errors.description}</p>}
-                            </div>
 
-                            {/* Version Field */}
-                            <div className="space-y-2">
-                                <Label htmlFor="version">Version</Label>
-                                <Input
-                                    id="version"
+                                <TextInput
+                                    label="Version"
+                                    placeholder="e.g. 2.1.0"
+                                    size="sm"
                                     value={data.version}
-                                    onChange={(e) => setData('version', e.target.value)}
-                                    placeholder="Enter product version"
+                                    onChange={e => setData('version', e.currentTarget.value)}
+                                    error={errors.version}
                                 />
-                                {errors.version && <p className="text-sm text-red-500">{errors.version}</p>}
-                            </div>
 
-                            {/* Status Field */}
-                            <div className="space-y-2">
-                                <Label htmlFor="status">Status *</Label>
                                 <Select
+                                    label="Status"
+                                    required
+                                    size="sm"
                                     value={data.status}
-                                    onValueChange={(value: 'active' | 'inactive' | 'discontinued') => setData('status', value)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select status" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="active">Active</SelectItem>
-                                        <SelectItem value="inactive">Inactive</SelectItem>
-                                        <SelectItem value="discontinued">Discontinued</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                {errors.status && <p className="text-sm text-red-500">{errors.status}</p>}
-                            </div>
+                                    onChange={val =>
+                                        setData('status', val as 'active' | 'inactive' | 'discontinued')
+                                    }
+                                    error={errors.status}
+                                    data={[
+                                        { value: 'active',       label: 'Active' },
+                                        { value: 'inactive',     label: 'Inactive' },
+                                        { value: 'discontinued', label: 'Discontinued' },
+                                    ]}
+                                    renderOption={({ option }) => (
+                                        <Group gap="xs">
+                                            <div
+                                                style={{
+                                                    width: 7,
+                                                    height: 7,
+                                                    borderRadius: '50%',
+                                                    background: STATUS_COLORS[option.value],
+                                                    flexShrink: 0,
+                                                }}
+                                            />
+                                            <Text size="sm">{option.label}</Text>
+                                        </Group>
+                                    )}
+                                />
 
-                            {/* Form Actions */}
-                            <div className="flex justify-end space-x-4 pt-6">
-                                <Link href="/admin/products">
-                                    <Button variant="outline" type="button">
-                                        Cancel
-                                    </Button>
-                                </Link>
-                                <Button type="submit" disabled={processing}>
-                                    {processing ? 'Updating...' : 'Update Product'}
-                                </Button>
-                            </div>
+                                <div className="border-t pt-4">
+                                    <Group justify="flex-end" gap="xs">
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            component={Link}
+                                            href="/admin/products"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            size="sm"
+                                            loading={processing}
+                                        >
+                                            Update product
+                                        </Button>
+                                    </Group>
+                                </div>
+
+                            </Stack>
                         </form>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
         </AppLayout>
     );

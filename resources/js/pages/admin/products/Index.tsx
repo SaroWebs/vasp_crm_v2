@@ -1,20 +1,14 @@
 import AppLayout from '@/layouts/app-layout';
 import { Product, type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Package, Plus, Search, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, Package } from 'lucide-react';
 import ProductCard from '@/components/admin/products/ProductCard';
+import { useState } from 'react';
+import { TextInput, Button, Text, Group } from '@mantine/core';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Admin',
-        href: '/admin/dashboard',
-    },
-    {
-        title: 'Products',
-        href: '/admin/products',
-    },
+    { title: 'Admin', href: '/admin/dashboard' },
+    { title: 'Products', href: '/admin/products' },
 ];
 
 interface ProductsIndexProps {
@@ -31,134 +25,157 @@ interface ProductsIndexProps {
     userPermissions?: string[];
 }
 
-export default function ProductsIndex(props: ProductsIndexProps) {
-    const {
-        products,
-        filters = {},
-        userPermissions = []
-    } = props;
+export default function ProductsIndex({
+    products,
+    filters = {},
+    userPermissions = [],
+}: ProductsIndexProps) {
+    const [search, setSearch] = useState('');
+
+    const visible = search
+        ? products.data.filter(p =>
+              p.name?.toLowerCase().includes(search.toLowerCase())
+          )
+        : products.data;
+
+    const totalClients = products.data.reduce(
+        (sum, p) => sum + (p.clients_count ?? 0),
+        0
+    );
+
+    const STATS = [
+        { label: 'Total products', value: products.total,                        sub: null },
+        { label: 'Total clients',  value: totalClients,                          sub: 'on this page' },
+        { label: 'Showing',        value: `${products.from}–${products.to}`,     sub: `of ${products.total}` },
+        { label: 'Page',           value: products.current_page,                 sub: `of ${products.last_page}` },
+    ];
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Products" />
 
-            <div className="space-y-6 p-6">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="flex h-full flex-1 flex-col">
+
+                {/* ── Header ── */}
+                <div className="flex items-center justify-between gap-4 border-b bg-background px-6 py-5">
                     <div>
-                        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Products</p>
-                        <h1 className="text-3xl font-bold">Product Management</h1>
-                        <p className="text-muted-foreground mt-1">View product metrics, manage clients, and quickly take action.</p>
+                        <Text size="xs" fw={500} tt="uppercase" c="dimmed" style={{ letterSpacing: '0.12em' }}>
+                            Admin · Products
+                        </Text>
+                        <Text size="lg" fw={600} lh="xs">
+                            Product directory
+                        </Text>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <Group gap="xs">
+                        <TextInput
+                            placeholder="Search products…"
+                            size="sm"
+                            leftSection={<Search size={14} />}
+                            value={search}
+                            onChange={e => setSearch(e.currentTarget.value)}
+                            style={{ width: 220 }}
+                        />
                         {userPermissions.includes('product.create') && (
-                            <Link href="/admin/products/create">
-                                <Button className="gap-2">
-                                    <Plus className="h-4 w-4" />
-                                    Create Product
+                            <Button
+                                size="sm"
+                                leftSection={<Plus size={14} />}
+                                component={Link}
+                                href="/admin/products/create"
+                            >
+                                New product
+                            </Button>
+                        )}
+                    </Group>
+                </div>
+
+                <div className="flex-1 overflow-auto p-6">
+
+                    {/* ── Stats ── */}
+                    <div className="mb-6 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                        {STATS.map(stat => (
+                            <div key={stat.label} className="rounded-lg bg-muted/50 px-4 py-3.5">
+                                <Text size="xs" c="dimmed">{stat.label}</Text>
+                                <Text size="xl" fw={600} mt={4} style={{ letterSpacing: '-0.01em' }}>
+                                    {stat.value}
+                                </Text>
+                                {stat.sub && (
+                                    <Text size="xs" c="dimmed" mt={2}>{stat.sub}</Text>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ── Section label ── */}
+                    <Text size="xs" fw={500} tt="uppercase" c="dimmed" mb="sm" style={{ letterSpacing: '0.1em' }}>
+                        {search
+                            ? `${visible.length} result${visible.length !== 1 ? 's' : ''}`
+                            : `${products.from}–${products.to} of ${products.total} products`}
+                    </Text>
+
+                    {/* ── Grid ── */}
+                    {visible.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-20 text-center">
+                            <Package size={26} className="text-muted-foreground/30" />
+                            <Text size="sm" c="dimmed">
+                                {search ? `No products match "${search}".` : 'No products yet.'}
+                            </Text>
+                            {!search && userPermissions.includes('product.create') && (
+                                <Button
+                                    variant="outline"
+                                    size="xs"
+                                    leftSection={<Plus size={13} />}
+                                    component={Link}
+                                    href="/admin/products/create"
+                                >
+                                    Create first product
                                 </Button>
-                            </Link>
-                        )}
-                        <Button variant="ghost" className="gap-2">
-                            <ArrowUpDown className="h-4 w-4" />
-                            Sort by Latest
-                        </Button>
-                    </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card className="border border-slate-200">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Total Products</CardTitle>
-                            <CardDescription className="text-xs">All active products</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold">{products.total}</div>
-                        </CardContent>
-                    </Card>
-                    <Card className="border border-slate-200">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Showing</CardTitle>
-                            <CardDescription className="text-xs">Current page items</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold">{products.data.length}</div>
-                        </CardContent>
-                    </Card>
-                    <Card className="border border-slate-200">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Page</CardTitle>
-                            <CardDescription className="text-xs">{products.current_page} of {products.last_page}</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold">{products.current_page}</div>
-                        </CardContent>
-                    </Card>
-                    <Card className="border border-slate-200">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Clients</CardTitle>
-                            <CardDescription className="text-xs">All clients in this page</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold">{products.data.reduce((sum, prod) => sum + (prod.clients_count ?? 0), 0)}</div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <Card className="border border-slate-200">
-                    <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <CardTitle className="text-base">Product Directory</CardTitle>
-                            <CardDescription>Search, filter, and manage active products.</CardDescription>
+                            )}
                         </div>
-                        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                            <Search className="h-4 w-4 text-muted-foreground" />
-                            <input
-                                className="w-full bg-transparent text-sm outline-none"
-                                type="text"
-                                placeholder="Search products..."
-                                aria-label="Search products"
-                            />
+                    ) : (
+                        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {visible.map(product => (
+                                <ProductCard key={product.id} product={product} />
+                            ))}
                         </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        {products.data.length === 0 ? (
-                            <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-muted-foreground">
-                                No products found yet. Create your first product to begin tracking clients.
-                            </div>
-                        ) : (
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {products.data.map((product) => (
-                                    <ProductCard key={product.id} product={product} />
-                                ))}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                    )}
 
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="text-sm text-muted-foreground">
-                        Showing {products.from} - {products.to} of {products.total} products
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {products.current_page > 1 && (
-                            <Link
-                                href={`/admin/products?${new URLSearchParams({ ...filters, page: (products.current_page - 1).toString() }).toString()}`}
-                                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-                            >
-                                Previous
-                            </Link>
-                        )}
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm">Page {products.current_page}</span>
-                        {products.current_page < products.last_page && (
-                            <Link
-                                href={`/admin/products?${new URLSearchParams({ ...filters, page: (products.current_page + 1).toString() }).toString()}`}
-                                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-                            >
-                                Next
-                            </Link>
-                        )}
-                    </div>
+                    {/* ── Pagination ── */}
+                    {products.last_page > 1 && (
+                        <Group justify="space-between" mt="lg">
+                            <Text size="sm" c="dimmed">
+                                Page {products.current_page} of {products.last_page}
+                            </Text>
+                            <Group gap="xs">
+                                {products.current_page > 1 && (
+                                    <Button
+                                        variant="default"
+                                        size="sm"
+                                        component={Link}
+                                        href={`/admin/products?${new URLSearchParams({
+                                            ...filters,
+                                            page: (products.current_page - 1).toString(),
+                                        })}`}
+                                    >
+                                        Previous
+                                    </Button>
+                                )}
+                                {products.current_page < products.last_page && (
+                                    <Button
+                                        variant="default"
+                                        size="sm"
+                                        component={Link}
+                                        href={`/admin/products?${new URLSearchParams({
+                                            ...filters,
+                                            page: (products.current_page + 1).toString(),
+                                        })}`}
+                                    >
+                                        Next
+                                    </Button>
+                                )}
+                            </Group>
+                        </Group>
+                    )}
                 </div>
             </div>
         </AppLayout>
