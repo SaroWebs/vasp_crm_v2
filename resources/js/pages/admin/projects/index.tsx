@@ -27,7 +27,7 @@ interface ProjectListItem {
     manager?: { id: number; name: string } | null;
     department?: { id: number; name: string } | null;
     tasks_count?: number;
-    milestones_count?: number;
+    phases_count?: number;
 }
 
 interface PaginatedProjects {
@@ -271,7 +271,7 @@ export default function ProjectIndex({
                                         <th className="px-2 py-3">Manager</th>
                                         <th className="px-2 py-3">Progress</th>
                                         <th className="px-2 py-3">Tasks</th>
-                                        <th className="px-2 py-3">Milestones</th>
+                                        <th className="px-2 py-3">Planning Milestones</th>
                                         <th className="px-2 py-3">Actions</th>
                                     </tr>
                                 </thead>
@@ -291,7 +291,7 @@ export default function ProjectIndex({
                                             <td className="px-2 py-3">{project.manager?.name ?? 'Unassigned'}</td>
                                             <td className="px-2 py-3">{project.progress ?? 0}%</td>
                                             <td className="px-2 py-3">{project.tasks_count ?? 0}</td>
-                                            <td className="px-2 py-3">{project.milestones_count ?? 0}</td>
+                                            <td className="px-2 py-3">{project.phases_count ?? 0}</td>
                                             <td className="px-2 py-3">
                                                 <div className="flex gap-2">
                                                     <Link href={`/admin/projects/${project.id}`}>

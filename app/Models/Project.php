@@ -35,15 +35,22 @@ class Project extends Model
 
     // Status constants
     const STATUS_PLANNING = 'planning';
+
     const STATUS_ACTIVE = 'active';
+
     const STATUS_ON_HOLD = 'on_hold';
+
     const STATUS_COMPLETED = 'completed';
+
     const STATUS_CANCELLED = 'cancelled';
 
     // Priority constants
     const PRIORITY_LOW = 'low';
+
     const PRIORITY_MEDIUM = 'medium';
+
     const PRIORITY_HIGH = 'high';
+
     const PRIORITY_CRITICAL = 'critical';
 
     // Default color
@@ -87,14 +94,6 @@ class Project extends Model
     public function team()
     {
         return $this->hasMany(ProjectTeam::class);
-    }
-
-    /**
-     * Get the project milestones.
-     */
-    public function milestones()
-    {
-        return $this->hasMany(ProjectMilestone::class)->orderBy('sort_order');
     }
 
     /**
@@ -155,7 +154,7 @@ class Project extends Model
     public function calculateProgress(): int
     {
         $tasks = $this->tasks;
-        
+
         if ($tasks->isEmpty()) {
             return 0;
         }
@@ -178,24 +177,18 @@ class Project extends Model
         return (int) round($totalProgress / max(1, $tasks->count()));
     }
 
-    /**
-     * Get overdue milestones.
-     */
-    public function getOverdueMilestones()
+    public function getOverduePlanningMilestones()
     {
-        return $this->milestones()
-            ->where('target_date', '<', now())
+        return $this->phases()
+            ->whereDate('end_date', '<', today())
             ->where('status', '!=', 'completed')
             ->get();
     }
 
-    /**
-     * Get upcoming milestones.
-     */
-    public function getUpcomingMilestones($days = 7)
+    public function getUpcomingPlanningMilestones(int $days = 7)
     {
-        return $this->milestones()
-            ->whereBetween('target_date', [now(), now()->addDays($days)])
+        return $this->phases()
+            ->whereBetween('end_date', [today(), today()->addDays($days)])
             ->where('status', '!=', 'completed')
             ->get();
     }
@@ -205,8 +198,8 @@ class Project extends Model
      */
     public function isOverdue(): bool
     {
-        return $this->end_date 
-            && $this->end_date->isPast() 
+        return $this->end_date
+            && $this->end_date->isPast()
             && $this->status !== self::STATUS_COMPLETED;
     }
 

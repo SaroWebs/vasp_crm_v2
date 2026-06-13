@@ -121,4 +121,168 @@ ALTER TABLE `sales_leads`
 ALTER TABLE `sales_leads`
     DROP COLUMN `converted_client_id`,
     DROP COLUMN `converted_at`;
+----------------------------------------------------------------------------
+
+
+
+-- -----------------------------------------------------------------------------
+-- STEP 1: Insert new project_phases rows from project_milestones
+--         (only where no matching phase already exists by project_id + name + end_date)
+-- -----------------------------------------------------------------------------4
+
+INSERT INTO project_phases (
+    project_id,
+    name,
+    description,
+    sort_order,
+    start_date,
+    end_date,
+    status,
+    progress,
+    color,
+    settings,
+    created_at,
+    updated_at,
+    deleted_at
+)
+SELECT
+    m.project_id,
+    m.name,
+    m.description,
+    m.sort_order,
+ 
+    -- start_date = previous milestone's target_date (chained), clamped to end_date
+    LEAST(
+        COALESCE(
+            LAG(DATE(m.target_date)) OVER (
+                PARTITION BY m.project_id
+                ORDER BY m.sort_order, m.target_date
+            ),
+            p.start_date,
+            DATE(m.target_date)
+        ),
+        DATE(m.target_date)
+    ) AS start_date,
+ 
+    DATE(m.target_date) AS end_date,
+ 
+    -- Map milestone status → phase status
+    CASE m.status
+        WHEN 'in_progress' THEN 'active'
+        WHEN 'completed'   THEN 'completed'
+        WHEN 'overdue'     THEN 'active'
+        ELSE 'pending'
+    END AS status,
+ 
+    m.progress,
+    NULL AS color,
+ 
+    -- Embed legacy milestone data into settings JSON
+    JSON_OBJECT(
+        'legacy_project_milestones', JSON_ARRAY(
+            JSON_OBJECT(
+                'id',             m.id,
+                'type',           m.type,
+                'target_date',    DATE(m.target_date),
+                'completed_date', m.completed_date,
+                'status',         m.status,
+                'metadata',       IF(m.metadata IS NULL OR m.metadata = '', JSON_OBJECT(), CAST(m.metadata AS JSON))
+            )
+        )
+    ) AS settings,
+ 
+    m.created_at,
+    m.updated_at,
+    NULL AS deleted_at
+ 
+FROM project_milestones m
+JOIN projects p ON p.id = m.project_id
+ 
+-- Only insert rows where no matching phase already exists
+WHERE m.deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM project_phases pp
+      WHERE pp.project_id  = m.project_id
+        AND pp.name        = m.name
+        AND DATE(pp.end_date) = DATE(m.target_date)
+  )
+ 
+ORDER BY m.project_id, m.sort_order, m.target_date;
+ 
+-- -----------------------------------------------------------------------------
+-- STEP 2: Merge legacy milestone data into existing matching phases
+--         (where project_id + name + end_date already matched a phase)
+-- -----------------------------------------------------------------------------
+
+UPDATE project_phases pp
+JOIN project_milestones m
+    ON  pp.project_id        = m.project_id
+    AND pp.name              = m.name
+    AND DATE(pp.end_date)    = DATE(m.target_date)
+SET pp.settings = JSON_SET(
+    COALESCE(pp.settings, '{}'),
+    '$.legacy_project_milestones',
+    JSON_ARRAY_APPEND(
+        COALESCE(
+            JSON_EXTRACT(pp.settings, '$.legacy_project_milestones'),
+            JSON_ARRAY()
+        ),
+        '$',
+        JSON_OBJECT(
+            'id',             m.id,
+            'type',           m.type,
+            'target_date',    DATE(m.target_date),
+            'completed_date', m.completed_date,
+            'status',         m.status,
+            'metadata',       IF(m.metadata IS NULL OR m.metadata = '', JSON_OBJECT(), CAST(m.metadata AS JSON))
+        )
+    )
+)
+WHERE m.deleted_at IS NULL;
+ 
+-- -----------------------------------------------------------------------------
+-- STEP 3: Drop the milestones table
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS project_milestones;
+ 
+ 
+-- -----------------------------------------------------------------------------
+-- STEP 4: Copy role_permissions from milestone permission → phase permission
+-- -----------------------------------------------------------------------------
+INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at)
+SELECT
+    rp.role_id,
+    (SELECT id FROM permissions WHERE slug = 'project.manage_phases' LIMIT 1) AS permission_id,
+    rp.created_at,
+    rp.updated_at
+FROM role_permissions rp
+WHERE rp.permission_id = (
+    SELECT id FROM permissions WHERE slug = 'project.manage_milestones' LIMIT 1
+);
+ 
+ 
+-- -----------------------------------------------------------------------------
+-- STEP 5: Copy user_permissions (granted only) → phase permission
+-- -----------------------------------------------------------------------------
+INSERT IGNORE INTO user_permissions (user_id, permission_id, granted, created_at, updated_at)
+SELECT
+    up.user_id,
+    (SELECT id FROM permissions WHERE slug = 'project.manage_phases' LIMIT 1),
+    'granted',
+    up.created_at,
+    up.updated_at
+FROM user_permissions up
+WHERE up.permission_id = (
+    SELECT id FROM permissions WHERE slug = 'project.manage_milestones' LIMIT 1
+)
+  AND up.granted = 'granted';
+ 
+ 
+-- -----------------------------------------------------------------------------
+-- STEP 6: Delete the old milestone permission record
+-- -----------------------------------------------------------------------------
+DELETE FROM permissions
+WHERE slug = 'project.manage_milestones';
+
 ```

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, GripVertical, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckCircle2, GripVertical, Pencil, Trash2, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -121,6 +121,16 @@ export default function ProjectPlanningTab({
             onSuccess('Phase updated.');
         } catch (error) {
             onError(error, 'Failed to update phase.');
+        }
+    };
+
+    const handleCompletePhase = async (phaseId: number) => {
+        try {
+            await axios.post(`/admin/projects/${projectId}/phases/${phaseId}/complete`);
+            await refreshPhases();
+            onSuccess('Planning milestone completed.');
+        } catch (error) {
+            onError(error, 'Failed to complete planning milestone.');
         }
     };
 
@@ -302,12 +312,13 @@ export default function ProjectPlanningTab({
             {canManagePhases && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Create Phase</CardTitle>
+                        <CardTitle>Create Planning Milestone</CardTitle>
+                        <CardDescription>Each phase is a dated milestone that groups and schedules project tasks.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleCreatePhase} className="grid gap-3 md:grid-cols-3">
                             <div className="space-y-2 md:col-span-2">
-                                <Label>Phase Name</Label>
+                                <Label>Milestone Name</Label>
                                 <Input required value={phaseForm.name} onChange={(e) => setPhaseForm({ ...phaseForm, name: e.target.value })} />
                             </div>
                             <div className="space-y-2">
@@ -325,11 +336,11 @@ export default function ProjectPlanningTab({
                             </div>
                             <div className="space-y-2">
                                 <Label>Start</Label>
-                                <Input type="date" value={phaseForm.start_date} onChange={(e) => setPhaseForm({ ...phaseForm, start_date: e.target.value })} />
+                                <Input required type="date" value={phaseForm.start_date} onChange={(e) => setPhaseForm({ ...phaseForm, start_date: e.target.value })} />
                             </div>
                             <div className="space-y-2">
                                 <Label>End</Label>
-                                <Input type="date" value={phaseForm.end_date} onChange={(e) => setPhaseForm({ ...phaseForm, end_date: e.target.value })} />
+                                <Input required type="date" value={phaseForm.end_date} onChange={(e) => setPhaseForm({ ...phaseForm, end_date: e.target.value })} />
                             </div>
                             <div className="space-y-2">
                                 <Label>Color</Label>
@@ -340,7 +351,7 @@ export default function ProjectPlanningTab({
                                 <Textarea value={phaseForm.description} onChange={(e) => setPhaseForm({ ...phaseForm, description: e.target.value })} />
                             </div>
                             <div className="md:col-span-3">
-                                <Button type="submit">Add Phase</Button>
+                                <Button type="submit">Add Planning Milestone</Button>
                             </div>
                         </form>
                     </CardContent>
@@ -349,11 +360,17 @@ export default function ProjectPlanningTab({
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Phases</CardTitle>
-                    <CardDescription>Manage order, details, and status by phase.</CardDescription>
+                    <CardTitle>Planning Milestones</CardTitle>
+                    <CardDescription>Manage milestone order, dates, task progress, and completion.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    {sortedPhases.map((phase) => (
+                    {sortedPhases.map((phase) => {
+                        const isOverdue =
+                            Boolean(phase.end_date) &&
+                            new Date(`${String(phase.end_date).slice(0, 10)}T23:59:59`).getTime() < Date.now() &&
+                            phase.status !== 'completed';
+
+                        return (
                         <div
                             key={phase.id}
                             className={`rounded border p-3 ${draggingPhaseId === phase.id ? 'border-primary bg-muted/50' : ''}`}
@@ -366,7 +383,7 @@ export default function ProjectPlanningTab({
                             }}
                             onDrop={() => void handleDropReorder(phase.id)}
                         >
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
                                 <div className="flex items-start gap-3">
                                     {canManagePhases && <GripVertical className="mt-0.5 h-4 w-4 text-muted-foreground" />}
                                     <div>
@@ -376,9 +393,15 @@ export default function ProjectPlanningTab({
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="outline">{phase.progress ?? 0}%</Badge>
                                     <Badge variant="secondary">{phase.status}</Badge>
+                                    {isOverdue && (
+                                        <Badge variant="destructive">
+                                            <TriangleAlert className="mr-1 h-3 w-3" />
+                                            Overdue
+                                        </Badge>
+                                    )}
                                     {canManagePhases && (
                                         <>
                                             <Button size="icon" variant="outline" onClick={() => void reorderPhases(phase.id, 'up')}>
@@ -401,6 +424,12 @@ export default function ProjectPlanningTab({
                                                 <Pencil className="mr-2 h-4 w-4" />
                                                 Edit
                                             </Button>
+                                            {phase.status !== 'completed' && (
+                                                <Button size="sm" onClick={() => void handleCompletePhase(phase.id)}>
+                                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                                    Complete
+                                                </Button>
+                                            )}
                                             <Button size="icon" variant="destructive" onClick={() => void handleDeletePhase(phase.id)}>
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
@@ -481,18 +510,19 @@ export default function ProjectPlanningTab({
                                 </div>
                             )}
                         </div>
-                    ))}
-                    {phases.length === 0 && <p className="text-sm text-muted-foreground">No phases created.</p>}
+                        );
+                    })}
+                    {phases.length === 0 && <p className="text-sm text-muted-foreground">No planning milestones created.</p>}
                 </CardContent>
             </Card>
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Phase Timeline</CardTitle>
-                    <CardDescription>Visual timeline for phases with both start and end dates.</CardDescription>
+                    <CardTitle>Planning Timeline</CardTitle>
+                    <CardDescription>Visual schedule for planning milestones and their progress.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    {!phaseTimelineBounds && <p className="text-sm text-muted-foreground">Add start and end dates to phases to view the timeline.</p>}
+                    {!phaseTimelineBounds && <p className="text-sm text-muted-foreground">Add planning milestones to view the timeline.</p>}
                     {phaseTimelineBounds && (
                         <div
                             className="space-y-3"

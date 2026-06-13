@@ -168,7 +168,6 @@ class PermissionSeeder extends Seeder
             ['name' => 'Delete Project', 'slug' => 'project.delete', 'module' => 'project', 'action' => 'delete'],
             ['name' => 'Restore Project', 'slug' => 'project.restore', 'module' => 'project', 'action' => 'restore'],
             ['name' => 'Manage Project Team', 'slug' => 'project.manage_team', 'module' => 'project', 'action' => 'manage_team'],
-            ['name' => 'Manage Project Milestones', 'slug' => 'project.manage_milestones', 'module' => 'project', 'action' => 'manage_milestones'],
             ['name' => 'Manage Project Phases', 'slug' => 'project.manage_phases', 'module' => 'project', 'action' => 'manage_phases'],
             ['name' => 'Manage Project Timeline', 'slug' => 'project.manage_timeline', 'module' => 'project', 'action' => 'manage_timeline'],
             ['name' => 'Manage Project Attachments', 'slug' => 'project.manage_attachments', 'module' => 'project', 'action' => 'manage_attachments'],

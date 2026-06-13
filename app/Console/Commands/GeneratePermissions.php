@@ -213,13 +213,6 @@ class GeneratePermissions extends Command
                 'description' => 'Manage project team',
             ],
             [
-                'name' => 'Project Manage Milestones',
-                'slug' => 'project.manage_milestones',
-                'module' => 'project',
-                'action' => 'manage_milestones',
-                'description' => 'Manage project milestones',
-            ],
-            [
                 'name' => 'Project Manage Phases',
                 'slug' => 'project.manage_phases',
                 'module' => 'project',

@@ -49,20 +49,7 @@ export interface ProjectPhase {
     progress: number;
     color?: string | null;
     tasks_count?: number;
-}
-
-export interface ProjectMilestone {
-    id: number;
-    name: string;
-    description?: string | null;
-    target_date: string | null;
-    completed_date?: string | null;
-    status: string;
-    type: string;
-    progress: number;
-    sort_order?: number;
-    created_at?: string;
-    updated_at?: string;
+    settings?: Record<string, unknown> | null;
 }
 
 export interface ProjectTimelineEvent {
@@ -115,7 +102,6 @@ export interface ProjectShowData {
     department?: { id: number; name: string } | null;
     creator?: { id: number; name: string } | null;
     team?: ProjectTeamMember[];
-    milestones?: ProjectMilestone[];
     phases?: ProjectPhase[];
     timeline_events?: ProjectTimelineEvent[];
     attachments?: ProjectAttachment[];

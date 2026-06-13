@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\ProjectPhase;
 use App\Models\ProjectTeam;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -37,7 +38,7 @@ class ProjectController extends Controller
         }
 
         $query = Project::with(['manager', 'department', 'team.user'])
-            ->withCount(['tasks', 'milestones']);
+            ->withCount(['tasks', 'phases']);
 
         // Filter by status
         if ($request->filled('status')) {
@@ -194,7 +195,6 @@ class ProjectController extends Controller
             'tasks.forwardings.toDepartment:id,name',
             'tasks.forwardings.forwardedBy:id,name',
             'phases.tasks',
-            'milestones',
             'timelineEvents.user',
             'attachments.uploader',
         ]);
@@ -338,10 +338,10 @@ class ProjectController extends Controller
                 ->where('due_at', '<', now())
                 ->whereNotIn('state', ['Done', 'Cancelled'])
                 ->count(),
-            'total_milestones' => $project->milestones()->count(),
-            'completed_milestones' => $project->milestones()->where('status', 'completed')->count(),
-            'overdue_milestones' => $project->milestones()
-                ->where('target_date', '<', now())
+            'total_planning_milestones' => $project->phases()->count(),
+            'completed_planning_milestones' => $project->phases()->where('status', ProjectPhase::STATUS_COMPLETED)->count(),
+            'overdue_planning_milestones' => $project->phases()
+                ->whereDate('end_date', '<', today())
                 ->where('status', '!=', 'completed')
                 ->count(),
             'team_size' => $project->team()->count(),

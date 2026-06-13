@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ReorderProjectPhasesRequest;
+use App\Http\Requests\StoreProjectPhaseRequest;
+use App\Http\Requests\UpdateProjectPhaseRequest;
 use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -38,22 +40,13 @@ class ProjectPhaseController extends Controller
     /**
      * Store a newly created phase.
      */
-    public function store(Request $request, Project $project)
+    public function store(StoreProjectPhaseRequest $request, Project $project)
     {
         if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'status' => ['required', 'in:pending,active,completed,on_hold'],
-            'color' => ['nullable', 'string', 'max:7'],
-            'sort_order' => ['nullable', 'integer', 'min:0'],
-            'settings' => ['nullable', 'array'],
-        ]);
+        $validated = $request->validated();
 
         $phase = $project->phases()->create([
             'name' => $validated['name'],
@@ -61,6 +54,7 @@ class ProjectPhaseController extends Controller
             'start_date' => $validated['start_date'] ?? null,
             'end_date' => $validated['end_date'] ?? null,
             'status' => $validated['status'],
+            'progress' => $validated['progress'] ?? 0,
             'color' => $validated['color'] ?? null,
             'sort_order' => $validated['sort_order'] ?? $project->phases()->count(),
             'settings' => $validated['settings'] ?? null,
@@ -95,7 +89,7 @@ class ProjectPhaseController extends Controller
     /**
      * Update the specified phase.
      */
-    public function update(Request $request, Project $project, ProjectPhase $phase)
+    public function update(UpdateProjectPhaseRequest $request, Project $project, ProjectPhase $phase)
     {
         if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
@@ -105,17 +99,11 @@ class ProjectPhaseController extends Controller
             return response()->json(['message' => 'Phase not found in this project.'], 404);
         }
 
-        $validated = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'status' => ['sometimes', 'required', 'in:pending,active,completed,on_hold'],
-            'progress' => ['nullable', 'integer', 'min:0', 'max:100'],
-            'color' => ['nullable', 'string', 'max:7'],
-            'sort_order' => ['nullable', 'integer', 'min:0'],
-            'settings' => ['nullable', 'array'],
-        ]);
+        $validated = $request->validated();
+
+        if (($validated['status'] ?? null) === ProjectPhase::STATUS_COMPLETED) {
+            $validated['progress'] = 100;
+        }
 
         $phase->update($validated);
 
@@ -155,17 +143,13 @@ class ProjectPhaseController extends Controller
     /**
      * Reorder phases.
      */
-    public function reorder(Request $request, Project $project)
+    public function reorder(ReorderProjectPhasesRequest $request, Project $project)
     {
         if (! $this->checkPermission('project.manage_phases')) {
             abort(403, 'Insufficient permissions to manage project phases.');
         }
 
-        $validated = $request->validate([
-            'phases' => ['required', 'array'],
-            'phases.*.id' => ['required', 'exists:project_phases,id'],
-            'phases.*.sort_order' => ['required', 'integer', 'min:0'],
-        ]);
+        $validated = $request->validated();
 
         DB::transaction(function () use ($validated, $project) {
             foreach ($validated['phases'] as $item) {
@@ -177,6 +161,27 @@ class ProjectPhaseController extends Controller
 
         return response()->json([
             'message' => 'Phases reordered successfully.',
+        ]);
+    }
+
+    public function complete(Project $project, ProjectPhase $phase)
+    {
+        if (! $this->checkPermission('project.manage_phases')) {
+            abort(403, 'Insufficient permissions to manage project phases.');
+        }
+
+        if ($phase->project_id !== $project->id) {
+            return response()->json(['message' => 'Phase not found in this project.'], 404);
+        }
+
+        $phase->update([
+            'status' => ProjectPhase::STATUS_COMPLETED,
+            'progress' => 100,
+        ]);
+
+        return response()->json([
+            'message' => 'Planning milestone completed successfully.',
+            'phase' => $phase->fresh(),
         ]);
     }
 

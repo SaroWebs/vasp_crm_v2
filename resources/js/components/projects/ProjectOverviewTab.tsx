@@ -1,4 +1,4 @@
-import { CheckSquare, FileText, Milestone, Users } from 'lucide-react';
+import { CheckSquare, FileText, Layers3, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProjectShowData } from './types';
@@ -8,7 +8,7 @@ interface ProjectOverviewTabProps {
     project: ProjectShowData;
     statusOptions: Record<string, string>;
     priorityOptions: Record<string, string>;
-    milestoneCount: number;
+    planningMilestoneCount: number;
     teamCount: number;
     attachmentCount: number;
     completedTasks: number;
@@ -19,7 +19,7 @@ export default function ProjectOverviewTab({
     project,
     statusOptions,
     priorityOptions,
-    milestoneCount,
+    planningMilestoneCount,
     teamCount,
     attachmentCount,
     completedTasks,
@@ -114,10 +114,10 @@ export default function ProjectOverviewTab({
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="flex items-center gap-2 text-muted-foreground">
-                                <Milestone className="h-4 w-4" />
-                                Milestones
+                                <Layers3 className="h-4 w-4" />
+                                Planning Milestones
                             </span>
-                            <span>{milestoneCount}</span>
+                            <span>{planningMilestoneCount}</span>
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="flex items-center gap-2 text-muted-foreground">

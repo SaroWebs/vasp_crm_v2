@@ -14,8 +14,11 @@ class ProjectTeam extends Model
 
     // Role constants
     const ROLE_OWNER = 'owner';
+
     const ROLE_MANAGER = 'manager';
+
     const ROLE_MEMBER = 'member';
+
     const ROLE_VIEWER = 'viewer';
 
     /**
@@ -83,7 +86,6 @@ class ProjectTeam extends Model
                 'edit_project',
                 'delete_project',
                 'manage_team',
-                'manage_milestones',
                 'manage_phases',
                 'manage_tasks',
                 'manage_attachments',
@@ -92,7 +94,6 @@ class ProjectTeam extends Model
             self::ROLE_MANAGER => [
                 'edit_project',
                 'manage_team',
-                'manage_milestones',
                 'manage_phases',
                 'manage_tasks',
                 'manage_attachments',

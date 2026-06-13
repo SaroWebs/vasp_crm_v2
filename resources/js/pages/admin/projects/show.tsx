@@ -2,20 +2,18 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ProjectOverviewTab from '@/components/projects/ProjectOverviewTab';
 import ProjectPlanningTab from '@/components/projects/ProjectPlanningTab';
 import ProjectTasksTab from '@/components/projects/ProjectTasksTab';
-import ProjectMilestonesTab from '@/components/projects/ProjectMilestonesTab';
 import ProjectTimelineTab from '@/components/projects/ProjectTimelineTab';
 import ProjectFilesTab from '@/components/projects/ProjectFilesTab';
 import ProjectSettingsTab from '@/components/projects/ProjectSettingsTab';
 import {
     ProjectAttachment,
-    ProjectMilestone,
     ProjectPhase,
     ProjectShowData,
     ProjectTeamMember,
@@ -52,7 +50,6 @@ export default function ShowProject({
     const [activeError, setActiveError] = useState<string | null>(null);
 
     const [phases, setPhases] = useState<ProjectPhase[]>(project.phases ?? []);
-    const [milestones, setMilestones] = useState<ProjectMilestone[]>(project.milestones ?? []);
     const [timelineEvents, setTimelineEvents] = useState<ProjectTimelineEvent[]>(project.timeline_events ?? []);
     const [attachments, setAttachments] = useState<ProjectAttachment[]>(project.attachments ?? []);
     const [team, setTeam] = useState<ProjectTeamMember[]>(project.team ?? []);
@@ -61,7 +58,6 @@ export default function ShowProject({
     const canEdit = userPermissions.includes('project.update');
     const canDelete = userPermissions.includes('project.delete');
     const canManagePhases = userPermissions.includes('project.manage_phases');
-    const canManageMilestones = userPermissions.includes('project.manage_milestones');
     const canManageTimeline = userPermissions.includes('project.manage_timeline');
     const canManageAttachments = userPermissions.includes('project.manage_attachments');
     const canManageTeam = userPermissions.includes('project.manage_team');
@@ -75,52 +71,47 @@ export default function ShowProject({
         setActiveError(null);
     };
 
-    const onActionError = (error: unknown, fallback: string) => {
+    const onActionError = useCallback((error: unknown, fallback: string) => {
         const axiosMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
         setActiveError(axiosMessage);
         setActiveMessage(null);
-    };
+    }, []);
 
-    const refreshPhases = async () => {
+    const refreshPhases = useCallback(async () => {
         const response = await axios.get(`/admin/projects/${project.id}/phases`);
         setPhases(response.data ?? []);
-    };
+    }, [project.id]);
 
-    const refreshMilestones = async () => {
-        const response = await axios.get(`/admin/projects/${project.id}/milestones`);
-        setMilestones(response.data ?? []);
-    };
-
-    const refreshTimeline = async () => {
+    const refreshTimeline = useCallback(async () => {
         const response = await axios.get(`/admin/projects/${project.id}/timeline`);
         setTimelineEvents(response.data ?? []);
-    };
+    }, [project.id]);
 
-    const refreshAttachments = async () => {
+    const refreshAttachments = useCallback(async () => {
         const response = await axios.get(`/admin/projects/${project.id}/attachments`);
         setAttachments(response.data ?? []);
-    };
+    }, [project.id]);
 
-    const refreshTeam = async () => {
+    const refreshTeam = useCallback(async () => {
         const response = await axios.get(`/admin/projects/${project.id}/team`);
         setTeam(response.data ?? []);
-    };
+    }, [project.id]);
 
-    const refreshTasks = async () => {
+    const refreshTasks = useCallback(async () => {
         const response = await axios.get(`/admin/projects/${project.id}/gantt`);
         setTasks(response.data?.tasks ?? []);
-    };
+    }, [project.id]);
 
     useEffect(() => {
         const run = async () => {
             try {
-                await Promise.all([refreshPhases(), refreshMilestones(), refreshTimeline(), refreshAttachments(), refreshTeam(), refreshTasks()]);
+                await Promise.all([refreshPhases(), refreshTimeline(), refreshAttachments(), refreshTeam(), refreshTasks()]);
             } catch (error) {
                 onActionError(error, 'Unable to refresh project tabs.');
             }
         };
         void run();
-    }, []);
+    }, [onActionError, refreshAttachments, refreshPhases, refreshTasks, refreshTeam, refreshTimeline]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -159,7 +150,6 @@ export default function ShowProject({
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="planning">Planning</TabsTrigger>
                         <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                        <TabsTrigger value="milestones">Milestones</TabsTrigger>
                         <TabsTrigger value="timeline">Timeline</TabsTrigger>
                         <TabsTrigger value="files">Files</TabsTrigger>
                         <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -170,7 +160,7 @@ export default function ShowProject({
                             project={project}
                             statusOptions={statusOptions}
                             priorityOptions={priorityOptions}
-                            milestoneCount={milestones.length}
+                            planningMilestoneCount={phases.length}
                             teamCount={team.length}
                             attachmentCount={attachments.length}
                             completedTasks={completedTasks}
@@ -196,17 +186,6 @@ export default function ShowProject({
                             phases={phases}
                             canCreateTask={canCreateTask}
                             onRefreshTasks={refreshTasks}
-                            onSuccess={onActionSuccess}
-                            onError={onActionError}
-                        />
-                    </TabsContent>
-
-                    <TabsContent value="milestones">
-                        <ProjectMilestonesTab
-                            projectId={project.id}
-                            milestones={milestones}
-                            canManageMilestones={canManageMilestones}
-                            onMilestonesChange={setMilestones}
                             onSuccess={onActionSuccess}
                             onError={onActionError}
                         />

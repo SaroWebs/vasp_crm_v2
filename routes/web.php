@@ -32,7 +32,6 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProjectAttachmentController;
 use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\ProjectMilestoneController;
 use App\Http\Controllers\ProjectPhaseController;
 use App\Http\Controllers\ProjectTimelineController;
 use App\Http\Controllers\RemoteWorkAssignmentController;
@@ -199,17 +198,6 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::delete('/projects/{project}/team/{user}', [ProjectController::class, 'removeTeamMember'])->name('projects.team.remove');
         Route::patch('/projects/{project}/team/{user}', [ProjectController::class, 'updateTeamMemberRole'])->name('projects.team.update-role');
 
-        // Project Milestones
-        Route::get('/projects/{project}/milestones', [ProjectMilestoneController::class, 'index'])->name('projects.milestones.index');
-        Route::post('/projects/{project}/milestones', [ProjectMilestoneController::class, 'store'])->name('projects.milestones.store');
-        Route::get('/projects/{project}/milestones/{milestone}', [ProjectMilestoneController::class, 'show'])->name('projects.milestones.show');
-        Route::patch('/projects/{project}/milestones/{milestone}', [ProjectMilestoneController::class, 'update'])->name('projects.milestones.update');
-        Route::delete('/projects/{project}/milestones/{milestone}', [ProjectMilestoneController::class, 'destroy'])->name('projects.milestones.destroy');
-        Route::post('/projects/{project}/milestones/{milestone}/complete', [ProjectMilestoneController::class, 'complete'])->name('projects.milestones.complete');
-        Route::post('/projects/{project}/milestones/reorder', [ProjectMilestoneController::class, 'reorder'])->name('projects.milestones.reorder');
-        Route::get('/projects/{project}/milestones/overdue', [ProjectMilestoneController::class, 'overdue'])->name('projects.milestones.overdue');
-        Route::get('/projects/{project}/milestones/upcoming', [ProjectMilestoneController::class, 'upcoming'])->name('projects.milestones.upcoming');
-
         // Project Phases
         Route::get('/projects/{project}/phases', [ProjectPhaseController::class, 'index'])->name('projects.phases.index');
         Route::post('/projects/{project}/phases', [ProjectPhaseController::class, 'store'])->name('projects.phases.store');
@@ -217,6 +205,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::patch('/projects/{project}/phases/{phase}', [ProjectPhaseController::class, 'update'])->name('projects.phases.update');
         Route::delete('/projects/{project}/phases/{phase}', [ProjectPhaseController::class, 'destroy'])->name('projects.phases.destroy');
         Route::post('/projects/{project}/phases/reorder', [ProjectPhaseController::class, 'reorder'])->name('projects.phases.reorder');
+        Route::post('/projects/{project}/phases/{phase}/complete', [ProjectPhaseController::class, 'complete'])->name('projects.phases.complete');
         Route::get('/projects/{project}/phases/{phase}/tasks', [ProjectPhaseController::class, 'getTasks'])->name('projects.phases.tasks');
         Route::post('/projects/{project}/phases/{phase}/update-progress', [ProjectPhaseController::class, 'updateProgress'])->name('projects.phases.update-progress');
 
