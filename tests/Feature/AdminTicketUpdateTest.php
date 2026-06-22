@@ -3,19 +3,96 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\AdminTicketController;
+use App\Http\Requests\StoreAdminTicketRequest;
 use App\Models\Client;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketHistory;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\TicketNumberGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Tests\TestCase;
 
 class AdminTicketUpdateTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_admin_can_create_a_ticket_with_a_255_character_title(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $client = Client::create([
+            'name' => 'Acme Corporation',
+            'status' => 'active',
+        ]);
+        $title = str_repeat('T', 255);
+
+        $validated = [
+            'client_id' => $client->id,
+            'title' => $title,
+            'description' => 'A ticket title at the documented maximum length.',
+            'priority' => 'high',
+        ];
+        $request = new class($validated) extends StoreAdminTicketRequest
+        {
+            /**
+             * @param  array<string, mixed>  $validatedData
+             */
+            public function __construct(private array $validatedData)
+            {
+                parent::__construct();
+            }
+
+            public function validated($key = null, $default = null): mixed
+            {
+                return $key === null ? $this->validatedData : data_get($this->validatedData, $key, $default);
+            }
+
+            public function file($key = null, $default = null): mixed
+            {
+                return $default;
+            }
+        };
+
+        $controller = new AdminTicketController(new NotificationService);
+        $response = $controller->store($request, new TicketNumberGenerator);
+
+        $ticket = Ticket::query()->sole();
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame(route('admin.tickets.show', $ticket), $response->getTargetUrl());
+        $this->assertDatabaseHas('tickets', [
+            'id' => $ticket->id,
+            'client_id' => $client->id,
+            'organization_user_id' => null,
+            'created_by' => $user->id,
+            'title' => $title,
+            'priority' => 'high',
+        ]);
+    }
+
+    public function test_admin_ticket_creation_rejects_titles_over_255_characters(): void
+    {
+        $client = Client::create([
+            'name' => 'Acme Corporation',
+            'status' => 'active',
+        ]);
+
+        $request = new StoreAdminTicketRequest;
+        $validator = Validator::make([
+            'client_id' => $client->id,
+            'title' => str_repeat('T', 256),
+            'priority' => 'low',
+        ], $request->rules());
+
+        $this->assertTrue($validator->fails());
+        $this->assertArrayHasKey('title', $validator->errors()->toArray());
+        $this->assertDatabaseCount('tickets', 0);
+    }
 
     public function test_ticket_update_allows_missing_organization_user_id(): void
     {

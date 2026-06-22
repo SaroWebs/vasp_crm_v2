@@ -11,6 +11,7 @@ use App\Services\TicketNumberGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -60,16 +61,20 @@ class ClientTicketController extends Controller
 
         $validated = $request->validated();
 
-        $ticket = Ticket::create([
-            'client_id' => $client->id,
-            'organization_user_id' => $organizationUser->id,
-            'ticket_number' => $ticketNumberGenerator->generateForClient($client),
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'category' => $validated['category'],
-            'priority' => $validated['priority'],
-            'status' => 'open',
-        ]);
+        $ticket = DB::transaction(function () use ($client, $organizationUser, $ticketNumberGenerator, $validated): Ticket {
+            $lockedClient = Client::query()->lockForUpdate()->findOrFail($client->id);
+
+            return Ticket::create([
+                'client_id' => $lockedClient->id,
+                'organization_user_id' => $organizationUser->id,
+                'ticket_number' => $ticketNumberGenerator->generateForClient($lockedClient),
+                'title' => $validated['title'],
+                'description' => $validated['description'] ?? null,
+                'category' => $validated['category'],
+                'priority' => $validated['priority'],
+                'status' => 'open',
+            ]);
+        }, 3);
 
         return redirect()->route('client.tickets.show', [$client, $ticket])
             ->with('success', 'Ticket created successfully.');

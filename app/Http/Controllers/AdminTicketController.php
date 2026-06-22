@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ExportTicketsRequest;
+use App\Http\Requests\StoreAdminTicketRequest;
 use App\Models\Client;
 use App\Models\Notification;
 use App\Models\OrganizationUser;
@@ -17,6 +18,7 @@ use App\Services\TicketNumberGenerator;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -275,54 +277,49 @@ class AdminTicketController extends Controller
     /**
      * Store a newly created ticket in storage (Admin can create for any client).
      */
-    public function store(Request $request, TicketNumberGenerator $ticketNumberGenerator)
+    public function store(StoreAdminTicketRequest $request, TicketNumberGenerator $ticketNumberGenerator): RedirectResponse
     {
-        $validated = $request->validate([
-            'client_id' => ['required', 'integer', 'exists:clients,id'],
-            'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'priority' => ['nullable', 'in:low,medium,high,critical'],
-            'attachments.*' => ['nullable', 'file', 'max:10240'],
-        ]);
+        $validated = $request->validated();
 
         try {
-            $client = Client::find($validated['client_id']);
-            if (! $client) {
-                return back()->withErrors(['client_id' => 'Client not found']);
-            }
+            $newTicket = DB::transaction(function () use ($request, $validated, $ticketNumberGenerator): Ticket {
+                $client = Client::query()
+                    ->lockForUpdate()
+                    ->findOrFail($validated['client_id']);
 
-            $ticketNum = $ticketNumberGenerator->generateForClient($client);
+                $ticket = Ticket::create([
+                    'client_id' => $client->id,
+                    'organization_user_id' => null,
+                    'created_by' => Auth::id(),
+                    'ticket_number' => $ticketNumberGenerator->generateForClient($client),
+                    'title' => $validated['title'],
+                    'description' => $validated['description'] ?? null,
+                    'category' => 'technical',
+                    'priority' => $validated['priority'] ?? 'low',
+                    'status' => 'open',
+                ]);
 
-            $newTicket = Ticket::create([
-                'client_id' => $validated['client_id'],
-                'organization_user_id' => null,
-                'created_by' => Auth::id(),
-                'ticket_number' => $ticketNum,
-                'title' => $validated['title'],
-                'description' => $validated['description'] ?? null,
-                'category' => 'technical',
-                'priority' => $validated['priority'] ?? 'low',
-                'status' => 'open',
-            ]);
-
-            // Handle Attachments
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $file) {
+                foreach ($request->file('attachments', []) as $file) {
                     $path = $file->store('ticket-attachments', 'public');
 
                     TicketAttachment::create([
-                        'ticket_id' => $newTicket->id,
+                        'ticket_id' => $ticket->id,
                         'file_path' => $path,
                         'file_type' => $file->getClientMimeType(),
                     ]);
                 }
-            }
+
+                return $ticket;
+            }, 3);
 
             return redirect()->route('admin.tickets.show', $newTicket->id)
                 ->with('success', 'Ticket created successfully');
+        } catch (\Throwable $exception) {
+            report($exception);
 
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Something went wrong: '.$e->getMessage()]);
+            return back()
+                ->withErrors(['error' => 'The ticket could not be created. Please try again.'])
+                ->withInput();
         }
     }
 
