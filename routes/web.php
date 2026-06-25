@@ -8,6 +8,7 @@ use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\MonthlyCycleRuleController;
 use App\Http\Controllers\Client\ClientCommentAttachmentController;
 use App\Http\Controllers\Client\ClientPortalAuthController;
 use App\Http\Controllers\Client\ClientTicketCommentController;
@@ -416,6 +417,16 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::get('/api/attendance/date', [AttendanceController::class, 'getAttendanceByDate'])->name('api.attendance.byDate');
         Route::post('/api/attendance/{employee}/override', [AttendanceController::class, 'adminOverrideAttendance'])->name('api.attendance.override');
         Route::delete('/api/attendance/{attendance}', [AttendanceController::class, 'adminDeleteAttendance'])->name('api.attendance.delete');
+
+        // Op Month Cycle Rules
+        Route::get('/attendance/cycle-rules', [MonthlyCycleRuleController::class, 'page'])->name('attendance.cycle-rules');
+        Route::get('/api/attendance/cycle-rules', [MonthlyCycleRuleController::class, 'index'])->name('api.attendance.cycle-rules.index');
+        Route::post('/api/attendance/cycle-rules', [MonthlyCycleRuleController::class, 'store'])->name('api.attendance.cycle-rules.store');
+        Route::put('/api/attendance/cycle-rules/{monthlyCycleRule}', [MonthlyCycleRuleController::class, 'update'])->name('api.attendance.cycle-rules.update');
+        Route::get('/api/attendance/cycle-rules/preview', [MonthlyCycleRuleController::class, 'preview'])->name('api.attendance.cycle-rules.preview');
+        Route::get('/api/attendance/op-month/current', [MonthlyCycleRuleController::class, 'currentOpMonth'])->name('api.attendance.op-month.current');
+        Route::get('/api/attendance/op-month/resolve', [MonthlyCycleRuleController::class, 'resolveDate'])->name('api.attendance.op-month.resolve');
+        Route::get('/api/attendance/op-months', [MonthlyCycleRuleController::class, 'listOpMonths'])->name('api.attendance.op-months');
 
         Route::get('/shifts', [ShiftController::class, 'index'])->name('shifts.index');
         Route::get('/api/shifts', [ShiftController::class, 'shifts'])->name('api.shifts.list');

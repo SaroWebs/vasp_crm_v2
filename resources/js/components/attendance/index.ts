@@ -14,3 +14,4 @@ export { RemoteWorkHistoryList } from './RemoteWorkHistoryList';
 export { RemoteWorkRequestForm } from './RemoteWorkRequestForm';
 export { FieldWorkHistoryList } from './FieldWorkHistoryList';
 export { FieldWorkRequestForm } from './FieldWorkRequestForm';
+export { OpMonthSelector, type OpMonth } from './OpMonthSelector';

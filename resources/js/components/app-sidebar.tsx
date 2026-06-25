@@ -28,6 +28,7 @@ import {
     ListChecks,
     CalendarDays,
     CalendarCheck,
+    CalendarCog,
     Handshake,
 } from 'lucide-react';
 import AppLogo from './app-logo';
@@ -136,6 +137,13 @@ const adminNavGroups: NavGroup[] = [
                 href: '/admin/attendance',
                 icon: CalendarCheck,
                 roles: ['super-admin', 'admin', 'manager', 'team-lead'],
+                menuKey: 'organization.attendance',
+            },
+            {
+                title: 'Op Month Rules',
+                href: '/admin/attendance/cycle-rules',
+                icon: CalendarCog,
+                roles: ['super-admin', 'admin'],
                 menuKey: 'organization.attendance',
             },
             // leave management

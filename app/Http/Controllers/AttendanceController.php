@@ -466,11 +466,6 @@ class AttendanceController extends Controller
     {
         $user = Auth::user();
 
-        $validated = $request->validate([
-            'month' => ['nullable', 'integer', 'in:1,2,3,4,5,6,7,8,9,10,11,12'],
-            'year' => ['nullable', 'integer'],
-        ]);
-
         if (! $user || ! $user->employee) {
             return response()->json([
                 'status' => 'error',
@@ -487,18 +482,29 @@ class AttendanceController extends Controller
             ], 404);
         }
 
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->input('start_date'));
+            $endDate = Carbon::parse($request->input('end_date'));
+        } elseif ($request->filled('month') && $request->filled('year')) {
+            $month = (int) $request->input('month');
+            $year = (int) $request->input('year');
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+        } else {
+            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $startDate = Carbon::parse($currentOpMonth['start_date']);
+            $endDate = Carbon::parse($currentOpMonth['end_date']);
+        }
+
         $attendance = Attendance::where('employee_id', $employee->code)
-            ->whereMonth('attendance_date', $validated['month'] ?? date('m'))
-            ->whereYear('attendance_date', $validated['year'] ?? date('Y'))
+            ->whereBetween('attendance_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->orderBy('attendance_date')
             ->orderBy('punch_in')
             ->get();
         $attendanceData = $attendance->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
-        $month = $validated['month'] ?? (int) date('m');
-        $year = $validated['year'] ?? (int) date('Y');
-        $summary = $this->computeSummary($attendance, $month, $year);
-        $calendarDays = $this->buildAttendanceCalendarDays($employee, $attendanceData, $month, $year);
+        $summary = $this->computeSummary($attendance, $startDate, $endDate);
+        $calendarDays = $this->buildAttendanceCalendarDays($employee, $attendanceData, $startDate, $endDate);
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
@@ -510,11 +516,13 @@ class AttendanceController extends Controller
             'summary' => $summary,
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
-                'holidays' => $workingHoursService->getHolidaysForYear($year),
+                'holidays' => $workingHoursService->getHolidaysForYear($startDate->year),
                 'days' => $calendarDays,
             ],
-            'month' => $month,
-            'year' => $year,
+            'month' => (int) $startDate->month,
+            'year' => (int) $startDate->year,
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString(),
         ]);
     }
 
@@ -551,17 +559,8 @@ class AttendanceController extends Controller
         return Inertia::render('admin/attendance/Summary');
     }
 
-    /**
-     * Unified API: fetch attendance for a specific employee (by ID or code).
-     * Handles permission checks: employees can only view their own, managers/admins can view anyone.
-     */
     public function getAttendance(Request $request, string $employeeId): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['nullable', 'integer', 'between:1,12'],
-            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-        ]);
-
         /** @var User|null $user */
         $user = Auth::user();
 
@@ -607,19 +606,29 @@ class AttendanceController extends Controller
             ], 403);
         }
 
-        $month = $validated['month'] ?? (int) now()->month;
-        $year = $validated['year'] ?? (int) now()->year;
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->input('start_date'));
+            $endDate = Carbon::parse($request->input('end_date'));
+        } elseif ($request->filled('month') && $request->filled('year')) {
+            $month = (int) $request->input('month');
+            $year = (int) $request->input('year');
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+        } else {
+            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $startDate = Carbon::parse($currentOpMonth['start_date']);
+            $endDate = Carbon::parse($currentOpMonth['end_date']);
+        }
 
         $records = Attendance::where('employee_id', $employee->code)
-            ->whereMonth('attendance_date', $month)
-            ->whereYear('attendance_date', $year)
+            ->whereBetween('attendance_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->orderBy('attendance_date')
             ->orderBy('punch_in')
             ->get();
         $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
-        $summary = $this->computeSummary($records, $month, $year);
-        $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $month, $year);
+        $summary = $this->computeSummary($records, $startDate, $endDate);
+        $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $startDate, $endDate);
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
@@ -631,11 +640,13 @@ class AttendanceController extends Controller
             'summary' => $summary,
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
-                'holidays' => $workingHoursService->getHolidaysForYear($year),
+                'holidays' => $workingHoursService->getHolidaysForYear($startDate->year),
                 'days' => $calendarDays,
             ],
-            'month' => $month,
-            'year' => $year,
+            'month' => (int) $startDate->month,
+            'year' => (int) $startDate->year,
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString(),
         ]);
     }
 
@@ -645,24 +656,29 @@ class AttendanceController extends Controller
      */
     public function adminGetEmployeeAttendance(Request $request, Employee $employee): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['nullable', 'integer', 'between:1,12'],
-            'year' => ['nullable', 'integer'],
-        ]);
-
-        $month = $validated['month'] ?? (int) date('m');
-        $year = $validated['year'] ?? (int) date('Y');
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->input('start_date'));
+            $endDate = Carbon::parse($request->input('end_date'));
+        } elseif ($request->filled('month') && $request->filled('year')) {
+            $month = (int) $request->input('month');
+            $year = (int) $request->input('year');
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+        } else {
+            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $startDate = Carbon::parse($currentOpMonth['start_date']);
+            $endDate = Carbon::parse($currentOpMonth['end_date']);
+        }
 
         $records = Attendance::where('employee_id', $employee->code)
-            ->whereMonth('attendance_date', $month)
-            ->whereYear('attendance_date', $year)
+            ->whereBetween('attendance_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->orderBy('attendance_date')
             ->orderBy('punch_in')
             ->get();
         $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
-        $summary = $this->computeSummary($records, $month, $year);
-        $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $month, $year);
+        $summary = $this->computeSummary($records, $startDate, $endDate);
+        $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $startDate, $endDate);
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
@@ -674,11 +690,13 @@ class AttendanceController extends Controller
             'summary' => $summary,
             'calendar' => [
                 'working_hours' => $workingHoursService->getWorkingHoursConfig(),
-                'holidays' => $workingHoursService->getHolidaysForYear($year),
+                'holidays' => $workingHoursService->getHolidaysForYear($startDate->year),
                 'days' => $calendarDays,
             ],
-            'month' => $month,
-            'year' => $year,
+            'month' => (int) $startDate->month,
+            'year' => (int) $startDate->year,
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString(),
         ]);
     }
 
@@ -687,27 +705,32 @@ class AttendanceController extends Controller
      */
     public function adminGetAllAttendanceSummary(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['nullable', 'integer', 'between:1,12'],
-            'year' => ['nullable', 'integer'],
-        ]);
-
-        $month = $validated['month'] ?? (int) date('m');
-        $year = $validated['year'] ?? (int) date('Y');
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->input('start_date'));
+            $endDate = Carbon::parse($request->input('end_date'));
+        } elseif ($request->filled('month') && $request->filled('year')) {
+            $month = (int) $request->input('month');
+            $year = (int) $request->input('year');
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+        } else {
+            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $startDate = Carbon::parse($currentOpMonth['start_date']);
+            $endDate = Carbon::parse($currentOpMonth['end_date']);
+        }
 
         $employees = Employee::query()
             ->with([
                 'department:id,name',
-                'attendances' => function ($query) use ($month, $year) {
-                    $query->whereMonth('attendance_date', $month)
-                        ->whereYear('attendance_date', $year);
+                'attendances' => function ($query) use ($startDate, $endDate) {
+                    $query->whereBetween('attendance_date', [$startDate->toDateString(), $endDate->toDateString()]);
                 },
             ])
             ->orderBy('name')
             ->get();
 
-        $result = $employees->map(function (Employee $employee) use ($month, $year) {
-            $summary = $this->computeSummary($employee->attendances, $month, $year);
+        $result = $employees->map(function (Employee $employee) use ($startDate, $endDate) {
+            $summary = $this->computeSummary($employee->attendances, $startDate, $endDate);
 
             return [
                 'id' => $employee->id,
@@ -722,8 +745,10 @@ class AttendanceController extends Controller
             'status' => 'success',
             'message' => 'Attendance summary fetched successfully.',
             'data' => $result,
-            'month' => $month,
-            'year' => $year,
+            'month' => (int) $startDate->month,
+            'year' => (int) $startDate->year,
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString(),
         ]);
     }
 
@@ -814,24 +839,22 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Compute summary stats for a collection of attendance records for a given month.
+     * Compute summary stats for a collection of attendance records for a given date range.
      *
      * @param  Collection<int, Attendance>  $records
      * @return array{total_working_days: int, present_days: int, absent_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_hours: float}
      */
-    private function computeSummary(Collection $records, int $month, int $year): array
+    private function computeSummary(Collection $records, Carbon $startDate, Carbon $endDate): array
     {
-        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-        $periodEnd = Carbon::create($year, $month, 1)->endOfMonth();
         $today = Carbon::today();
 
         /** @var WorkingHoursService $workingHoursService */
         $workingHoursService = app(WorkingHoursService::class);
 
-        // Count configured working days up to today (or end of month)
-        $boundary = $periodEnd->lt($today) ? $periodEnd : $today;
+        // Count configured working days up to today (or end of period)
+        $boundary = $endDate->lt($today) ? $endDate->copy() : $today;
         $totalWorkingDays = 0;
-        $cursor = $periodStart->copy();
+        $cursor = $startDate->copy();
 
         while ($cursor->lte($boundary)) {
             if ($workingHoursService->isWorkingDay($cursor)) {
@@ -1572,36 +1595,43 @@ class AttendanceController extends Controller
      * @param  Collection<int, array<string, mixed>>  $records
      * @return array<int, array<string, mixed>>
      */
-    private function buildAttendanceCalendarDays(Employee $employee, Collection $records, int $month, int $year): array
+    private function buildAttendanceCalendarDays(Employee $employee, Collection $records, Carbon $startDate, Carbon $endDate): array
     {
         $workingHoursService = app(WorkingHoursService::class);
-        $holidayMap = collect($workingHoursService->getHolidaysForYear($year))->keyBy('date');
+        
+        // Fetch holidays for all years covered by the start and end date range
+        $holidays = [];
+        for ($year = $startDate->year; $year <= $endDate->year; $year++) {
+            $holidays = array_merge($holidays, $workingHoursService->getHolidaysForYear($year));
+        }
+        $holidayMap = collect($holidays)->keyBy('date');
+
         $recordMap = $records->groupBy(function (array $record): string {
             $date = Carbon::parse($record['attendance_date'])->toDateString();
 
             return $date;
         })->map(fn (Collection $dailyRecords, string $date): array => $this->combineDailyCalendarRecords($employee, $dailyRecords, $date));
 
-        $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
         $days = [];
+        $cursor = $startDate->copy()->startOfDay();
+        $today = Carbon::today();
 
-        for ($day = 1; $day <= $daysInMonth; $day++) {
-            $calendarDate = Carbon::create($year, $month, $day)->startOfDay();
-            $date = $calendarDate->toDateString();
+        while ($cursor->lte($endDate)) {
+            $date = $cursor->toDateString();
             $record = $recordMap->get($date);
             $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $date);
             $holiday = $holidayMap->get($date);
-            $isCurrentMonthDay = $calendarDate->isToday();
+            $isToday = $cursor->eq($today);
 
             $status = $record
                 ? $this->normalizeCalendarStatus((string) ($record['status'] ?? 'present'), $record)
-                : $this->resolveCalendarStatus($shiftMeta, $calendarDate);
+                : $this->resolveCalendarStatus($shiftMeta, $cursor);
 
             $days[] = [
-                'day' => $day,
+                'day' => $cursor->day,
                 'date' => $date,
                 'status' => $status,
-                'is_today' => $isCurrentMonthDay,
+                'is_today' => $isToday,
                 'record' => $record,
                 'holiday' => $holiday ? [
                     'date' => $holiday['date'] ?? $date,
@@ -1618,6 +1648,8 @@ class AttendanceController extends Controller
                 'is_field_work' => (bool) ($shiftMeta['is_field_work'] ?? false),
                 'is_remote_work' => (bool) ($shiftMeta['is_remote_work'] ?? false),
             ];
+
+            $cursor->addDay();
         }
 
         return $days;

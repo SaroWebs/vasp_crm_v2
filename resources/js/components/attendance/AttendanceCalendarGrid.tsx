@@ -254,8 +254,12 @@ export function AttendanceCalendarGrid({
     const calendarDays = useMemo(() => {
         if (calendar?.days?.length) {
             const days: CalendarGridItem[] = [];
+            const firstDateStr = calendar.days[0].date;
+            const d = new Date(firstDateStr + 'T00:00:00');
+            const dayOfWeek = d.getDay();
+            const startPadding = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 
-            for (let i = 0; i < firstDay; i++) {
+            for (let i = 0; i < startPadding; i++) {
                 days.push({ day: null, date: '', status: 'empty' });
             }
 
