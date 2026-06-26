@@ -55,7 +55,8 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const dropRef = useRef<HTMLDivElement>(null);
     const [dragActive, setDragActive] = useState(false);
 
-    const { url, errors } = usePage();
+    const { url, props } = usePage();
+    const errors = (props.errors ?? {}) as Record<string, string>;
 
     useEffect(() => {
         const params = new URLSearchParams(url.split('?')[1] ?? '');
