@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import axios, { AxiosInstance } from 'axios';
 import { ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle } from 'lucide-react';
 import { AttendanceCalendarGrid, type AttendanceCalendarDay } from './AttendanceCalendarGrid';
+import { OpMonthSelector, type OpMonth } from './OpMonthSelector';
 import { AttendanceSummaryCards } from './AttendanceSummaryCards';
 import { Auth } from '@/types';
+import { Button } from '@/components/ui/button';
+import { AttendanceOverrideModal } from './AttendanceOverrideModal';
 
 interface AttendanceRecord {
     id: number;
@@ -65,6 +68,7 @@ interface AttendanceCalendarProps {
     auth?: Auth | null;
     /** Override the API base URL. Defaults to /api/attendance */
     employeeId?: number;
+    employeeName?: string;
     axiosInstance?: AxiosInstance;
     /** Initial month (1–12). Defaults to current month. */
     defaultMonth?: number;
@@ -205,6 +209,7 @@ function CalendarSkeleton() {
 export function AttendanceCalendar({
     auth,
     employeeId = 0,
+    employeeName,
     axiosInstance,
     defaultMonth,
     defaultYear,
@@ -215,35 +220,70 @@ export function AttendanceCalendar({
     const [currentMonth, setCurrentMonth] = useState(defaultMonth ?? now.getMonth() + 1);
     const [currentYear, setCurrentYear] = useState(defaultYear ?? now.getFullYear());
 
+    const [opMonths, setOpMonths] = useState<OpMonth[]>([]);
+    const [selectedOpMonth, setSelectedOpMonth] = useState<OpMonth | null>(null);
+    const [opMonthsLoading, setOpMonthsLoading] = useState(true);
+
     const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
     const [summary, setSummary] = useState<AttendanceSummary | null>(null);
     const [calendarMeta, setCalendarMeta] = useState<AttendanceApiResponse['calendar']>();
     const [selectedDay, setSelectedDay] = useState<AttendanceCalendarDay | null>(null);
+    const [overrideModalOpen, setOverrideModalOpen] = useState(false);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const empId = employeeId ? employeeId : auth?.user?.employee?.id ?? auth?.user?.id;
-    const employeeName = auth?.user?.name;
+    const empName = employeeName || auth?.user?.name || 'Employee';
     const url = employeeId
         ? `/admin/employee-attendance/${employeeId}`
         : `/api/my/attendance`;
 
-    // ── Fetch ────────────────────────────────────────────────────────────────
+    // ── Fetch derived op months on mount ──
+    useEffect(() => {
+        const fetchOpMonths = async () => {
+            setOpMonthsLoading(true);
+            try {
+                const http = axiosInstance ?? axios;
+                const token = auth?.token ?? auth?.user?.token;
+                const { data } = await http.get('/admin/api/attendance/op-months', {
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                });
+                if (data.status === 'success' && data.data?.length) {
+                    setOpMonths(data.data);
+                    
+                    let defaultMatch = null;
+                    if (defaultMonth && defaultYear) {
+                        const targetMonthStr = `-${String(defaultMonth).padStart(2, '0')}-`;
+                        defaultMatch = data.data.find((om: OpMonth) => om.start_date.includes(targetMonthStr) || om.end_date.includes(targetMonthStr));
+                    }
+                    setSelectedOpMonth(defaultMatch ?? data.data[0]);
+                }
+            } catch (err) {
+                console.error('Failed to fetch op months', err);
+            } finally {
+                setOpMonthsLoading(false);
+            }
+        };
+        fetchOpMonths();
+    }, [axiosInstance, auth, defaultMonth, defaultYear]);
 
+    // ── Fetch Attendance ──
     const fetchAttendance = useCallback(
-        async (month: number, year: number) => {
+        async (startDate: string, endDate: string) => {
             setLoading(true);
             setError(null);
 
             try {
                 const http = axiosInstance ?? axios;
-
-                // Resolve the bearer token from auth
                 const token = auth?.token ?? auth?.user?.token;
 
                 const { data } = await http.get<AttendanceApiResponse>(url, {
-                    params: { employee_id: empId, month, year },
+                    params: {
+                        employee_id: empId,
+                        start_date: startDate,
+                        end_date: endDate,
+                    },
                     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                 });
 
@@ -264,7 +304,6 @@ export function AttendanceCalendar({
                 } else {
                     setError('An unexpected error occurred.');
                 }
-                // Keep previous data visible on error so the UI isn't blank
             } finally {
                 setLoading(false);
             }
@@ -273,8 +312,10 @@ export function AttendanceCalendar({
     );
 
     useEffect(() => {
-        fetchAttendance(currentMonth, currentYear);
-    }, [currentMonth, currentYear, fetchAttendance]);
+        if (selectedOpMonth) {
+            fetchAttendance(selectedOpMonth.start_date, selectedOpMonth.end_date);
+        }
+    }, [selectedOpMonth, fetchAttendance]);
 
     useEffect(() => {
         if (!calendarMeta?.days?.length) {
@@ -291,26 +332,23 @@ export function AttendanceCalendar({
             ?? null;
 
         setSelectedDay(match);
-    }, [calendarMeta, currentMonth, currentYear]);
+    }, [calendarMeta]);
 
-    // ── Navigation ───────────────────────────────────────────────────────────
+    // ── Navigation ──
+    const selectedIndex = selectedOpMonth
+        ? opMonths.findIndex(om => om.start_date === selectedOpMonth.start_date)
+        : -1;
 
     function goToPreviousMonth() {
-        setCurrentMonth((m) => {
-            const newMonth = m === 1 ? 12 : m - 1;
-            const newYear = m === 1 ? currentYear - 1 : currentYear;
-            if (m === 1) setCurrentYear(newYear);
-            return newMonth;
-        });
+        if (selectedIndex !== -1 && selectedIndex < opMonths.length - 1) {
+            setSelectedOpMonth(opMonths[selectedIndex + 1]);
+        }
     }
 
     function goToNextMonth() {
-        setCurrentMonth((m) => {
-            const newMonth = m === 12 ? 1 : m + 1;
-            const newYear = m === 12 ? currentYear + 1 : currentYear;
-            if (m === 12) setCurrentYear(newYear);
-            return newMonth;
-        });
+        if (selectedIndex > 0) {
+            setSelectedOpMonth(opMonths[selectedIndex - 1]);
+        }
     }
 
     const handleDayClick = useCallback((day: AttendanceCalendarDay) => {
@@ -318,8 +356,7 @@ export function AttendanceCalendar({
         onDayClick?.(day.date);
     }, [onDayClick]);
 
-    const isCurrentMonth =
-        currentMonth === now.getMonth() + 1 && currentYear === now.getFullYear();
+    const isCurrentMonth = selectedIndex === 0;
     const timezone = calendarMeta?.working_hours.timezone ?? 'Asia/Calcutta';
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -337,8 +374,8 @@ export function AttendanceCalendar({
                         <h2 className="text-base font-semibold leading-tight">
                             Attendance Calendar
                         </h2>
-                        {employeeName && (
-                            <p className="text-xs text-muted-foreground">{employeeName}</p>
+                        {empName && (
+                            <p className="text-xs text-muted-foreground">{empName}</p>
                         )}
                     </div>
                 </div>
@@ -348,25 +385,24 @@ export function AttendanceCalendar({
                     <button
                         type="button"
                         onClick={goToPreviousMonth}
-                        disabled={loading}
+                        disabled={loading || opMonthsLoading || selectedIndex === -1 || selectedIndex === opMonths.length - 1}
                         className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-background hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label="Previous month"
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </button>
 
-                    <span className="min-w-[130px] text-center text-sm font-medium">
-                        {loading ? (
-                            <span className="inline-block h-4 w-24 animate-pulse rounded bg-muted/60 align-middle" />
-                        ) : (
-                            `${MONTH_NAMES[currentMonth - 1]} ${currentYear}`
-                        )}
-                    </span>
+                    <OpMonthSelector
+                        opMonths={opMonths}
+                        selected={selectedOpMonth}
+                        onChange={setSelectedOpMonth}
+                        loading={loading || opMonthsLoading}
+                    />
 
                     <button
                         type="button"
                         onClick={goToNextMonth}
-                        disabled={isCurrentMonth || loading}
+                        disabled={loading || opMonthsLoading || selectedIndex <= 0}
                         className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-background hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label="Next month"
                     >
@@ -384,7 +420,11 @@ export function AttendanceCalendar({
                     </div>
                     <button
                         type="button"
-                        onClick={() => fetchAttendance(currentMonth, currentYear)}
+                        onClick={() => {
+                            if (selectedOpMonth) {
+                                void fetchAttendance(selectedOpMonth.start_date, selectedOpMonth.end_date);
+                            }
+                        }}
                         className="flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/50"
                     >
                         <RefreshCw className="h-3 w-3" />
@@ -407,8 +447,8 @@ export function AttendanceCalendar({
                 <div className="rounded-xl border bg-background/60 p-3 sm:p-4">
                     <AttendanceCalendarGrid
                         records={attendanceData}
-                        month={currentMonth}
-                        year={currentYear}
+                        month={selectedOpMonth ? new Date(selectedOpMonth.start_date + 'T00:00:00').getMonth() + 1 : currentMonth}
+                        year={selectedOpMonth ? new Date(selectedOpMonth.start_date + 'T00:00:00').getFullYear() : currentYear}
                         calendar={calendarMeta}
                         onDayClick={handleDayClick}
                     />
@@ -425,8 +465,20 @@ export function AttendanceCalendar({
                                 {getStatusLabel(selectedDay.status)}{selectedDay.shift_source === 'assigned_shift' ? ' - assigned shift' : selectedDay.shift_source === 'general_hours' ? ' - general hours' : ''}
                             </p>
                         </div>
-                        <div className="rounded-full border bg-muted/60 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            {selectedDay.shift_grace_minutes != null ? `${selectedDay.shift_grace_minutes} min grace` : 'No grace'}
+                        <div className="flex items-center gap-2">
+                            <div className="rounded-full border bg-muted/60 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                {selectedDay.shift_grace_minutes != null ? `${selectedDay.shift_grace_minutes} min grace` : 'No grace'}
+                            </div>
+                            {employeeId > 0 && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setOverrideModalOpen(true)}
+                                    className="h-7 px-3 text-xs"
+                                >
+                                    Override
+                                </Button>
+                            )}
                         </div>
                     </div>
 
@@ -473,6 +525,28 @@ export function AttendanceCalendar({
                     </div>
                 ))}
             </div>
+
+            {employeeId > 0 && (
+                <AttendanceOverrideModal
+                    open={overrideModalOpen}
+                    onOpenChange={setOverrideModalOpen}
+                    employeeId={empId}
+                    employeeName={empName}
+                    selectedDate={selectedDay?.date}
+                    existingRecord={selectedDay?.record ? {
+                        attendance_date: selectedDay.date,
+                        punch_in: selectedDay.record.punch_in,
+                        punch_out: selectedDay.record.punch_out,
+                        mode: selectedDay.record.mode,
+                        status: selectedDay.record.status,
+                    } : null}
+                    onSuccess={() => {
+                        if (selectedOpMonth) {
+                            void fetchAttendance(selectedOpMonth.start_date, selectedOpMonth.end_date);
+                        }
+                    }}
+                />
+            )}
         </div>
     );
 }

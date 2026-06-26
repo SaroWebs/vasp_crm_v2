@@ -50,17 +50,7 @@ export function OpMonthSelector({ opMonths, selected, onChange, loading }: OpMon
                     ))}
                 </SelectContent>
             </Select>
-            {selected && (
-                <span className="hidden text-xs text-muted-foreground sm:block">
-                    {dayCount(selected.start_date, selected.end_date)} days
-                </span>
-            )}
         </div>
     );
 }
 
-function dayCount(start: string, end: string): number {
-    const s = new Date(start);
-    const e = new Date(end);
-    return Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
-}

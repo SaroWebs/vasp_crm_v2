@@ -40,10 +40,6 @@ interface AdminRaiseTicketProps {
 export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const [open, setOpen] = useState(false);
     const [clientSearchValue, setClientSearchValue] = useState('');
-    const [sheetPortalTarget, setSheetPortalTarget] =
-        useState<HTMLDivElement | null>(null);
-
-    
 
     const [form, setForm] = useState<FormData>({
         client_id: '',
@@ -57,19 +53,22 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const dropRef = useRef<HTMLDivElement>(null);
     const [dragActive, setDragActive] = useState(false);
 
-   const { url } = usePage();
+    const { url, errors } = usePage();
 
     useEffect(() => {
         const params = new URLSearchParams(url.split('?')[1] ?? '');
         const clientIdParam = params.get('client_id');
-        if (clientIdParam && form.client_id === '') {
+        const createParam = params.get('create');
+        if (clientIdParam) {
             setForm((prev) => ({
                 ...prev,
                 client_id: Number(clientIdParam) || '',
             }));
-            setOpen(true);
+            if ((createParam === '1' || createParam === 'true') && form.client_id === '') {
+                setOpen(true);
+            }
         }
-    }, []);
+    }, [url]);
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     ) => {
@@ -155,7 +154,6 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                 </MantineButton>
             </SheetTrigger>
             <SheetContent
-                ref={setSheetPortalTarget}
                 className="overflow-y-auto sm:max-w-xl"
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
@@ -177,7 +175,6 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                             searchable
                             clearable
                             nothingFoundMessage="No clients found"
-                            defaultDropdownOpened={false}
                             searchValue={clientSearchValue}
                             onSearchChange={setClientSearchValue}
                             data={clients.map((client) => ({
@@ -193,12 +190,12 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                                 handleSelectChange('client_id', val ?? '')
                             }
                             comboboxProps={{
-                                withinPortal: true,
-                                portalProps: {
-                                    target: sheetPortalTarget ?? undefined,
-                                },
+                                withinPortal: false,
                             }}
                         />
+                        {errors.client_id && (
+                            <p className="text-xs text-red-500 font-medium mt-1">{errors.client_id}</p>
+                        )}
                     </div>
 
                     {/* Title */}
@@ -213,6 +210,9 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                             onChange={handleChange}
                             required
                         />
+                        {errors.title && (
+                            <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
+                        )}
                     </div>
 
                     {/* Description */}
@@ -226,6 +226,9 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                             onChange={handleChange}
                             rows={4}
                         />
+                        {errors.description && (
+                            <p className="text-xs text-red-500 font-medium mt-1">{errors.description}</p>
+                        )}
                     </div>
 
                     {/* Priority */}
@@ -247,6 +250,9 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                                 <SelectItem value="critical">Critical</SelectItem>
                             </SelectContent>
                         </UiSelect>
+                        {errors.priority && (
+                            <p className="text-xs text-red-500 font-medium mt-1">{errors.priority}</p>
+                        )}
                     </div>
 
                     {/* Attachments */}
@@ -309,6 +315,10 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                             </ul>
                         )}
                     </div>
+
+                    {errors.error && (
+                        <p className="text-sm text-red-500 font-semibold text-center mt-2">{errors.error}</p>
+                    )}
 
                     <div className="flex justify-end space-x-2 pt-4">
                         <MantineButton

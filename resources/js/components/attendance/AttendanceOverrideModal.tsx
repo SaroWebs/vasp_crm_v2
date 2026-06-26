@@ -26,12 +26,13 @@ interface AttendanceRecord {
     punch_in: string | null;
     punch_out: string | null;
     mode: string;
+    status?: string | null;
 }
 
 interface AttendanceOverrideModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    employeeId: number;
+    employeeId?: number;
     employeeName: string;
     selectedDate?: string;
     existingRecord?: AttendanceRecord | null;
@@ -64,6 +65,7 @@ export function AttendanceOverrideModal({
         punch_in: normalizeTimeInput(existingRecord?.punch_in),
         punch_out: normalizeTimeInput(existingRecord?.punch_out),
         mode: existingRecord?.mode || 'office',
+        status: existingRecord?.status || 'auto',
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -71,12 +73,15 @@ export function AttendanceOverrideModal({
         setLoading(true);
         setError(null);
 
+        const isTimeOptional = ['absent', 'leave', 'holiday'].includes(formData.status);
+
         try {
             await axios.post(`/api/attendance/${employeeId}/override`, {
                 attendance_date: formData.attendance_date,
-                punch_in: formData.punch_in,
-                punch_out: formData.punch_out || null,
+                punch_in: isTimeOptional ? null : (formData.punch_in || null),
+                punch_out: isTimeOptional ? null : (formData.punch_out || null),
                 mode: formData.mode,
+                status: formData.status === 'auto' ? null : formData.status,
             });
 
             onSuccess();
@@ -88,6 +93,8 @@ export function AttendanceOverrideModal({
             setLoading(false);
         }
     };
+
+    const isTimeOptional = ['absent', 'leave', 'holiday'].includes(formData.status);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -118,29 +125,63 @@ export function AttendanceOverrideModal({
                         </div>
 
                         <div className="grid gap-2">
-                            <Label htmlFor="punch_in">Punch In Time</Label>
-                            <Input
-                                id="punch_in"
-                                type="time"
-                                value={formData.punch_in}
-                                onChange={(e) =>
-                                    setFormData({ ...formData, punch_in: e.target.value })
+                            <Label htmlFor="status">Status Override</Label>
+                            <Select
+                                value={formData.status}
+                                onValueChange={(value) =>
+                                    setFormData({
+                                        ...formData,
+                                        status: value,
+                                        // clear punch times if status is absent, leave, or holiday
+                                        punch_in: ['absent', 'leave', 'holiday'].includes(value) ? '' : formData.punch_in,
+                                        punch_out: ['absent', 'leave', 'holiday'].includes(value) ? '' : formData.punch_out,
+                                    })
                                 }
-                                required
-                            />
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select status override" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="auto">Auto (Calculated)</SelectItem>
+                                    <SelectItem value="present">Present</SelectItem>
+                                    <SelectItem value="absent">Absent</SelectItem>
+                                    <SelectItem value="leave">Leave</SelectItem>
+                                    <SelectItem value="holiday">Holiday</SelectItem>
+                                    <SelectItem value="half_day">Half Day</SelectItem>
+                                    <SelectItem value="field_work">Field Work</SelectItem>
+                                    <SelectItem value="remote_work">Remote Work</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="punch_out">Punch Out Time (optional)</Label>
-                            <Input
-                                id="punch_out"
-                                type="time"
-                                value={formData.punch_out}
-                                onChange={(e) =>
-                                    setFormData({ ...formData, punch_out: e.target.value })
-                                }
-                            />
-                        </div>
+                        {!isTimeOptional && (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="punch_in">Punch In Time</Label>
+                                    <Input
+                                        id="punch_in"
+                                        type="time"
+                                        value={formData.punch_in}
+                                        onChange={(e) =>
+                                            setFormData({ ...formData, punch_in: e.target.value })
+                                        }
+                                        required={!isTimeOptional}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="punch_out">Punch Out Time (optional)</Label>
+                                    <Input
+                                        id="punch_out"
+                                        type="time"
+                                        value={formData.punch_out}
+                                        onChange={(e) =>
+                                            setFormData({ ...formData, punch_out: e.target.value })
+                                        }
+                                    />
+                                </div>
+                            </>
+                        )}
 
                         <div className="grid gap-2">
                             <Label htmlFor="mode">Mode</Label>

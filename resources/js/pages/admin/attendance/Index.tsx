@@ -19,6 +19,8 @@ import {
 } from '@mantine/core';
 import { CalendarClock, CheckCircle2, ListChecks, RotateCcw, UserCog, XCircle } from 'lucide-react';
 import ShiftChangePanel from '@/components/admin/employees/ShiftChangePanel';
+import { AttendanceSummaryTab } from '@/components/attendance';
+
 
 interface Employee {
     id: number;
@@ -305,6 +307,7 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
                             <Tabs.Tab value="requests" leftSection={<ListChecks size={16} />}>Requests</Tabs.Tab>
                             <Tabs.Tab value="assignments" leftSection={<UserCog size={16} />}>Assignments</Tabs.Tab>
                             <Tabs.Tab value="shifts" leftSection={<UserCog size={16} />}>Shifts</Tabs.Tab>
+                            <Tabs.Tab value="summary" leftSection={<ListChecks size={16} />}>Summary</Tabs.Tab>
                         </Tabs.List>
 
                         <Tabs.Panel value="daily" pt="md">
@@ -321,6 +324,10 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
 
                         <Tabs.Panel value="shifts" pt="md">
                             <ShiftChangePanel employees={employees} selectedId={null} />
+                        </Tabs.Panel>
+
+                        <Tabs.Panel value="summary" pt="md">
+                            <AttendanceSummaryTab />
                         </Tabs.Panel>
                     </Tabs>
                 </div>

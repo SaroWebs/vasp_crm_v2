@@ -21,6 +21,7 @@ class Attendance extends Model
         'group_name',
         'is_live',
         'mode',
+        'status',
     ];
 
     /**

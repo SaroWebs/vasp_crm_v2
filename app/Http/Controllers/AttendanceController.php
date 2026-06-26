@@ -13,6 +13,7 @@ use App\Models\RemoteWorkRequest;
 use App\Models\Visitor;
 use App\Models\VisitorPunch;
 use App\Services\AttendanceCalculationService;
+use App\Services\MonthlyCycleService;
 use App\Services\NotificationService;
 use App\Services\WorkingHoursService;
 use Carbon\Carbon;
@@ -491,7 +492,7 @@ class AttendanceController extends Controller
             $startDate = Carbon::create($year, $month, 1)->startOfMonth();
             $endDate = Carbon::create($year, $month, 1)->endOfMonth();
         } else {
-            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $currentOpMonth = app(MonthlyCycleService::class)->getCurrentOpMonth();
             $startDate = Carbon::parse($currentOpMonth['start_date']);
             $endDate = Carbon::parse($currentOpMonth['end_date']);
         }
@@ -503,7 +504,7 @@ class AttendanceController extends Controller
             ->get();
         $attendanceData = $attendance->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
-        $summary = $this->computeSummary($attendance, $startDate, $endDate);
+        $summary = $this->computeSummary($employee, $attendance, $startDate, $endDate);
         $calendarDays = $this->buildAttendanceCalendarDays($employee, $attendanceData, $startDate, $endDate);
 
         /** @var WorkingHoursService $workingHoursService */
@@ -615,7 +616,7 @@ class AttendanceController extends Controller
             $startDate = Carbon::create($year, $month, 1)->startOfMonth();
             $endDate = Carbon::create($year, $month, 1)->endOfMonth();
         } else {
-            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $currentOpMonth = app(MonthlyCycleService::class)->getCurrentOpMonth();
             $startDate = Carbon::parse($currentOpMonth['start_date']);
             $endDate = Carbon::parse($currentOpMonth['end_date']);
         }
@@ -627,7 +628,7 @@ class AttendanceController extends Controller
             ->get();
         $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
-        $summary = $this->computeSummary($records, $startDate, $endDate);
+        $summary = $this->computeSummary($employee, $records, $startDate, $endDate);
         $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $startDate, $endDate);
 
         /** @var WorkingHoursService $workingHoursService */
@@ -665,7 +666,7 @@ class AttendanceController extends Controller
             $startDate = Carbon::create($year, $month, 1)->startOfMonth();
             $endDate = Carbon::create($year, $month, 1)->endOfMonth();
         } else {
-            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $currentOpMonth = app(MonthlyCycleService::class)->getCurrentOpMonth();
             $startDate = Carbon::parse($currentOpMonth['start_date']);
             $endDate = Carbon::parse($currentOpMonth['end_date']);
         }
@@ -677,7 +678,7 @@ class AttendanceController extends Controller
             ->get();
         $recordsData = $records->map(fn (Attendance $record) => $this->decorateAttendanceWithShiftMetrics($record))->values();
 
-        $summary = $this->computeSummary($records, $startDate, $endDate);
+        $summary = $this->computeSummary($employee, $records, $startDate, $endDate);
         $calendarDays = $this->buildAttendanceCalendarDays($employee, $recordsData, $startDate, $endDate);
 
         /** @var WorkingHoursService $workingHoursService */
@@ -714,7 +715,7 @@ class AttendanceController extends Controller
             $startDate = Carbon::create($year, $month, 1)->startOfMonth();
             $endDate = Carbon::create($year, $month, 1)->endOfMonth();
         } else {
-            $currentOpMonth = app(\App\Services\MonthlyCycleService::class)->getCurrentOpMonth();
+            $currentOpMonth = app(MonthlyCycleService::class)->getCurrentOpMonth();
             $startDate = Carbon::parse($currentOpMonth['start_date']);
             $endDate = Carbon::parse($currentOpMonth['end_date']);
         }
@@ -730,7 +731,7 @@ class AttendanceController extends Controller
             ->get();
 
         $result = $employees->map(function (Employee $employee) use ($startDate, $endDate) {
-            $summary = $this->computeSummary($employee->attendances, $startDate, $endDate);
+            $summary = $this->computeSummary($employee, $employee->attendances, $startDate, $endDate);
 
             return [
                 'id' => $employee->id,
@@ -766,7 +767,9 @@ class AttendanceController extends Controller
         }
 
         $attendanceDate = Carbon::parse($request->attendance_date)->toDateString();
-        $punchIn = Carbon::createFromFormat('H:i', $request->punch_in)->format('H:i:s');
+        $punchIn = $request->punch_in
+            ? Carbon::createFromFormat('H:i', $request->punch_in)->format('H:i:s')
+            : null;
         $punchOut = $request->punch_out
             ? Carbon::createFromFormat('H:i', $request->punch_out)->format('H:i:s')
             : null;
@@ -780,6 +783,7 @@ class AttendanceController extends Controller
                 'mode' => $request->mode ?? 'office',
                 'punch_in' => $punchIn,
                 'punch_out' => $punchOut,
+                'status' => $request->status,
             ]
         );
 
@@ -839,37 +843,241 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Compute summary stats for a collection of attendance records for a given date range.
-     *
-     * @param  Collection<int, Attendance>  $records
-     * @return array{total_working_days: int, present_days: int, absent_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_hours: float}
+     * Helper to get a value from a record, supporting both array and object representations.
      */
-    private function computeSummary(Collection $records, Carbon $startDate, Carbon $endDate): array
+    private function getRecordValue(mixed $record, string $key): mixed
     {
-        $today = Carbon::today();
+        if (is_array($record)) {
+            return $record[$key] ?? null;
+        }
 
-        /** @var WorkingHoursService $workingHoursService */
-        $workingHoursService = app(WorkingHoursService::class);
+        return $record->$key ?? null;
+    }
 
-        // Count configured working days up to today (or end of period)
-        $boundary = $endDate->lt($today) ? $endDate->copy() : $today;
-        $totalWorkingDays = 0;
-        $cursor = $startDate->copy();
+    /**
+     * Resolve status for a single date dynamically (used when querying outside the range).
+     */
+    private function resolveStatusForSingleDate(Employee $employee, Carbon $date): string
+    {
+        $dateStr = $date->toDateString();
+        $record = Attendance::where('employee_id', $employee->code)
+            ->where('attendance_date', $dateStr)
+            ->first();
 
-        while ($cursor->lte($boundary)) {
-            if ($workingHoursService->isWorkingDay($cursor)) {
-                $totalWorkingDays++;
+        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $dateStr);
+
+        if ($record) {
+            if ($record->status !== null) {
+                return $record->status;
             }
+
+            $punchIn = $this->normalizeAttendanceTime($record->punch_in);
+            $punchOut = $this->normalizeAttendanceTime($record->punch_out);
+            $metrics = $this->buildShiftMetrics($dateStr, $punchIn, $punchOut, $shiftMeta);
+
+            return app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
+        }
+
+        return $this->resolveCalendarStatus($shiftMeta, $date);
+    }
+
+    /**
+     * Resolve statuses for each date in a range, applying sandwich and manual status override rules.
+     *
+     * @param  Collection<int, mixed>  $records
+     * @return array<string, string> Array of resolved statuses keyed by date string 'YYYY-MM-DD'
+     */
+    private function resolveDailyStatusesWithSandwich(Employee $employee, Carbon $startDate, Carbon $endDate, Collection $records): array
+    {
+        $recordsByDate = $records->keyBy(function ($record) {
+            return Carbon::parse($this->getRecordValue($record, 'attendance_date'))->toDateString();
+        });
+
+        $statuses = [];
+        $cursor = $startDate->copy()->startOfDay();
+
+        while ($cursor->lte($endDate)) {
+            $dateStr = $cursor->toDateString();
+            $record = $recordsByDate->get($dateStr);
+            $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $dateStr);
+
+            if ($record) {
+                $recStatus = $this->getRecordValue($record, 'status');
+                if ($recStatus !== null) {
+                    $statuses[$dateStr] = $recStatus;
+                } else {
+                    $punchIn = $this->normalizeAttendanceTime($this->getRecordValue($record, 'punch_in'));
+                    $punchOut = $this->normalizeAttendanceTime($this->getRecordValue($record, 'punch_out'));
+                    $metrics = $this->buildShiftMetrics($dateStr, $punchIn, $punchOut, $shiftMeta);
+                    $statuses[$dateStr] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
+                }
+            } else {
+                $statuses[$dateStr] = $this->resolveCalendarStatus($shiftMeta, $cursor);
+            }
+
             $cursor->addDay();
         }
 
-        $presentDays = $records->groupBy('attendance_date')->count();
-        $absentDays = max(0, $totalWorkingDays - $presentDays);
+        // Find contiguous blocks of non-working days ('weekend' or 'holiday')
+        $nonWorkingBlocks = [];
+        $currentBlock = [];
 
-        $dailyShiftMetrics = $records->groupBy('attendance_date')->map(function (Collection $group) {
-            $record = $group->sortBy('punch_in')->first();
+        $cursor = $startDate->copy()->startOfDay();
+        while ($cursor->lte($endDate)) {
+            $dateStr = $cursor->toDateString();
+            $status = $statuses[$dateStr];
 
-            if (! $record || ! $record->punch_in || ! $record->attendance_date) {
+            if ($status === 'weekend' || $status === 'holiday') {
+                $currentBlock[] = $dateStr;
+            } else {
+                if (! empty($currentBlock)) {
+                    $nonWorkingBlocks[] = $currentBlock;
+                    $currentBlock = [];
+                }
+            }
+            $cursor->addDay();
+        }
+        if (! empty($currentBlock)) {
+            $nonWorkingBlocks[] = $currentBlock;
+        }
+
+        // Apply sandwich rules
+        foreach ($nonWorkingBlocks as $block) {
+            $firstDateStr = $block[0];
+            $lastDateStr = $block[count($block) - 1];
+
+            $precedingStatus = $this->findAdjacentWorkingDayStatus($employee, Carbon::parse($firstDateStr), -1, $statuses, $recordsByDate);
+            $succeedingStatus = $this->findAdjacentWorkingDayStatus($employee, Carbon::parse($lastDateStr), 1, $statuses, $recordsByDate);
+
+            if ($precedingStatus === 'absent' && $succeedingStatus === 'absent') {
+                foreach ($block as $dateStr) {
+                    $record = $recordsByDate->get($dateStr);
+                    if ($record && $this->getRecordValue($record, 'status') !== null) {
+                        continue;
+                    }
+                    $statuses[$dateStr] = 'absent';
+                }
+            }
+        }
+
+        return $statuses;
+    }
+
+    /**
+     * Find the status of the closest working day in direction $step (-1 for past, 1 for future)
+     */
+    private function findAdjacentWorkingDayStatus(Employee $employee, Carbon $anchorDate, int $step, array $rangeStatuses, Collection $recordsByDate): string
+    {
+        $cursor = $anchorDate->copy()->addDays($step);
+        $safetyLimit = 60;
+
+        while ($safetyLimit > 0) {
+            $dateStr = $cursor->toDateString();
+
+            $status = null;
+            if (isset($rangeStatuses[$dateStr])) {
+                $status = $rangeStatuses[$dateStr];
+            } else {
+                $status = $this->resolveStatusForSingleDate($employee, $cursor);
+            }
+
+            if ($status !== 'weekend' && $status !== 'holiday') {
+                return $status;
+            }
+
+            $cursor->addDays($step);
+            $safetyLimit--;
+        }
+
+        return 'weekend';
+    }
+
+    /**
+     * Compute summary stats for a collection of attendance records for a given date range.
+     *
+     * @param  Collection<int, Attendance>  $records
+     * @return array{total_days: int, total_working_days: int, present_days: int, absent_days: int, paid_leave_days: int, unpaid_leave_days: int, leave_days: int, holiday_days: int, remote_days: int, field_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_hours: float}
+     */
+    private function computeSummary(Employee $employee, Collection $records, Carbon $startDate, Carbon $endDate): array
+    {
+        $today = Carbon::today();
+        $boundary = $endDate->lt($today) ? $endDate->copy() : $today;
+
+        $totalWorkingDays = 0;
+        $presentDays = 0;
+        $absentDays = 0;
+        $paidLeaveDays = 0;
+        $unpaidLeaveDays = 0;
+        $holidayDays = 0;
+        $remoteDays = 0;
+        $fieldDays = 0;
+
+        $resolvedStatuses = $this->resolveDailyStatusesWithSandwich($employee, $startDate, $endDate, $records);
+
+        $cursor = $startDate->copy()->startOfDay();
+
+        while ($cursor->lte($boundary)) {
+            $dateStr = $cursor->toDateString();
+            $status = $resolvedStatuses[$dateStr] ?? 'absent';
+            $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $dateStr);
+            $normStatus = $this->normalizeCalendarStatus($status);
+
+            // Determine the raw (pre-sandwich) nature of the day from shift config.
+            // If the shift has no working hours AND no special flags, it is a natural non-working day.
+            $rawIsNonWorking = (! $shiftMeta['start_time'] && ! $shiftMeta['end_time'])
+                || ($shiftMeta['is_holiday'] ?? false);
+
+            // A sandwiched weekend/holiday has normStatus === 'absent' but rawIsNonWorking === true.
+            // Per business rules we exclude such days from absent_days and totalWorkingDays counts.
+            if ($rawIsNonWorking && $normStatus === 'absent') {
+                $cursor->addDay();
+
+                continue;
+            }
+
+            if (in_array($normStatus, ['present', 'late', 'early_out', 'incomplete', 'half_day', 'field_work', 'remote_work'])) {
+                $presentDays++;
+
+                if ($normStatus === 'remote_work' || ($shiftMeta['is_remote_work'] ?? false)) {
+                    $remoteDays++;
+                } elseif ($normStatus === 'field_work' || ($shiftMeta['is_field_work'] ?? false)) {
+                    $fieldDays++;
+                }
+            } elseif ($normStatus === 'leave') {
+                $leaveRequest = LeaveRequest::query()
+                    ->where('employee_id', $employee->id)
+                    ->where('status', 'approved')
+                    ->where('start_date', '<=', $dateStr)
+                    ->where('end_date', '>=', $dateStr)
+                    ->with('leaveType')
+                    ->first();
+
+                if ($leaveRequest && $leaveRequest->leaveType && $leaveRequest->leaveType->is_paid) {
+                    $paidLeaveDays++;
+                } else {
+                    $unpaidLeaveDays++;
+                }
+            } elseif ($normStatus === 'holiday') {
+                $holidayDays++;
+            } elseif ($normStatus === 'absent') {
+                $absentDays++;
+            }
+
+            if ($normStatus !== 'weekend' && $normStatus !== 'holiday') {
+                $totalWorkingDays++;
+            }
+
+            $cursor->addDay();
+        }
+
+        $dailyShiftMetrics = $records->groupBy(function ($r) {
+            return Carbon::parse($this->getRecordValue($r, 'attendance_date'))->toDateString();
+        })->map(function (Collection $group, string $dateStr) use ($resolvedStatuses, $employee) {
+            $record = $group->sortBy(fn ($r) => $this->getRecordValue($r, 'punch_in'))->first();
+            $status = $resolvedStatuses[$dateStr] ?? 'absent';
+            $normStatus = $this->normalizeCalendarStatus($status);
+
+            if (! $record || ! $this->getRecordValue($record, 'punch_in') || ! $this->getRecordValue($record, 'attendance_date') || in_array($normStatus, ['absent', 'leave', 'holiday'])) {
                 return [
                     'is_late_in' => false,
                     'is_early_in' => false,
@@ -879,24 +1087,22 @@ class AttendanceController extends Controller
                     'early_in_minutes' => 0,
                     'early_out_minutes' => 0,
                     'late_out_minutes' => 0,
+                    'total_work_minutes' => 0,
                 ];
             }
 
-            $date = Carbon::parse($record->attendance_date);
-            $attendanceDate = $date->toDateString();
-            $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $record->employee_id, $attendanceDate);
+            $punchIn = $this->normalizeAttendanceTime($this->getRecordValue($record, 'punch_in'));
+            $punchOut = $this->normalizeAttendanceTime($this->getRecordValue($record, 'punch_out'));
+            $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $dateStr);
 
-            return $this->buildShiftMetrics($attendanceDate, $record->punch_in, $record->punch_out, $shiftMeta);
+            return $this->buildShiftMetrics($dateStr, $punchIn, $punchOut, $shiftMeta);
         });
 
-        $lateDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_late_in'])->count();
-        $earlyOutDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_early_out'])->count();
-        $totalLateMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_in_minutes']);
-        $totalEarlyOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_out_minutes']);
+        $lateDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_late_in'] ?? false)->count();
+        $earlyOutDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_early_out'] ?? false)->count();
+        $totalLateMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_in_minutes'] ?? 0);
+        $totalEarlyOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_out_minutes'] ?? 0);
 
-        // Total hours = sum of actual work minutes from shift metrics converted to hours
-        // This uses the calculated total_work_minutes which properly handles punch times
-        // accounting for early_in, late_out, and other variations
         $totalHours = $dailyShiftMetrics->sum(function (array $metrics) {
             $workMinutes = $metrics['total_work_minutes'] ?? null;
             if ($workMinutes === null) {
@@ -911,6 +1117,12 @@ class AttendanceController extends Controller
             'total_working_days' => $totalWorkingDays,
             'present_days' => $presentDays,
             'absent_days' => $absentDays,
+            'paid_leave_days' => $paidLeaveDays,
+            'unpaid_leave_days' => $unpaidLeaveDays,
+            'leave_days' => $paidLeaveDays + $unpaidLeaveDays,
+            'holiday_days' => $holidayDays,
+            'remote_days' => $remoteDays,
+            'field_days' => $fieldDays,
             'late_days' => $lateDays,
             'early_out_days' => $earlyOutDays,
             'total_late_minutes' => $totalLateMinutes,
@@ -1126,7 +1338,11 @@ class AttendanceController extends Controller
         $punchOut = $this->normalizeAttendanceTime($attendance->punch_out);
         $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $attendance->employee_id, $attendanceDate);
         $metrics = $this->buildShiftMetrics($attendanceDate, $punchIn, $punchOut, $shiftMeta);
-        $metrics['status'] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
+        if ($attendance->status !== null) {
+            $metrics['status'] = $attendance->status;
+        } else {
+            $metrics['status'] = app(AttendanceCalculationService::class)->determineAttendanceStatus($metrics);
+        }
         $metrics['late_minutes'] = $metrics['late_in_minutes'];
         $metrics['is_late'] = $metrics['is_late_in'];
 
@@ -1349,7 +1565,7 @@ class AttendanceController extends Controller
         }
 
         // ── 3. Collapse consecutive same-direction typed events (MachineId 1 & 3) ─
-        
+
         $collapsed = [];
         $lastDir = null;
 
@@ -1376,7 +1592,7 @@ class AttendanceController extends Controller
         }
 
         // ── 4. Position-resolve "combined" machine events ─────────────────────────
-        
+
         $total = count($collapsed);
         $resolved = [];
 
@@ -1406,7 +1622,7 @@ class AttendanceController extends Controller
         }
 
         // ── 5. Extract punch_in, punch_out, and breaks ────────────────────────────
-        
+
         $resolvedCount = count($resolved);
         $punchIn = $resolved[0]['time'];
         $punchOut = null;
@@ -1598,7 +1814,7 @@ class AttendanceController extends Controller
     private function buildAttendanceCalendarDays(Employee $employee, Collection $records, Carbon $startDate, Carbon $endDate): array
     {
         $workingHoursService = app(WorkingHoursService::class);
-        
+
         // Fetch holidays for all years covered by the start and end date range
         $holidays = [];
         for ($year = $startDate->year; $year <= $endDate->year; $year++) {
@@ -1612,6 +1828,8 @@ class AttendanceController extends Controller
             return $date;
         })->map(fn (Collection $dailyRecords, string $date): array => $this->combineDailyCalendarRecords($employee, $dailyRecords, $date));
 
+        $resolvedStatuses = $this->resolveDailyStatusesWithSandwich($employee, $startDate, $endDate, $records);
+
         $days = [];
         $cursor = $startDate->copy()->startOfDay();
         $today = Carbon::today();
@@ -1623,9 +1841,8 @@ class AttendanceController extends Controller
             $holiday = $holidayMap->get($date);
             $isToday = $cursor->eq($today);
 
-            $status = $record
-                ? $this->normalizeCalendarStatus((string) ($record['status'] ?? 'present'), $record)
-                : $this->resolveCalendarStatus($shiftMeta, $cursor);
+            $status = $resolvedStatuses[$date] ?? 'absent';
+            $status = $this->normalizeCalendarStatus($status, $record ?? []);
 
             $days[] = [
                 'day' => $cursor->day,
@@ -1682,7 +1899,7 @@ class AttendanceController extends Controller
 
         return array_merge($combinedRecord, $metrics);
     }
- 
+
     /**
      * Normalize the calendar status for days that do not have a punch record.
      *

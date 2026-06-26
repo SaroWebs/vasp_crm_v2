@@ -19,9 +19,10 @@ class AttendanceOverrideRequest extends FormRequest
     {
         return [
             'attendance_date' => ['required', 'date'],
-            'punch_in' => ['required', 'date_format:H:i'],
+            'punch_in' => ['nullable', 'required_without:status', 'date_format:H:i'],
             'punch_out' => ['nullable', 'date_format:H:i', 'after:punch_in'],
             'mode' => ['nullable', 'string', 'in:office,remote'],
+            'status' => ['nullable', 'string', 'in:present,absent,leave,holiday,half_day,field_work,remote_work'],
         ];
     }
 }
