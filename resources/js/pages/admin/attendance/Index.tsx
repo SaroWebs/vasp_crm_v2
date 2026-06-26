@@ -301,15 +301,17 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
             <Head title="Attendance Management" />
             <AppLayout breadcrumbs={breadcrumbs}>
                 <div className="space-y-4 p-4">
-                    <Tabs defaultValue="daily" className="w-full">
+                    <Tabs defaultValue="summary" className="w-full">
                         <Tabs.List>
+                            <Tabs.Tab value="summary" leftSection={<ListChecks size={16} />}>Summary</Tabs.Tab>
                             <Tabs.Tab value="daily" leftSection={<CalendarClock size={16} />}>Daily Attendance</Tabs.Tab>
                             <Tabs.Tab value="requests" leftSection={<ListChecks size={16} />}>Requests</Tabs.Tab>
                             <Tabs.Tab value="assignments" leftSection={<UserCog size={16} />}>Assignments</Tabs.Tab>
                             <Tabs.Tab value="shifts" leftSection={<UserCog size={16} />}>Shifts</Tabs.Tab>
-                            <Tabs.Tab value="summary" leftSection={<ListChecks size={16} />}>Summary</Tabs.Tab>
                         </Tabs.List>
-
+                        <Tabs.Panel value="summary" pt="md">
+                            <AttendanceSummaryTab />
+                        </Tabs.Panel>
                         <Tabs.Panel value="daily" pt="md">
                             <DailyAttendancePanel />
                         </Tabs.Panel>
@@ -326,9 +328,6 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
                             <ShiftChangePanel employees={employees} selectedId={null} />
                         </Tabs.Panel>
 
-                        <Tabs.Panel value="summary" pt="md">
-                            <AttendanceSummaryTab />
-                        </Tabs.Panel>
                     </Tabs>
                 </div>
             </AppLayout>

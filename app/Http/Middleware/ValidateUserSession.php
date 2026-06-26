@@ -31,19 +31,22 @@ class ValidateUserSession
                 return redirect('/admin/login')->with('status', 'Your account is inactive. Contact administrator.');
             }
 
+            // Sync the stored session_id with the current session.
+            // On shared hosting / behind Cloudflare, concurrent requests or internal
+            // session regeneration can cause a transient mismatch. Since the user IS
+            // authenticated (Laravel validated their session cookie), we trust the
+            // current session and simply update the stored ID instead of force-logging out.
             $currentSessionId = $request->session()->getId();
-            $storedSessionId = $user->session_id;
+            $storedSessionId  = $user->session_id;
 
             if (! $storedSessionId || $storedSessionId !== $currentSessionId) {
-                Auth::guard('web')->logout();
-
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-
-                return redirect('/admin/login')->with('status', 'Your session has been invalidated. Please login again.');
+                // Update the stored session ID silently — do NOT logout the user
+                $user->session_id = $currentSessionId;
+                $user->saveQuietly();
             }
         }
 
         return $next($request);
     }
 }
+

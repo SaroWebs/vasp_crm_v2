@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { router, usePage } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { FileText, Plus, Save, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -39,6 +40,7 @@ interface AdminRaiseTicketProps {
 
 export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const [open, setOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [clientSearchValue, setClientSearchValue] = useState('');
 
     const [form, setForm] = useState<FormData>({
@@ -95,6 +97,9 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+
         const formData = new FormData();
         formData.append('client_id', form.client_id.toString());
         formData.append('title', form.title);
@@ -110,6 +115,14 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
             onSuccess: () => {
                 setOpen(false);
                 resetForm();
+                toast.success('Ticket created successfully.');
+            },
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                toast.error(firstError ?? 'Failed to create ticket. Please try again.');
+            },
+            onFinish: () => {
+                setIsSubmitting(false);
             },
         });
     };
@@ -330,10 +343,11 @@ export default function AdminRaiseTicket({ clients }: AdminRaiseTicketProps) {
                         </MantineButton>
                         <MantineButton
                             type="submit"
-                            disabled={!form.client_id || !form.title}
-                            leftSection={<Save size={14} />}
+                            disabled={!form.client_id || !form.title || isSubmitting}
+                            loading={isSubmitting}
+                            leftSection={!isSubmitting ? <Save size={14} /> : undefined}
                         >
-                            Create Ticket
+                            {isSubmitting ? 'Creating...' : 'Create Ticket'}
                         </MantineButton>
                     </div>
                 </form>

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
@@ -73,7 +74,12 @@ class HandleInertiaRequests extends Middleware
                 || $user->roles->contains('slug', 'super-admin');
         }
 
-        if ($guardType === 'admin' && $user && ! $hasAdminRole && Schema::hasTable('role_menu_items')) {
+        // Cache the schema check to avoid hitting the DB on every request
+        $hasRoleMenuTable = Cache::remember('schema_has_role_menu_items', 3600, function () {
+            return Schema::hasTable('role_menu_items');
+        });
+
+        if ($guardType === 'admin' && $user && ! $hasAdminRole && $hasRoleMenuTable) {
             $roleIds = $user->roles->pluck('id')->filter()->values();
 
             if ($roleIds->isNotEmpty()) {
@@ -106,3 +112,4 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 }
+
