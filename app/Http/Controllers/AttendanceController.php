@@ -996,7 +996,7 @@ class AttendanceController extends Controller
      * Compute summary stats for a collection of attendance records for a given date range.
      *
      * @param  Collection<int, Attendance>  $records
-     * @return array{total_days: int, total_working_days: int, present_days: int, absent_days: int, paid_leave_days: int, unpaid_leave_days: int, leave_days: int, holiday_days: int, remote_days: int, field_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_hours: float}
+     * @return array{total_days: int, total_working_days: int, present_days: int, absent_days: int, paid_leave_days: int, unpaid_leave_days: int, leave_days: int, holiday_days: int, remote_days: int, field_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_overtime_minutes: int, total_hours: float}
      */
     private function computeSummary(Employee $employee, Collection $records, Carbon $startDate, Carbon $endDate): array
     {
@@ -1021,19 +1021,6 @@ class AttendanceController extends Controller
             $status = $resolvedStatuses[$dateStr] ?? 'absent';
             $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $dateStr);
             $normStatus = $this->normalizeCalendarStatus($status);
-
-            // Determine the raw (pre-sandwich) nature of the day from shift config.
-            // If the shift has no working hours AND no special flags, it is a natural non-working day.
-            $rawIsNonWorking = (! $shiftMeta['start_time'] && ! $shiftMeta['end_time'])
-                || ($shiftMeta['is_holiday'] ?? false);
-
-            // A sandwiched weekend/holiday has normStatus === 'absent' but rawIsNonWorking === true.
-            // Per business rules we exclude such days from absent_days and totalWorkingDays counts.
-            if ($rawIsNonWorking && $normStatus === 'absent') {
-                $cursor->addDay();
-
-                continue;
-            }
 
             if (in_array($normStatus, ['present', 'late', 'early_out', 'incomplete', 'half_day', 'field_work', 'remote_work'])) {
                 $presentDays++;
@@ -1073,7 +1060,8 @@ class AttendanceController extends Controller
         $dailyShiftMetrics = $records->groupBy(function ($r) {
             return Carbon::parse($this->getRecordValue($r, 'attendance_date'))->toDateString();
         })->map(function (Collection $group, string $dateStr) use ($resolvedStatuses, $employee) {
-            $record = $group->sortBy(fn ($r) => $this->getRecordValue($r, 'punch_in'))->first();
+            $orderedRecords = $group->sortBy(fn ($r) => $this->getRecordValue($r, 'punch_in'))->values();
+            $record = $orderedRecords->first();
             $status = $resolvedStatuses[$dateStr] ?? 'absent';
             $normStatus = $this->normalizeCalendarStatus($status);
 
@@ -1091,8 +1079,12 @@ class AttendanceController extends Controller
                 ];
             }
 
-            $punchIn = $this->normalizeAttendanceTime($this->getRecordValue($record, 'punch_in'));
-            $punchOut = $this->normalizeAttendanceTime($this->getRecordValue($record, 'punch_out'));
+            $punchIn = $this->normalizeAttendanceTime(
+                $orderedRecords->pluck('punch_in')->filter()->sort()->first()
+            );
+            $punchOut = $this->normalizeAttendanceTime(
+                $orderedRecords->pluck('punch_out')->filter()->sort()->last()
+            );
             $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate((string) $employee->code, $dateStr);
 
             return $this->buildShiftMetrics($dateStr, $punchIn, $punchOut, $shiftMeta);
@@ -1102,6 +1094,7 @@ class AttendanceController extends Controller
         $earlyOutDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_early_out'] ?? false)->count();
         $totalLateMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_in_minutes'] ?? 0);
         $totalEarlyOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_out_minutes'] ?? 0);
+        $totalOvertimeMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['overtime_minutes'] ?? 0);
 
         $totalHours = $dailyShiftMetrics->sum(function (array $metrics) {
             $workMinutes = $metrics['total_work_minutes'] ?? null;
@@ -1127,6 +1120,7 @@ class AttendanceController extends Controller
             'early_out_days' => $earlyOutDays,
             'total_late_minutes' => $totalLateMinutes,
             'total_early_out_minutes' => $totalEarlyOutMinutes,
+            'total_overtime_minutes' => $totalOvertimeMinutes,
             'total_hours' => round($totalHours, 2),
         ];
     }
@@ -1378,24 +1372,6 @@ class AttendanceController extends Controller
         }
 
         return $this->parseAttendanceDateTime($time)->format('H:i:s');
-    }
-
-    private function calculateOvertimeMinutes(string $employeeId, string $attendanceDate, string $punchOut, ?int $totalWorkMinutes = null): int
-    {
-        $shiftMeta = $this->resolveEffectiveShiftForEmployeeDate($employeeId, $attendanceDate);
-
-        if (! $shiftMeta['end_time']) {
-            return 0;
-        }
-
-        $scheduledOut = Carbon::parse($attendanceDate.' '.$shiftMeta['end_time']);
-        $actualOut = Carbon::parse($attendanceDate.' '.$punchOut);
-
-        if ($actualOut->lte($scheduledOut)) {
-            return 0;
-        }
-
-        return $scheduledOut->diffInMinutes($actualOut);
     }
 
     /**
@@ -1662,15 +1638,6 @@ class AttendanceController extends Controller
             $shiftMeta
         );
 
-        $overtimeMinutes = $punchOut
-            ? $this->calculateOvertimeMinutes(
-                $employeeId,
-                $date->toDateString(),
-                $punchOut->format('H:i:s'),
-                $totalWorkMinutes
-            )
-            : 0;
-
         return [
             'status' => 'success',
             'employee_id' => $employeeId,
@@ -1694,7 +1661,7 @@ class AttendanceController extends Controller
             'is_late_out' => $shiftMetrics['is_late_out'],
             'late_minutes' => $shiftMetrics['late_in_minutes'],
             'is_late' => $shiftMetrics['is_late_in'],
-            'overtime_minutes' => $overtimeMinutes,
+            'overtime_minutes' => $shiftMetrics['overtime_minutes'],
         ];
     }
 
@@ -1769,15 +1736,6 @@ class AttendanceController extends Controller
             $shiftMeta
         );
 
-        $overtimeMinutes = $punchOut
-            ? $this->calculateOvertimeMinutes(
-                $employeeId,
-                $date->toDateString(),
-                $punchOut->format('H:i:s'),
-                $totalWorkMinutes
-            )
-            : 0;
-
         return [
             'status' => 'success',
             'employee_id' => $employeeId,
@@ -1801,7 +1759,7 @@ class AttendanceController extends Controller
             'is_late_out' => $shiftMetrics['is_late_out'],
             'late_minutes' => $shiftMetrics['late_in_minutes'],
             'is_late' => $shiftMetrics['is_late_in'],
-            'overtime_minutes' => $overtimeMinutes,
+            'overtime_minutes' => $shiftMetrics['overtime_minutes'],
         ];
     }
 

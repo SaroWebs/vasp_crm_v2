@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\AttendanceDayPolicyService;
 use App\Services\TimeCalculatorService;
-use App\Services\WorkingHoursService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -153,11 +153,10 @@ class TaskTimeEntry extends Model
      */
     public static function start(Task $task, int $userId, ?string $description = null): self
     {
-        // Get working hours service to check if current time is working time
-        $workingHoursService = app(WorkingHoursService::class);
+        $user = User::query()->with('employee')->find($userId);
         $now = now();
 
-        if (! $workingHoursService->isWorkingTime($now)) {
+        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user?->employee, $now)) {
             throw new \Exception('Cannot start time entry outside working hours');
         }
 

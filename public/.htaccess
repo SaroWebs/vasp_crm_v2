@@ -24,6 +24,11 @@
     RewriteRule ^ index.php [L]
 </IfModule>
 
+<IfModule mod_headers.c>
+    Header unset Content-Security-Policy-Report-Only
+    Header always set Content-Security-Policy-Report-Only "default-src 'self'; base-uri 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; font-src 'self' data:; form-action 'self'; frame-ancestors 'self'; img-src 'self' data: blob:; object-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'"
+</IfModule>
+
 # Increase PHP limits for heavy pages (prevents Cloudflare 520 on shared hosting)
 <IfModule mod_php.c>
     php_value max_execution_time 120

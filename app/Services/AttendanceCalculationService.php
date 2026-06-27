@@ -3,19 +3,12 @@
 namespace App\Services;
 
 use App\Models\Employee;
-use App\Models\EmployeeShiftAssignment;
-use App\Models\FieldWorkAssignment;
-use App\Models\FieldWorkRequest;
-use App\Models\LeaveRequest;
-use App\Models\RemoteWorkAssignment;
-use App\Models\RemoteWorkRequest;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Schema;
 
 class AttendanceCalculationService
 {
     public function __construct(
-        private WorkingHoursService $workingHoursService
+        private AttendanceDayPolicyService $dayPolicyService
     ) {}
 
     /**
@@ -23,12 +16,7 @@ class AttendanceCalculationService
      */
     public function isEmployeeOnLeave(Employee $employee, Carbon $date): bool
     {
-        return LeaveRequest::query()
-            ->where('employee_id', $employee->id)
-            ->where('status', 'approved')
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
-            ->exists();
+        return $this->dayPolicyService->isEmployeeOnLeave($employee, $date);
     }
 
     /**
@@ -37,24 +25,7 @@ class AttendanceCalculationService
      */
     public function isEmployeeOnRemoteWork(Employee $employee, Carbon $date): bool
     {
-        // Check for direct remote work assignments (admin assigned)
-        $hasDirectAssignment = RemoteWorkAssignment::query()
-            ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
-            ->exists();
-
-        if ($hasDirectAssignment) {
-            return true;
-        }
-
-        // Check for approved remote work requests (employee requested)
-        return RemoteWorkRequest::query()
-            ->where('employee_id', $employee->id)
-            ->where('status', 'approved')
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
-            ->exists();
+        return $this->dayPolicyService->isEmployeeOnRemoteWork($employee, $date);
     }
 
     /**
@@ -63,25 +34,7 @@ class AttendanceCalculationService
      */
     public function isEmployeeOnFieldWork(Employee $employee, Carbon $date): bool
     {
-        // Check for approved field work assignments (admin assigned)
-        $hasApprovedAssignment = FieldWorkAssignment::query()
-            ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
-            ->where('status', 'approved')
-            ->exists();
-
-        if ($hasApprovedAssignment) {
-            return true;
-        }
-
-        // Check for approved field work requests (employee requested)
-        return FieldWorkRequest::query()
-            ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
-            ->where('status', 'approved')
-            ->exists();
+        return $this->dayPolicyService->isEmployeeOnFieldWork($employee, $date);
     }
 
     /**
@@ -97,186 +50,7 @@ class AttendanceCalculationService
         $employee = Employee::query()->where('code', $employeeCode)->first();
         $date = Carbon::parse($attendanceDate);
 
-        // Check if on approved leave
-        if ($employee && $this->isEmployeeOnLeave($employee, $date)) {
-            return [
-                'shift_id' => null,
-                'start_time' => null,
-                'end_time' => null,
-                'grace_minutes' => 0,
-                'is_half_day' => false,
-                'is_leave_day' => true,
-                'is_holiday' => false,
-                'is_field_work' => false,
-                'is_remote_work' => false,
-            ];
-        }
-
-        // Check if on approved remote work
-        if ($employee && $this->isEmployeeOnRemoteWork($employee, $date)) {
-            return [
-                'shift_id' => null,
-                'start_time' => null,
-                'end_time' => null,
-                'grace_minutes' => 0,
-                'is_half_day' => false,
-                'is_leave_day' => false,
-                'is_holiday' => false,
-                'is_field_work' => false,
-                'is_remote_work' => true,
-            ];
-        }
-
-        // Check for field work (both approved assignments and requests)
-        if ($employee && $this->isEmployeeOnFieldWork($employee, $date)) {
-            $fieldWork = FieldWorkAssignment::query()
-                ->where('employee_id', $employee->id)
-                ->where('start_date', '<=', $date->toDateString())
-                ->where('end_date', '>=', $date->toDateString())
-                ->where('status', 'approved')
-                ->first();
-
-            // If no approved assignment, check for approved request
-            if (! $fieldWork) {
-                $fieldWorkRequest = FieldWorkRequest::query()
-                    ->where('employee_id', $employee->id)
-                    ->where('start_date', '<=', $date->toDateString())
-                    ->where('end_date', '>=', $date->toDateString())
-                    ->where('status', 'approved')
-                    ->first();
-
-                if ($fieldWorkRequest) {
-                    $fieldWork = $fieldWorkRequest;
-                }
-            }
-
-            $shiftMeta = $this->resolveShiftForEmployeeDate($employeeCode, $attendanceDate);
-
-            return [
-                'shift_id' => $shiftMeta['shift_id'],
-                'start_time' => $fieldWork->custom_start_time ?? $fieldWork->custom_end_time ?? null
-                    ? ($fieldWork->custom_start_time ? '09:00:00' : $shiftMeta['start_time'])
-                    : $shiftMeta['start_time'],
-                'end_time' => $fieldWork->custom_end_time ?? $fieldWork->custom_start_time ?? null
-                    ? ($fieldWork->custom_end_time ? '18:00:00' : $shiftMeta['end_time'])
-                    : $shiftMeta['end_time'],
-                'grace_minutes' => (int) $shiftMeta['grace_minutes'],
-                'is_half_day' => false,
-                'is_leave_day' => false,
-                'is_holiday' => false,
-                'is_field_work' => true,
-                'is_remote_work' => false,
-            ];
-        }
-
-        if ($this->workingHoursService->isHoliday($date)) {
-            return [
-                'shift_id' => null,
-                'start_time' => null,
-                'end_time' => null,
-                'grace_minutes' => 0,
-                'is_half_day' => false,
-                'is_leave_day' => false,
-                'is_holiday' => true,
-                'is_field_work' => false,
-                'is_remote_work' => false,
-            ];
-        }
-
-        $workingHours = $this->workingHoursService->getWorkingHoursForDate($date);
-        $dayName = strtolower($date->format('l'));
-
-        if (! $workingHours['start'] || ! $workingHours['end']) {
-            return [
-                'shift_id' => null,
-                'start_time' => null,
-                'end_time' => null,
-                'grace_minutes' => 0,
-                'is_half_day' => false,
-                'is_leave_day' => false,
-                'is_holiday' => false,
-                'is_field_work' => false,
-                'is_remote_work' => false,
-            ];
-        }
-
-        if ($dayName === 'saturday') {
-            return [
-                'shift_id' => null,
-                'start_time' => $workingHours['start']->format('H:i:s'),
-                'end_time' => $workingHours['end']->format('H:i:s'),
-                'grace_minutes' => $this->resolveGraceMinutes(0),
-                'is_half_day' => true,
-                'is_leave_day' => false,
-                'is_holiday' => false,
-                'is_field_work' => false,
-                'is_remote_work' => false,
-            ];
-        }
-
-        // First, try to get shift assignment
-        $shiftMeta = $this->resolveShiftForEmployeeDate($employeeCode, $attendanceDate);
-
-        if ($shiftMeta['start_time'] && $shiftMeta['end_time']) {
-            return array_merge($shiftMeta, [
-                'is_leave_day' => false,
-                'is_holiday' => false,
-                'is_field_work' => false,
-                'is_remote_work' => false,
-            ]);
-        }
-
-        return [
-            'shift_id' => null,
-            'start_time' => $workingHours['start']->format('H:i:s'),
-            'end_time' => $workingHours['end']->format('H:i:s'),
-            'grace_minutes' => $this->resolveGraceMinutes(0),
-            'is_half_day' => false,
-            'is_leave_day' => false,
-            'is_holiday' => false,
-            'is_field_work' => false,
-            'is_remote_work' => false,
-        ];
-    }
-
-    /**
-     * Resolve shift assignment for an employee on a specific date.
-     */
-    private function resolveShiftForEmployeeDate(string $employeeCode, string $attendanceDate): array
-    {
-        if (! Schema::hasTable('employee_shift_assignments') || ! Schema::hasTable('shifts')) {
-            return ['shift_id' => null, 'start_time' => null, 'end_time' => null, 'grace_minutes' => 0, 'is_half_day' => false];
-        }
-
-        $employee = Employee::query()->where('code', $employeeCode)->first();
-
-        if (! $employee) {
-            return ['shift_id' => null, 'start_time' => null, 'end_time' => null, 'grace_minutes' => 0, 'is_half_day' => false];
-        }
-
-        $assignment = EmployeeShiftAssignment::query()
-            ->with('shift')
-            ->where('employee_id', $employee->id)
-            ->where('is_active', true)
-            ->where('effective_from', '<=', $attendanceDate)
-            ->where(function ($query) use ($attendanceDate) {
-                $query->whereNull('effective_to')
-                    ->orWhere('effective_to', '>=', $attendanceDate);
-            })
-            ->orderByDesc('effective_from')
-            ->first();
-
-        if (! $assignment || ! $assignment->shift || ! $assignment->shift->is_active) {
-            return ['shift_id' => null, 'start_time' => null, 'end_time' => null, 'grace_minutes' => 0, 'is_half_day' => false];
-        }
-
-        return [
-            'shift_id' => $assignment->shift->id,
-            'start_time' => $assignment->shift->start_time,
-            'end_time' => $assignment->shift->end_time,
-            'grace_minutes' => $this->resolveGraceMinutes((int) $assignment->shift->grace_minutes),
-            'is_half_day' => false,
-        ];
+        return $this->dayPolicyService->resolveForEmployeeDate($employee, $date);
     }
 
     /**
@@ -342,7 +116,6 @@ class AttendanceCalculationService
             } elseif ($actualOut->gt($scheduledEnd)) {
                 $result['late_out_minutes'] = abs($actualOut->diffInMinutes($scheduledEnd));
                 $result['is_late_out'] = true;
-                $result['overtime_minutes'] = $result['late_out_minutes'];
             }
         }
 
@@ -352,6 +125,8 @@ class AttendanceCalculationService
             $actualOut = Carbon::parse($attendanceDate.' '.$punchOut);
             $result['total_work_minutes'] = $actualIn->diffInMinutes($actualOut);
         }
+
+        $result['overtime_minutes'] = $result['early_in_minutes'] + $result['late_out_minutes'];
 
         return $result;
     }

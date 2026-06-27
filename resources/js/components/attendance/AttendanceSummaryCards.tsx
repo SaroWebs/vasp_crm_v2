@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, Clock, Timer, AlertTriangle, TrendingUp } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Timer, AlertTriangle } from 'lucide-react';
 
 interface AttendanceSummaryCardsProps {
     summary: {
@@ -8,6 +8,7 @@ interface AttendanceSummaryCardsProps {
         early_out_days?: number;
         total_late_minutes?: number;
         total_early_out_minutes?: number;
+        total_overtime_minutes?: number;
         total_hours: number;
     };
 }
@@ -76,10 +77,21 @@ export function AttendanceSummaryCards({ summary }: AttendanceSummaryCardsProps)
                     ? formatMinutes(summary.total_early_out_minutes)
                     : undefined,
         },
+        {
+            label: 'Overtime',
+            value: summary.total_overtime_minutes
+                ? formatMinutes(summary.total_overtime_minutes)
+                : '0m',
+            icon: Timer,
+            iconColor: 'text-cyan-500',
+            valueColor: 'text-cyan-700 dark:text-cyan-400',
+            borderColor: 'border-l-cyan-400',
+            bg: 'bg-cyan-50 dark:bg-cyan-950/30',
+        },
     ];
 
     return (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             {stats.map((stat) => (
                 <div
                     key={stat.label}

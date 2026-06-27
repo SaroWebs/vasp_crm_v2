@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Task;
 use App\Models\TaskAssignment;
 use App\Models\TaskTimeEntry;
+use App\Services\AttendanceDayPolicyService;
 use App\Services\WorkingHoursService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,9 +47,8 @@ class TimeTrackingController extends Controller
         }
 
         // Check if current time is working time
-        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
-        if (! $workingHoursService->isWorkingTime($now)) {
+        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
             return response()->json([
                 'error' => 'Task actions are not available outside working hours',
                 'message' => 'Please resume your work during working hours',
@@ -162,9 +162,8 @@ class TimeTrackingController extends Controller
         }
 
         // Check if current time is working time
-        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
-        if (! $workingHoursService->isWorkingTime($now)) {
+        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
             return response()->json([
                 'error' => 'Task actions are not available outside working hours',
                 'message' => 'Please resume your work during working hours',
@@ -453,10 +452,9 @@ class TimeTrackingController extends Controller
         $task->update(['due_at' => $validatedData['due_at']]);
 
         // Now start the task
-        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
 
-        if (! $workingHoursService->isWorkingTime($now)) {
+        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
             return response()->json([
                 'error' => 'Task actions are not available outside working hours',
                 'message' => 'Please resume your work during working hours',

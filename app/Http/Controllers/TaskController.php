@@ -11,6 +11,7 @@ use App\Models\TaskTimeEntry;
 use App\Models\TaskType;
 use App\Models\User;
 use App\Models\WorkloadMetric;
+use App\Services\AttendanceDayPolicyService;
 use App\Services\DueDateCalculatorService;
 use App\Services\NotificationService;
 use App\Services\TaskActionAuthorizationService;
@@ -716,9 +717,8 @@ class TaskController extends Controller
         }
 
         // Check if current time is working time
-        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
-        if (! $workingHoursService->isWorkingTime($now)) {
+        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
             return response()->json([
                 'error' => 'Task actions are not available outside working hours',
                 'message' => 'Please resume your work during working hours',
@@ -856,9 +856,8 @@ class TaskController extends Controller
         }
 
         // Check if current time is working time
-        $workingHoursService = app(WorkingHoursService::class);
         $now = now();
-        if (! $workingHoursService->isWorkingTime($now)) {
+        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
             return response()->json([
                 'error' => 'Task actions are not available outside working hours',
                 'message' => 'Please resume your work during working hours',

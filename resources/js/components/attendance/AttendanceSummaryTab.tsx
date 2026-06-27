@@ -12,8 +12,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Download, Eye, Users, TrendingUp, Clock, AlertCircle, CalendarCheck2, Palmtree, Umbrella, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Download, Eye, Users, TrendingUp, Clock, Timer, AlertCircle, CalendarCheck2, Palmtree, Umbrella, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -38,6 +37,7 @@ interface EmployeeSummary {
         early_out_days: number;
         total_late_minutes: number;
         total_early_out_minutes: number;
+        total_overtime_minutes: number;
         total_hours: number;
     };
 }
@@ -131,7 +131,7 @@ function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: Op
         if (fetchedRef.current === cacheKey) return;
         fetchedRef.current = cacheKey;
 
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         axios
             .get(`/admin/employee-attendance/${emp.id}`, {
                 params: { start_date: opMonth.start_date, end_date: opMonth.end_date },
@@ -157,6 +157,7 @@ function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: Op
                 <StatCard label="Unpaid Leave" value={s.unpaid_leave_days ?? 0} color="text-orange-600" />
                 <StatCard label="Holidays" value={s.holiday_days ?? 0} color="text-indigo-600" />
                 <StatCard label="Late Days" value={s.late_days} color="text-yellow-600" />
+                <StatCard label="Overtime" value={fmtMinutes(s.total_overtime_minutes)} color="text-cyan-600" />
                 <StatCard label="Total Hours" value={`${s.total_hours.toFixed(1)}h`} color="text-blue-600" />
             </div>
 
@@ -264,6 +265,7 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
     const totalEarlyOut = summaries.reduce((s, e) => s + e.summary.early_out_days, 0);
     const totalLateMinutes = summaries.reduce((s, e) => s + e.summary.total_late_minutes, 0);
     const totalEarlyOutMinutes = summaries.reduce((s, e) => s + e.summary.total_early_out_minutes, 0);
+    const totalOvertimeMinutes = summaries.reduce((s, e) => s + e.summary.total_overtime_minutes, 0);
     const totalHours = summaries.reduce((s, e) => s + e.summary.total_hours, 0);
 
     const tableSummaries = summaries.filter((e) => e.summary.present_days > 0);
@@ -361,6 +363,15 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                         <p className="text-lg font-bold text-amber-700">{totalEarlyOutMinutes}</p>
                     </CardContent>
                 </Card>
+                <Card className="border-none shadow-sm">
+                    <CardContent className="flex items-center gap-2 px-2.5 py-1.5">
+                        <Timer className="h-5 w-5 shrink-0 text-cyan-500" />
+                        <div>
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Overtime</p>
+                            <p className="text-lg font-bold text-cyan-700">{fmtMinutes(totalOvertimeMinutes)}</p>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             <Card>
@@ -396,6 +407,7 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                                         <TableHead className="text-center">Early Out</TableHead>
                                         <TableHead className="text-center">Late Min.</TableHead>
                                         <TableHead className="text-center">EO Min.</TableHead>
+                                        <TableHead className="text-center">OT</TableHead>
                                         <TableHead className="text-center">Hours</TableHead>
                                         <TableHead className="text-right">Detail</TableHead>
                                     </TableRow>
@@ -403,13 +415,13 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                                 <TableBody>
                                     {summaries.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={14} className="py-12 text-center text-muted-foreground">
+                                            <TableCell colSpan={15} className="py-12 text-center text-muted-foreground">
                                                 No attendance data for this period.
                                             </TableCell>
                                         </TableRow>
                                     ) : tableSummaries.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={14} className="py-12 text-center text-muted-foreground">
+                                            <TableCell colSpan={15} className="py-12 text-center text-muted-foreground">
                                                 No employees with attendance records in this period.
                                             </TableCell>
                                         </TableRow>
@@ -447,6 +459,9 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                                                 </TableCell>
                                                 <TableCell className="text-center text-sm text-amber-700">
                                                     {emp.summary.total_early_out_minutes}
+                                                </TableCell>
+                                                <TableCell className="text-center text-sm text-cyan-700">
+                                                    {fmtMinutes(emp.summary.total_overtime_minutes)}
                                                 </TableCell>
                                                 <TableCell className="text-center text-sm">
                                                     {emp.summary.total_hours.toFixed(1)}h

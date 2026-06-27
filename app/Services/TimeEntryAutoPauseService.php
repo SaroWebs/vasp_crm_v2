@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Service to automatically manage time entries outside working hours.
- * 
+ *
  * This service handles:
  * - Pausing entries started outside working hours
  * - Pausing entries that run past working hours end
@@ -18,11 +18,13 @@ use Illuminate\Support\Facades\Log;
 class TimeEntryAutoPauseService
 {
     protected WorkingHoursService $workingHoursService;
+
     protected TimeCalculatorService $timeCalculatorService;
 
     public function __construct(
         WorkingHoursService $workingHoursService,
-        TimeCalculatorService $timeCalculatorService
+        TimeCalculatorService $timeCalculatorService,
+        private AttendanceDayPolicyService $dayPolicyService
     ) {
         $this->workingHoursService = $workingHoursService;
         $this->timeCalculatorService = $timeCalculatorService;
@@ -30,13 +32,13 @@ class TimeEntryAutoPauseService
 
     /**
      * Process all active time entries and auto-pause those outside working hours.
-     * 
+     *
      * @return array Array containing counts of processed, paused, and split entries
      */
     public function processActiveTimeEntries(): array
     {
-        $activeEntries = TaskTimeEntry::active()->get();
-        
+        $activeEntries = TaskTimeEntry::active()->with('user.employee')->get();
+
         $stats = [
             'processed' => 0,
             'paused' => 0,
@@ -46,9 +48,9 @@ class TimeEntryAutoPauseService
 
         foreach ($activeEntries as $entry) {
             $stats['processed']++;
-            
+
             $result = $this->processTimeEntry($entry);
-            
+
             if ($result === 'paused') {
                 $stats['paused']++;
             } elseif ($result === 'split') {
@@ -59,51 +61,46 @@ class TimeEntryAutoPauseService
         }
 
         Log::info('TimeEntryAutoPauseService: Processed active time entries', $stats);
-        
+
         return $stats;
     }
 
     /**
      * Process a single time entry.
-     * 
-     * @param TaskTimeEntry $entry
+     *
      * @return string Result: 'paused', 'split', 'skipped', or 'active'
      */
     public function processTimeEntry(TaskTimeEntry $entry): string
     {
         $now = now();
-        $startTime = $entry->start_time instanceof DateTime 
-            ? clone $entry->start_time 
+        $startTime = $entry->start_time instanceof DateTime
+            ? clone $entry->start_time
             : new DateTime($entry->start_time);
-        
+        $employee = $entry->user?->employee;
+
         // Convert to configured timezone
         $timezone = new DateTimeZone($this->workingHoursService->getWorkingHoursConfig()['timezone']);
         $startTime->setTimezone($timezone);
-        
+
         $nowInTz = clone $now;
         $nowInTz->setTimezone($timezone);
 
-        // Check if the entry was started outside working hours
-        if (!$this->workingHoursService->isWorkingDay($startTime)) {
-            // Started on a non-working day (holiday or weekend)
-            return $this->pauseEntry($entry, 'Started on non-working day');
-        }
-
-        if (!$this->workingHoursService->isWorkingTime($startTime)) {
-            // Started outside working hours (evening, early morning)
+        if (! $this->dayPolicyService->isWithinWorkingWindow($employee, $startTime)) {
             return $this->pauseEntry($entry, 'Started outside working hours');
         }
 
-        // Check if the entry has run past today's working hours
-        $workingHours = $this->workingHoursService->getWorkingHoursForDate($startTime);
-        
-        if ($workingHours['end'] && $nowInTz > $workingHours['end']) {
+        $schedule = $this->dayPolicyService->resolveForEmployeeDate($employee, $startTime->format('Y-m-d'));
+        $workingEnd = $schedule['end_time']
+            ? new DateTime($startTime->format('Y-m-d').' '.$schedule['end_time'], $timezone)
+            : null;
+
+        if ($workingEnd && $nowInTz > $workingEnd) {
             // Current time is past the end of working hours for the day the entry started
             // Check if we're on the same day
             if ($startTime->format('Y-m-d') === $nowInTz->format('Y-m-d')) {
                 return $this->pauseEntry($entry, 'Ran past end of working hours');
             }
-            
+
             // Entry spans multiple days - split it
             return $this->splitEntryIfNeeded($entry);
         }
@@ -112,8 +109,9 @@ class TimeEntryAutoPauseService
         $nextDayStart = clone $startTime;
         $nextDayStart->modify('+1 day');
         $nextDayStart->setTime(0, 0, 0);
-        
-        if ($nowInTz >= $nextDayStart && $this->workingHoursService->isWorkingDay($nextDayStart)) {
+
+        $nextDaySchedule = $this->dayPolicyService->resolveForEmployeeDate($employee, $nextDayStart->format('Y-m-d'));
+        if ($nowInTz >= $nextDayStart && $nextDaySchedule['is_working_day']) {
             // We're on a new working day and the entry is still running
             return $this->splitEntryIfNeeded($entry);
         }
@@ -124,43 +122,39 @@ class TimeEntryAutoPauseService
 
     /**
      * Pause a time entry with a reason.
-     * 
-     * @param TaskTimeEntry $entry
-     * @param string $reason
-     * @return string
      */
     protected function pauseEntry(TaskTimeEntry $entry, string $reason): string
     {
         Log::info("TimeEntryAutoPauseService: Pausing entry #{$entry->id} - {$reason}");
-        
+
         $entry->end();
-        
+
         return 'paused';
     }
 
     /**
      * Split an entry if it spans multiple working days.
-     * 
-     * @param TaskTimeEntry $entry
-     * @return string
      */
     protected function splitEntryIfNeeded(TaskTimeEntry $entry): string
     {
+        $entry->loadMissing('user.employee');
+
         $now = now();
-        $startTime = $entry->start_time instanceof DateTime 
-            ? clone $entry->start_time 
+        $startTime = $entry->start_time instanceof DateTime
+            ? clone $entry->start_time
             : new DateTime($entry->start_time);
-        
+        $employee = $entry->user?->employee;
+
         $timezone = new DateTimeZone($this->workingHoursService->getWorkingHoursConfig()['timezone']);
         $startTime->setTimezone($timezone);
-        
+
         $nowInTz = clone $now;
         $nowInTz->setTimezone($timezone);
 
         // Check if entry spans multiple working days
         $startDate = clone $startTime;
         $startDate->setTime(0, 0, 0);
-        
+
         $endDate = clone $nowInTz;
         $endDate->setTime(0, 0, 0);
 
@@ -176,26 +170,30 @@ class TimeEntryAutoPauseService
         $createdEntries = 0;
 
         while ($currentDate < $endDate) {
-            $workingHours = $this->workingHoursService->getWorkingHoursForDate($currentDate);
-            
-            if (!$workingHours['start'] || !$workingHours['end']) {
+            $schedule = $this->dayPolicyService->resolveForEmployeeDate($employee, $currentDate->format('Y-m-d'));
+
+            if (! $schedule['start_time'] || ! $schedule['end_time']) {
                 // Non-working day, skip
                 $currentDate->modify('+1 day');
+
                 continue;
             }
 
+            $workingStart = new DateTime($currentDate->format('Y-m-d').' '.$schedule['start_time'], $timezone);
+            $workingEnd = new DateTime($currentDate->format('Y-m-d').' '.$schedule['end_time'], $timezone);
+
             // Calculate segment start and end
-            $segmentStart = $currentDate == $startDate ? $startTime : $workingHours['start'];
-            
+            $segmentStart = $currentDate == $startDate ? $startTime : $workingStart;
+
             // For the last day, use current time as end
             if ($currentDate == $endDate) {
                 $segmentEnd = $nowInTz;
             } else {
-                $segmentEnd = $workingHours['end'];
+                $segmentEnd = $workingEnd;
             }
 
             // Skip if segment is outside working hours
-            if ($segmentStart >= $workingHours['start'] && $segmentEnd <= $workingHours['end']) {
+            if ($segmentStart >= $workingStart && $segmentEnd <= $workingEnd) {
                 // Create a new time entry for this segment
                 if ($createdEntries === 0) {
                     // Update the original entry
@@ -208,7 +206,7 @@ class TimeEntryAutoPauseService
                     TaskTimeEntry::create([
                         'task_id' => $entry->task_id,
                         'user_id' => $entry->user_id,
-                        'start_time' => $workingHours['start'],
+                        'start_time' => $workingStart,
                         'end_time' => $segmentEnd,
                         'description' => $entry->description,
                         'is_active' => false,
@@ -233,36 +231,31 @@ class TimeEntryAutoPauseService
 
     /**
      * Check if a time entry should be allowed to start.
-     * 
-     * @param DateTime $startTime
-     * @return bool
      */
     public function canStartTimeEntry(DateTime $startTime): bool
     {
-        return $this->workingHoursService->isWorkingDay($startTime) 
+        return $this->workingHoursService->isWorkingDay($startTime)
             && $this->workingHoursService->isWorkingTime($startTime);
     }
 
     /**
      * Get the recommended end time for an active entry.
-     * 
-     * @param TaskTimeEntry $entry
-     * @return DateTime|null
      */
     public function getRecommendedEndTime(TaskTimeEntry $entry): ?DateTime
     {
-        $startTime = $entry->start_time instanceof DateTime 
-            ? clone $entry->start_time 
+        $startTime = $entry->start_time instanceof DateTime
+            ? clone $entry->start_time
             : new DateTime($entry->start_time);
-        
+
         $timezone = new DateTimeZone($this->workingHoursService->getWorkingHoursConfig()['timezone']);
         $startTime->setTimezone($timezone);
 
         // Get working hours for the start day
-        $workingHours = $this->workingHoursService->getWorkingHoursForDate($startTime);
-        
-        if ($workingHours['end']) {
-            return $workingHours['end'];
+        $entry->loadMissing('user.employee');
+        $schedule = $this->dayPolicyService->resolveForEmployeeDate($entry->user?->employee, $startTime->format('Y-m-d'));
+
+        if ($schedule['end_time']) {
+            return new DateTime($startTime->format('Y-m-d').' '.$schedule['end_time'], $timezone);
         }
 
         return null;
@@ -270,7 +263,7 @@ class TimeEntryAutoPauseService
 
     /**
      * Forcefully stop all active time entries.
-     * 
+     *
      * @return int Number of entries stopped
      */
     public function forceStopAllActiveEntries(): int
@@ -289,8 +282,8 @@ class TimeEntryAutoPauseService
 
     /**
      * Stop entries that have been running too long (configurable threshold).
-     * 
-     * @param int $maxHours Maximum hours allowed for a single entry
+     *
+     * @param  int  $maxHours  Maximum hours allowed for a single entry
      * @return int Number of entries stopped
      */
     public function stopEntriesExceedingMaxDuration(int $maxHours = 12): int
@@ -300,12 +293,12 @@ class TimeEntryAutoPauseService
         $now = now();
 
         foreach ($activeEntries as $entry) {
-            $startTime = $entry->start_time instanceof DateTime 
-                ? clone $entry->start_time 
+            $startTime = $entry->start_time instanceof DateTime
+                ? clone $entry->start_time
                 : new DateTime($entry->start_time);
-            
+
             $hoursRunning = ($now->timestamp - $startTime->timestamp) / 3600;
-            
+
             if ($hoursRunning > $maxHours) {
                 $entry->end();
                 $count++;

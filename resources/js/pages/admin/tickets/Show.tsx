@@ -20,16 +20,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { Attachment, Task, Ticket, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
@@ -49,10 +39,10 @@ import {
     Trash,
     Trash2,
     User,
-    X,
     XCircle,
+    type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import TicketAssignmentDialog from '@/components/ticket-assignment-dialog';
 
@@ -75,42 +65,8 @@ interface TicketsShowProps {
     ticket: Ticket;
 }
 
-interface TaskAdjustmentPayload {
-    title: string;
-    description: string;
-    startAt: string;
-    dueAt?: string;
-    estimateHours?: string;
-    assignmentNotes?: string;
-}
-
-interface UserAssignmentPayload {
-    assignedTo: number;
-    task: TaskAdjustmentPayload;
-}
-
-interface UserAssignmentFormProps {
-    ticket: Pick<Ticket, 'title' | 'description'>;
-    onSubmit: (payload: UserAssignmentPayload) => void;
-    onCancel: () => void;
-    isSubmitting: boolean;
-}
-
-interface AssignmentUser {
-    id: number;
-    name: string;
-    email: string;
-    department_name?: string | null;
-    active_task_count: number;
-    in_progress_task_count: number;
-    pending_task_count: number;
-    planned_utilization_percent: number;
-    availability_status: 'available' | 'balanced' | 'overloaded' | string;
-    load_status: 'free' | 'busy' | string;
-}
-
 export default function TicketsShow({ ticket }: TicketsShowProps) {
-    const [isApproving, setIsApproving] = useState(false);
+    const [, setIsApproving] = useState(false);
 
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [
@@ -158,7 +114,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
     const [pendingAction, setPendingAction] = useState<
         'close' | 'reject' | 'cancel' | null
     >(null);
-    const [isCheckingTasks, setIsCheckingTasks] = useState(false);
+    const [, setIsCheckingTasks] = useState(false);
 
     const getStatusBadge = (status: string) => {
         const variants: Record<
@@ -173,7 +129,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             closed: 'outline',
         };
 
-        const icons: Record<string, any> = {
+        const icons: Record<string, LucideIcon> = {
             open: Clock,
             approved: CheckCircle,
             'in-progress': Clock,
@@ -206,7 +162,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             critical: 'destructive',
         };
 
-        const icons: Record<string, any> = {
+        const icons: Record<string, LucideIcon> = {
             low: AlertTriangle,
             medium: AlertTriangle,
             high: AlertTriangle,
@@ -237,7 +193,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             cancelled: 'destructive',
         };
 
-        const icons: Record<string, any> = {
+        const icons: Record<string, LucideIcon> = {
             pending: Clock,
             'in-progress': Clock,
             completed: CheckCircle,
@@ -255,21 +211,6 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
                 {(status || 'UNKNOWN').replace('-', ' ').toUpperCase()}
             </Badge>
         );
-    };
-
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'P1':
-                return 'bg-red-100 text-red-800 border-red-200';
-            case 'P2':
-                return 'bg-orange-100 text-orange-800 border-orange-200';
-            case 'P3':
-                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            case 'P4':
-                return 'bg-green-100 text-green-800 border-green-200';
-            default:
-                return 'bg-gray-100 text-gray-800 border-gray-200';
-        }
     };
 
     const getInitials = (name: string) => {
@@ -306,10 +247,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         setIsApproving(true);
         axios
             .post(`/admin/tickets/${ticket.id}/approve`)
-            .then((res) => {
-                console.log(res);
+            .then(() => {
                 alert('Ticket approved successfully!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 alert('Failed to approve ticket: ' + err.message);
@@ -329,10 +269,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         setIsApproving(true);
         axios
             .post(`/admin/tickets/${ticket.id}/reject`)
-            .then((res) => {
-                console.log(res);
+            .then(() => {
                 alert('Ticket rejected successfully!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 alert('Failed to reject ticket: ' + err.message);
@@ -351,9 +290,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         setIsApproving(true);
         axios
             .patch(`/admin/tickets/${ticket.id}/status`, { status: 'closed' })
-            .then((res) => {
+            .then(() => {
                 toast.success('Ticket closed successfully!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 toast.error(
@@ -373,9 +312,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .patch(`/admin/tickets/${ticket.id}/status`, {
                 status: 'in-progress',
             })
-            .then((res) => {
+            .then(() => {
                 toast.success('Ticket reopened successfully!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 toast.error(
@@ -395,9 +334,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .patch(`/admin/tickets/${ticket.id}/status`, {
                 status: 'in-progress',
             })
-            .then((res) => {
+            .then(() => {
                 toast.success('Ticket marked as in progress!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 toast.error(
@@ -454,9 +393,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .patch(`/admin/tickets/${ticket.id}/status`, {
                 status: 'cancelled',
             })
-            .then((res) => {
+            .then(() => {
                 toast.success('Ticket cancelled successfully!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 toast.error(
@@ -479,10 +418,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
         setIsApproving(true);
         axios
             .delete(`/admin/tickets/${ticket.id}`)
-            .then((res) => {
-                console.log(res);
+            .then(() => {
                 alert('Ticket deleted successfully!');
-                window.location.href = '/admin/tickets';
+                router.visit('/admin/tickets', { replace: true });
             })
             .catch((err) => {
                 const errorMessage =
@@ -512,10 +450,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .delete(`/admin/tickets/${ticket.id}`, {
                 data: { force_delete: true },
             })
-            .then((res) => {
-                console.log(res);
+            .then(() => {
                 alert('Ticket permanently deleted successfully!');
-                window.location.href = '/admin/tickets';
+                router.visit('/admin/tickets', { replace: true });
             })
             .catch((err) => {
                 const errorMessage =

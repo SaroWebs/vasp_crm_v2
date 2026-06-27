@@ -248,7 +248,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
             .patch(`/admin/tickets/${ticketId}/status`, { status: 'closed' })
             .then(() => {
                 toast.success('Ticket closed successfully!');
-                window.location.reload();
+                router.reload({ preserveScroll: true });
             })
             .catch((err) => {
                 toast.error(

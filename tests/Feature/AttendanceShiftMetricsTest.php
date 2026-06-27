@@ -6,6 +6,7 @@ use App\Http\Controllers\AttendanceController;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\EmployeeShiftAssignment;
+use App\Models\Holiday;
 use App\Models\Punch;
 use App\Models\Shift;
 use Carbon\Carbon;
@@ -93,8 +94,8 @@ class AttendanceShiftMetricsTest extends TestCase
             new AttendanceController,
             $employee,
             collect(),
-            6,
-            2026
+            Carbon::parse('2026-06-01'),
+            Carbon::parse('2026-06-30')
         ))->keyBy('date');
 
         $this->assertSame('absent', $days['2026-06-09']['status']);
@@ -140,8 +141,8 @@ class AttendanceShiftMetricsTest extends TestCase
             new AttendanceController,
             $employee,
             $records,
-            6,
-            2026
+            Carbon::parse('2026-06-01'),
+            Carbon::parse('2026-06-30')
         ))->keyBy('date');
 
         $this->assertSame('09:00:48', $days['2026-06-01']['record']['punch_in']);
@@ -167,7 +168,7 @@ class AttendanceShiftMetricsTest extends TestCase
         $decorated = $ref->invoke($controller, $attendance);
 
         $this->assertNull($decorated['shift_id']);
-        $this->assertEquals(20, $decorated['late_minutes']);
+        $this->assertEquals(19, $decorated['late_minutes']);
         $this->assertEquals(0, $decorated['early_in_minutes']);
         $this->assertEquals(20, $decorated['early_out_minutes']);
         $this->assertEquals(0, $decorated['late_out_minutes']);
@@ -180,6 +181,11 @@ class AttendanceShiftMetricsTest extends TestCase
     public function test_shift_metrics_do_not_apply_on_holidays_without_shift(): void
     {
         $employee = Employee::factory()->create(['code' => '9021']);
+        Holiday::create([
+            'date' => '2026-05-27',
+            'name' => 'Test Holiday',
+            'type' => 'state',
+        ]);
 
         $attendance = Attendance::create([
             'employee_id' => $employee->code,
@@ -364,14 +370,76 @@ class AttendanceShiftMetricsTest extends TestCase
 
         $summary = $summaryMethod->invoke(
             $controller,
+            $employee,
             Attendance::query()->where('employee_id', $employee->code)->get(),
-            5,
-            2026
+            Carbon::parse('2026-05-01'),
+            Carbon::parse('2026-05-31')
         );
 
         $this->assertSame(1, $summary['late_days']);
         $this->assertSame(0, $summary['early_out_days']);
         $this->assertSame(2, $summary['total_late_minutes']);
         $this->assertSame(0, $summary['total_early_out_minutes']);
+    }
+
+    public function test_monthly_summary_counts_early_arrival_and_late_departure_as_overtime_not_late(): void
+    {
+        $employee = Employee::factory()->create(['code' => 'OT001']);
+
+        Attendance::create([
+            'employee_id' => $employee->code,
+            'attendance_date' => '2026-05-18',
+            'punch_in' => '08:54:00',
+            'punch_out' => '19:05:00',
+            'employee_name' => $employee->name,
+            'mode' => 'office',
+        ]);
+
+        $controller = new AttendanceController;
+        $summaryMethod = new \ReflectionMethod(AttendanceController::class, 'computeSummary');
+        $summaryMethod->setAccessible(true);
+
+        $summary = $summaryMethod->invoke(
+            $controller,
+            $employee,
+            Attendance::query()->where('employee_id', $employee->code)->get(),
+            Carbon::parse('2026-05-01'),
+            Carbon::parse('2026-05-31')
+        );
+
+        $this->assertSame(0, $summary['late_days']);
+        $this->assertSame(0, $summary['total_late_minutes']);
+        $this->assertSame(71, $summary['total_overtime_minutes']);
+        $this->assertSame(10.18, $summary['total_hours']);
+    }
+
+    public function test_sandwiched_holiday_counts_as_absent_in_summary(): void
+    {
+        Carbon::setTestNow('2026-06-05 10:00:00');
+
+        $employee = Employee::factory()->create(['code' => 'SAND001']);
+        Holiday::create([
+            'date' => '2026-06-03',
+            'name' => 'Midweek Holiday',
+            'type' => 'state',
+        ]);
+
+        $controller = new AttendanceController;
+        $summaryMethod = new \ReflectionMethod(AttendanceController::class, 'computeSummary');
+        $summaryMethod->setAccessible(true);
+
+        $summary = $summaryMethod->invoke(
+            $controller,
+            $employee,
+            collect(),
+            Carbon::parse('2026-06-02'),
+            Carbon::parse('2026-06-04')
+        );
+
+        $this->assertSame(3, $summary['absent_days']);
+        $this->assertSame(3, $summary['total_working_days']);
+        $this->assertSame(0, $summary['holiday_days']);
+
+        Carbon::setTestNow();
     }
 }

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Employee;
 use App\Models\EmployeeShiftAssignment;
+use App\Models\Holiday;
 use App\Models\LeaveType;
 use App\Models\Shift;
 use App\Models\User;
@@ -55,6 +56,7 @@ class AttendanceCalculationTest extends TestCase
         $this->assertFalse($metrics['is_late_in']);
         $this->assertEquals(30, $metrics['early_in_minutes']);
         $this->assertEquals(0, $metrics['late_in_minutes']);
+        $this->assertEquals(30, $metrics['overtime_minutes']);
     }
 
     /**
@@ -236,7 +238,7 @@ class AttendanceCalculationTest extends TestCase
         $this->assertFalse($metrics['is_early_out']);
     }
 
-    public function test_weekend_rules_override_an_assigned_shift(): void
+    public function test_saturday_half_day_uses_assigned_shift_start_time(): void
     {
         $employee = Employee::factory()->create(['code' => 'WEEKEND01']);
         $shift = Shift::create([
@@ -268,9 +270,9 @@ class AttendanceCalculationTest extends TestCase
             '2026-06-01'
         );
 
-        $this->assertNull($saturday['shift_id']);
-        $this->assertSame('09:00:00', $saturday['start_time']);
-        $this->assertSame('14:00:00', $saturday['end_time']);
+        $this->assertSame($shift->id, $saturday['shift_id']);
+        $this->assertSame('08:00:00', $saturday['start_time']);
+        $this->assertSame('13:00:00', $saturday['end_time']);
         $this->assertTrue($saturday['is_half_day']);
 
         $this->assertNull($sunday['shift_id']);
@@ -315,7 +317,12 @@ class AttendanceCalculationTest extends TestCase
      */
     public function test_holiday_returns_no_working_hours(): void
     {
-        // This test assumes holidays.json has 2026-01-26 as a holiday (Republic Day)
+        Holiday::create([
+            'date' => '2026-01-26',
+            'name' => 'Republic Day',
+            'type' => 'national',
+        ]);
+
         $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate('test_code', '2026-01-26');
 
         $this->assertTrue($shiftMeta['is_holiday']);
@@ -418,7 +425,7 @@ class AttendanceCalculationTest extends TestCase
         $this->assertTrue($metrics['is_late_out']);
         $this->assertEquals(15, $metrics['early_in_minutes']);
         $this->assertEquals(30, $metrics['late_out_minutes']);
-        $this->assertEquals(30, $metrics['overtime_minutes']);
+        $this->assertEquals(45, $metrics['overtime_minutes']);
     }
 
     /**
