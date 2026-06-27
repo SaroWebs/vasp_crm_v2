@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import DailyAttendancePanel from '@/components/admin/employees/DailyAttendancePanel';
@@ -33,7 +33,6 @@ interface Employee {
 }
 
 interface AdminAttendancePageProps {
-    auth: any;
     employees: Employee[];
 }
 
@@ -46,6 +45,22 @@ interface QueueItem {
     status: string;
     title: string;
     detail: string | null;
+}
+
+interface QueueRequest {
+    id: number;
+    employee?: {
+        name?: string | null;
+    } | null;
+    start_date: string;
+    end_date: string;
+    status: string;
+    leave_type?: {
+        name?: string | null;
+    } | null;
+    reason?: string | null;
+    location?: string | null;
+    description?: string | null;
 }
 
 
@@ -89,7 +104,7 @@ function RequestQueue() {
                 axios.get('/api/field-work-requests', { params }),
             ]);
 
-            const leaveItems = (leaveResponse.data.data ?? []).map((request: any): QueueItem => ({
+            const leaveItems = ((leaveResponse.data.data ?? []) as QueueRequest[]).map((request): QueueItem => ({
                 id: request.id,
                 type: 'leave',
                 employee_name: request.employee?.name ?? 'Unknown',
@@ -100,7 +115,7 @@ function RequestQueue() {
                 detail: request.reason,
             }));
 
-            const remoteItems = (remoteResponse.data.data ?? []).map((request: any): QueueItem => ({
+            const remoteItems = ((remoteResponse.data.data ?? []) as QueueRequest[]).map((request): QueueItem => ({
                 id: request.id,
                 type: 'remote',
                 employee_name: request.employee?.name ?? 'Unknown',
@@ -111,7 +126,7 @@ function RequestQueue() {
                 detail: request.reason,
             }));
 
-            const fieldItems = (fieldResponse.data.data ?? []).map((request: any): QueueItem => ({
+            const fieldItems = ((fieldResponse.data.data ?? []) as QueueRequest[]).map((request): QueueItem => ({
                 id: request.id,
                 type: 'field',
                 employee_name: request.employee?.name ?? 'Unknown',
@@ -123,8 +138,12 @@ function RequestQueue() {
             }));
 
             setItems([...leaveItems, ...remoteItems, ...fieldItems].sort((a, b) => b.start_date.localeCompare(a.start_date)));
-        } catch (err: any) {
-            setError(err.response?.data?.message ?? 'Failed to load request queue.');
+        } catch (err: unknown) {
+            setError(
+                axios.isAxiosError(err)
+                    ? err.response?.data?.message ?? 'Failed to load request queue.'
+                    : 'Failed to load request queue.',
+            );
         } finally {
             setLoading(false);
         }
@@ -296,12 +315,19 @@ function AssignmentPanel({ employees }: { employees: Employee[] }) {
 
 
 export default function AdminAttendancePage({ employees }: AdminAttendancePageProps) {
+    const [activeTab, setActiveTab] = useState<string | null>('summary');
+
     return (
         <>
             <Head title="Attendance Management" />
             <AppLayout breadcrumbs={breadcrumbs}>
                 <div className="space-y-4 p-4">
-                    <Tabs defaultValue="summary" className="w-full">
+                    <Tabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        keepMounted={false}
+                        className="w-full"
+                    >
                         <Tabs.List>
                             <Tabs.Tab value="summary" leftSection={<ListChecks size={16} />}>Summary</Tabs.Tab>
                             <Tabs.Tab value="daily" leftSection={<CalendarClock size={16} />}>Daily Attendance</Tabs.Tab>
@@ -310,22 +336,22 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
                             <Tabs.Tab value="shifts" leftSection={<UserCog size={16} />}>Shifts</Tabs.Tab>
                         </Tabs.List>
                         <Tabs.Panel value="summary" pt="md">
-                            <AttendanceSummaryTab />
+                            {activeTab === 'summary' && <AttendanceSummaryTab />}
                         </Tabs.Panel>
                         <Tabs.Panel value="daily" pt="md">
-                            <DailyAttendancePanel />
+                            {activeTab === 'daily' && <DailyAttendancePanel />}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="requests" pt="md">
-                            <RequestQueue />
+                            {activeTab === 'requests' && <RequestQueue />}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="assignments" pt="md">
-                            <AssignmentPanel employees={employees} />
+                            {activeTab === 'assignments' && <AssignmentPanel employees={employees} />}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="shifts" pt="md">
-                            <ShiftChangePanel employees={employees} selectedId={null} />
+                            {activeTab === 'shifts' && <ShiftChangePanel employees={employees} selectedId={null} />}
                         </Tabs.Panel>
 
                     </Tabs>

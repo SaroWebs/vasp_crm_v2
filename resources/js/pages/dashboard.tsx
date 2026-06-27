@@ -1,6 +1,6 @@
 ﻿import AppLayout from '@/layouts/app-layout';
 import { Auth, type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import AdminDashboard from '@/components/dashboard/AdminDashboard';
 import EmployeeDashboard from '@/components/dashboard/EmployeeDashboard';
 
@@ -19,15 +19,16 @@ interface DashboardProps {
 }
 
 export default function Dashboard(props: DashboardProps) {
+    const page = usePage<{ auth?: Auth }>();
     const {
         dashboard_type,
         ticketStats,
         taskStats,
-        auth=null,
+        auth = page.props.auth ?? null,
     } = props;
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <AppLayout breadcrumbs={breadcrumbs} auth={auth ?? undefined}>
             <Head title={dashboard_type === 'employee' ? 'Employee Dashboard' : 'Admin Dashboard'} />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
                 {dashboard_type === 'employee' ? (

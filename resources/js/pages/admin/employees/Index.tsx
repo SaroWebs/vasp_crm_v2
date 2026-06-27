@@ -110,6 +110,7 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
         status: filters.status || 'all',
     });
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasMountedSearchEffectRef = useRef(false);
 
     const canCreate = userPermissions.includes('employee.create') || isSuperAdmin;
     const canEdit = userPermissions.includes('employee.update') || isSuperAdmin;
@@ -200,6 +201,11 @@ export default function EmployeesIndex(props: EmployeesIndexProps) {
     }, []);
 
     useEffect(() => {
+        if (!hasMountedSearchEffectRef.current) {
+            hasMountedSearchEffectRef.current = true;
+            return;
+        }
+
         if (searchTimeoutRef.current) {
             clearTimeout(searchTimeoutRef.current);
         }
@@ -702,7 +708,11 @@ const VisitorPanel = () => {
     };
 
     useEffect(() => {
-        fetchVisitors();
+        const timeoutId = window.setTimeout(() => {
+            fetchVisitors();
+        }, 800);
+
+        return () => window.clearTimeout(timeoutId);
     }, []);
 
     const handleEdit = (visitor: Visitor) => {

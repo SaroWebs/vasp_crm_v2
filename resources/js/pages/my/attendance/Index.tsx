@@ -1,6 +1,6 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type Auth, type BreadcrumbItem } from '@/types';
 import {
     PunchWidget,
     AttendanceCalendar,
@@ -25,7 +25,7 @@ interface LeaveType {
 
 interface MyAttendancePageProps {
     breadcrumbs?: BreadcrumbItem[];
-    auth: any;
+    auth?: Auth;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -40,7 +40,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function MyAttendancePage(_props: MyAttendancePageProps) {
-    const { auth } = _props;
+    const page = usePage<{ auth?: MyAttendancePageProps['auth'] }>();
+    const auth = _props.auth ?? page.props.auth;
     const [activeTab, setActiveTab] = useState<string | null>('details');
     const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
     const [todayStatus, setTodayStatus] = useState<string | null>(null);
@@ -50,6 +51,10 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
     const [fieldWorkRefreshKey, setFieldWorkRefreshKey] = useState(0);
 
     useEffect(() => {
+        if (activeTab !== 'leaves' || leaveTypes.length > 0) {
+            return;
+        }
+
         const fetchLeaveTypes = async () => {
             try {
                 const response = await axios.get('/api/leave-types');
@@ -59,9 +64,13 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
             }
         };
         fetchLeaveTypes();
-    }, []);
+    }, [activeTab, leaveTypes.length]);
 
     useEffect(() => {
+        if (activeTab !== 'details') {
+            return;
+        }
+
         const fetchTodayStatus = async () => {
             try {
                 const response = await axios.get('/api/my/attendance/today');
@@ -71,7 +80,7 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
             }
         };
         fetchTodayStatus();
-    }, []);
+    }, [activeTab]);
 
     const handlePunchSuccess = () => {
         setTodayStatus('updated');
@@ -80,9 +89,14 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
     return (
         <>
             <Head title="My Attendance" />
-            <AppLayout breadcrumbs={breadcrumbs}>
+            <AppLayout breadcrumbs={breadcrumbs} auth={auth}>
                 <div className="p-4">
-                    <Tabs value={activeTab} onChange={setActiveTab} className="w-full min-h-[300px]">
+                    <Tabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        keepMounted={false}
+                        className="w-full min-h-[300px]"
+                    >
                         <Tabs.List>
                             <Tabs.Tab value="details">
                                 <Group>
@@ -117,7 +131,7 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
                         </Tabs.List>
 
                         <Tabs.Panel value="details" pt="md">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {activeTab === 'details' && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 <div className="space-y-4">
                                     <TodayAttendanceStatus auth={auth} />
                                     <div className="flex justify-between items-center">
@@ -130,15 +144,15 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
                                     </div>
                                     <PunchWidget auth={auth} onPunchSuccess={handlePunchSuccess} />
                                 </div>
-                            </div>
+                            </div>}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="calendar" pt="md">
-                            <AttendanceCalendar auth={auth} />
+                            {activeTab === 'calendar' && <AttendanceCalendar auth={auth} />}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="leaves" pt="md">
-                            <div className="space-y-4">
+                            {activeTab === 'leaves' && <div className="space-y-4">
                                 <Group>
                                     <Button onClick={() => setShowLeaveForm(!showLeaveForm)}>
                                         {showLeaveForm ? 'Cancel' : 'New Leave Request'}
@@ -162,11 +176,11 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
                                     <Text mb="sm">Leave History</Text>
                                     <LeaveHistoryList auth={auth} />
                                 </div>
-                            </div>
+                            </div>}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="remote" pt="md">
-                            <div className="space-y-4">
+                            {activeTab === 'remote' && <div className="space-y-4">
                                 <Group>
                                     <Button onClick={() => setShowRemoteWorkForm(!showRemoteWorkForm)}>
                                         {showRemoteWorkForm ? 'Cancel' : 'New Remote Work Request'}
@@ -184,11 +198,11 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
                                     <Text mb="sm">Remote Work History</Text>
                                     <RemoteWorkHistoryList auth={auth} />
                                 </div>
-                            </div>
+                            </div>}
                         </Tabs.Panel>
 
                         <Tabs.Panel value="field" pt="md">
-                            <div className="space-y-4">
+                            {activeTab === 'field' && <div className="space-y-4">
                                 <Group>
                                     <Button onClick={() => setShowFieldWorkForm(!showFieldWorkForm)}>
                                         {showFieldWorkForm ? 'Cancel' : 'New Field Work Request'}
@@ -209,7 +223,7 @@ export default function MyAttendancePage(_props: MyAttendancePageProps) {
                                     <Text mb="sm">Field Work History</Text>
                                     <FieldWorkHistoryList auth={auth} refreshKey={fieldWorkRefreshKey} />
                                 </div>
-                            </div>
+                            </div>}
                         </Tabs.Panel>
                     </Tabs>
                 </div>

@@ -8,6 +8,7 @@ import { useDashboardStats } from '@/hooks/use-dashboard-stats';
 import { CheckCircle, Clock, TicketIcon } from 'lucide-react';
 import DailyAttendancePanel from '../admin/employees/DailyAttendancePanel';
 import { Auth } from '@/types';
+import { useEffect, useState } from 'react';
 
 interface AdminDashboardProps {
     auth: Auth | null;
@@ -17,6 +18,16 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDashboardProps) {
     const { stats: dashboardStats } = useDashboardStats(auth?.user?.id);
+    const [showSecondaryWidgets, setShowSecondaryWidgets] = useState(false);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setShowSecondaryWidgets(true);
+        }, 700);
+
+        return () => window.clearTimeout(timeoutId);
+    }, []);
+
     const statNumber = (key: string): number => {
         const value = dashboardStats[key];
 
@@ -85,23 +96,20 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
                         ))}
                     </div>
                 </div>
-                <div className="md:col-span-8 space-y-4">
-                    <RecentTicketsWidget />
-                </div>
-                <div className="md:col-span-8 space-y-4">
-                    {/* <AttendanceList
-                        date={new Date()}
-                        type="admin"
-                        hasPagination={true}
-                        hasFilter={true}
-                        showRecentOnly={false}
-                    /> */}
-                    <DailyAttendancePanel/>
-                    <RecentReportSection />
-                </div>
+                {showSecondaryWidgets && (
+                    <>
+                        <div className="md:col-span-8 space-y-4">
+                            <RecentTicketsWidget />
+                        </div>
+                        <div className="md:col-span-8 space-y-4">
+                            <DailyAttendancePanel />
+                            <RecentReportSection />
+                        </div>
+                    </>
+                )}
             </div>
 
-            <TaskTimeline />
+            {showSecondaryWidgets && <TaskTimeline />}
 
             <div className="grid gap-4 md:grid-cols-2">
                 <Card>

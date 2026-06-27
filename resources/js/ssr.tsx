@@ -1,4 +1,5 @@
 import { createInertiaApp } from '@inertiajs/react';
+import { MantineProvider } from '@mantine/core';
 import createServer from '@inertiajs/react/server';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import ReactDOMServer from 'react-dom/server';
@@ -16,7 +17,11 @@ createServer((page) =>
                 import.meta.glob('./pages/**/*.tsx'),
             ),
         setup: ({ App, props }) => {
-            return <App {...props} />;
+            return (
+                <MantineProvider>
+                    <App {...props} />
+                </MantineProvider>
+            );
         },
     }),
 );

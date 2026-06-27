@@ -664,12 +664,20 @@ export default function TicketsIndex(props: TicketsIndexProps) {
     ] as const : [];
 
     useEffect(() => {
-        router.reload({
-            only: ['stats', 'userPermissions'],
-            preserveScroll: true,
-            preserveState: true,
-        });
-    }, []);
+        if (stats) {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            router.reload({
+                only: ['stats'],
+                preserveScroll: true,
+                preserveState: true,
+            });
+        }, 600);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [stats]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
