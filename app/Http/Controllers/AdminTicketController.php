@@ -120,7 +120,15 @@ class AdminTicketController extends Controller
     public function index(Request $request)
     {
         $query = Ticket::withTrashed()
-            ->with(['client', 'organizationUser', 'assignedTo', 'approvedBy', 'createdBy', 'latestClosedHistory', 'tasks']);
+            ->with([
+                'client:id,name',
+                'organizationUser:id,name,email',
+                'assignedTo:id,name',
+                'approvedBy:id,name',
+                'createdBy:id,name',
+                'tasks:id,ticket_id,title,state,task_code',
+                'tasks.assignedUsers:id,name',
+            ]);
 
         // Apply filters if provided
         if ($request->has('status') && $request->status !== 'all') {
@@ -187,13 +195,24 @@ class AdminTicketController extends Controller
         // Get clients for filter dropdown
         $clients = Client::select('id', 'name')->where('status', 'active')->get();
 
-        // Calculate global statistics (unfiltered)
-        $stats = [
-            'total_open' => Ticket::where('status', 'open')->count(),
-            'open_today' => Ticket::where('status', 'open')->whereDate('created_at', Carbon::today())->count(),
-            'in_progress' => Ticket::where('status', 'in-progress')->count(),
-            'completed' => Ticket::where('status', 'closed')->count(),
-        ];
+        $statsCallback = function () {
+            $statsRaw = DB::table('tickets')
+                ->whereNull('deleted_at')
+                ->selectRaw("
+                    COUNT(CASE WHEN status = 'open' THEN 1 END) as total_open,
+                    COUNT(CASE WHEN status = 'open' AND DATE(created_at) = ? THEN 1 END) as open_today,
+                    COUNT(CASE WHEN status = 'in-progress' THEN 1 END) as in_progress,
+                    COUNT(CASE WHEN status = 'closed' THEN 1 END) as completed
+                ", [Carbon::today()->toDateString()])
+                ->first();
+
+            return [
+                'total_open' => (int) ($statsRaw->total_open ?? 0),
+                'open_today' => (int) ($statsRaw->open_today ?? 0),
+                'in_progress' => (int) ($statsRaw->in_progress ?? 0),
+                'completed' => (int) ($statsRaw->completed ?? 0),
+            ];
+        };
 
         return Inertia::render('admin/tickets/Index', [
             'tickets' => $tickets,
@@ -203,8 +222,8 @@ class AdminTicketController extends Controller
                 'order_direction' => $direction,
             ],
             'clients' => $clients,
-            'stats' => $stats,
-            'userPermissions' => Auth::user()?->getAllPermissions()->pluck('slug')->toArray() ?? [],
+            'stats' => Inertia::lazy($statsCallback),
+            'userPermissions' => Inertia::lazy(fn () => Auth::user()?->getAllPermissions()->pluck('slug')->toArray() ?? []),
         ]);
     }
 
@@ -219,14 +238,14 @@ class AdminTicketController extends Controller
         }
 
         $ticket->load([
-            'client',
-            'organizationUser',
-            'assignedTo',
-            'approvedBy',
-            'createdBy',
+            'client:id,name',
+            'organizationUser:id,name,email',
+            'assignedTo:id,name',
+            'approvedBy:id,name',
+            'createdBy:id,name',
             'attachments',
             'tasks' => function ($query) {
-                $query->with(['assignedUsers', 'assignedDepartment', 'createdBy'])
+                $query->with(['assignedUsers:id,name', 'assignedDepartment:id,name', 'createdBy:id,name'])
                     ->latest('created_at');
             },
         ]);

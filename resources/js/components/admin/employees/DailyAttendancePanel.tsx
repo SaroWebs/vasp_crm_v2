@@ -50,7 +50,7 @@ function fmtTime(datetimeStr: string): string {
 function toHours(minutes: number | null): string {
     if (minutes === null) return '—';
     const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+    const m = Math.floor(minutes % 60);
     if (h === 0) return `${m}m`;
     return `${h}h ${m}m`;
 }

@@ -145,7 +145,6 @@ const getStatusIcon = (status: Task['state']) => {
 };
 
 export default function Show({ task, authUser }: TasksShowProps) {
-    console.log(task);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isRestoring, setIsRestoring] = useState(false);
     const [isForceDeleting, setIsForceDeleting] = useState(false);

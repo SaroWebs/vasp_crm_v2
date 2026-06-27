@@ -326,26 +326,28 @@ class User extends Authenticatable
      */
     public function getAllPermissions()
     {
-        $permissions = collect();
+        return once(function () {
+            $permissions = collect();
 
-        // Add user-level granted permissions
-        $userPermissions = $this->permissions()->get();
-        $permissions = $permissions->merge($userPermissions);
+            // Add user-level granted permissions
+            $userPermissions = $this->permissions()->get();
+            $permissions = $permissions->merge($userPermissions);
 
-        // Add role permissions that are not explicitly overridden by denied user permissions
-        if (! $this->relationLoaded('roles')) {
-            $this->load('roles');
-        }
+            // Add role permissions that are not explicitly overridden by denied user permissions
+            if (! $this->relationLoaded('roles')) {
+                $this->load('roles');
+            }
 
-        $deniedPermissionIds = $this->deniedPermissions()->get()->pluck('id')->toArray();
+            $deniedPermissionIds = $this->deniedPermissions()->get()->pluck('id')->toArray();
 
-        foreach ($this->roles as $role) {
-            $rolePermissions = $role->permissions()->get()
-                ->whereNotIn('id', $deniedPermissionIds);
-            $permissions = $permissions->merge($rolePermissions);
-        }
+            foreach ($this->roles as $role) {
+                $rolePermissions = $role->permissions()->get()
+                    ->whereNotIn('id', $deniedPermissionIds);
+                $permissions = $permissions->merge($rolePermissions);
+            }
 
-        return $permissions->unique('id');
+            return $permissions->unique('id');
+        });
     }
 
     /**

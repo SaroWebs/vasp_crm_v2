@@ -409,7 +409,6 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
     };
 
     const handleDeleteTicket = () => {
-        console.log('Deleting ticket:', ticket.id);
         // Admin can delete ticket regardless of task status
         setShowDeleteConfirmation(true);
     };
@@ -436,11 +435,9 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
 
     const handleCancelDelete = () => {
         setShowDeleteConfirmation(false);
-        console.log('Deletion cancelled by user.');
     };
 
     const handlePermanentDeleteTicket = () => {
-        console.log('Permanently deleting ticket:', ticket.id);
         setShowPermanentDeleteConfirmation(true);
     };
 
@@ -468,7 +465,6 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
 
     const handleCancelPermanentDelete = () => {
         setShowPermanentDeleteConfirmation(false);
-        console.log('Permanent deletion cancelled by user.');
     };
 
     const ConfirmationModal = ({

@@ -17,12 +17,26 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDashboardProps) {
     const { stats: dashboardStats } = useDashboardStats(auth?.user?.id);
+    const statNumber = (key: string): number => {
+        const value = dashboardStats[key];
+
+        return typeof value === 'number' ? value : 0;
+    };
+    const statDistribution = (key: string): Record<string, number> | undefined => {
+        const value = dashboardStats[key];
+
+        return value && typeof value === 'object' && !Array.isArray(value)
+            ? value
+            : undefined;
+    };
+    const ticketStatusDistribution = statDistribution('ticket_status_distribution') ?? ticketStats ?? {};
+    const taskStatusDistribution = statDistribution('task_status_distribution') ?? taskStats ?? {};
 
     const wizCards = [
         {
             title: 'Open Tickets',
             text: 'All active tickets',
-            stats: dashboardStats?.open_tickets ?? 0,
+            stats: statNumber('open_tickets'),
             icon: TicketIcon,
             color: 'orange',
             link: '/admin/tickets?status=open',
@@ -30,7 +44,7 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
         {
             title: 'Closed Today',
             text: 'Tickets closed today',
-            stats: dashboardStats?.tickets_closed_today ?? 0,
+            stats: statNumber('tickets_closed_today'),
             icon: CheckCircle,
             color: 'blue',
             link: '/admin/tickets?status=closed',
@@ -38,7 +52,7 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
         {
             title: 'Pending Tasks',
             text: 'All pending tasks',
-            stats: dashboardStats?.pending_tasks ?? 0,
+            stats: statNumber('pending_tasks'),
             icon: Clock,
             color: 'purple',
             link: '/admin/tasks?status=pending',
@@ -46,7 +60,7 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
         {
             title: 'Completed Today',
             text: 'Tasks completed today',
-            stats: dashboardStats?.tasks_completed_today ?? 0,
+            stats: statNumber('tasks_completed_today'),
             icon: CheckCircle,
             color: 'green',
             link: '/admin/tasks?status=completed',
@@ -99,7 +113,7 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-2">
-                            {Object.entries(ticketStats || {}).map(
+                            {Object.entries(ticketStatusDistribution).map(
                                 ([status, count]) => (
                                     <div
                                         key={status}
@@ -125,7 +139,7 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-2">
-                            {Object.entries(taskStats || {}).map(
+                            {Object.entries(taskStatusDistribution).map(
                                 ([status, count]) => (
                                     <div
                                         key={status}

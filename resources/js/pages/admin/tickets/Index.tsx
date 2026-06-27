@@ -157,7 +157,7 @@ interface TicketsIndexProps {
     };
     userPermissions?: string[];
     clients?: Array<{ id: number; name: string }>;
-    stats: {
+    stats?: {
         total_open: number;
         open_today: number;
         in_progress: number;
@@ -352,7 +352,6 @@ export default function TicketsIndex(props: TicketsIndexProps) {
 
     // tickets.data is already server-filtered; use directly
     const filteredTickets = tickets.data;
-    console.log('Filtered Tickets:', filteredTickets);
 
     const getPriorityBadge = (priority: string) => {
         const variants: Record<
@@ -490,7 +489,6 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                     className="max-h-80 w-72 overflow-y-auto"
                 >
                     <DropdownMenuLabel
-                        onClick={() => console.log(ticketTasks)}
                         className="flex items-center gap-2"
                     >
                         <ListChecks className="h-4 w-4" />
@@ -630,7 +628,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         );
     };
 
-    const wizCards = [
+    const wizCards = stats ? [
         {
             title: 'Total Open',
             text: 'All active tickets',
@@ -663,22 +661,43 @@ export default function TicketsIndex(props: TicketsIndexProps) {
             color: 'green',
             link: '/admin/tickets?status=closed',
         },
-    ] as const;
+    ] as const : [];
 
     useEffect(() => {
-        console.log(filteredTickets);
-    }, [filteredTickets]);
+        router.reload({
+            only: ['stats', 'userPermissions'],
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }, []);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Tickets" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
-                <div className="grid gap-2 md:grid-cols-4">
-                    {wizCards.map((card) => (
-                        <WizCardDesign1 key={card.title} {...card} />
-                    ))}
-                </div>
+                {!stats ? (
+                    <div className="grid gap-2 md:grid-cols-4">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="flex h-[76px] items-center justify-between gap-3 rounded-lg border-l-4 border-gray-200 bg-muted px-4 py-3 animate-pulse">
+                                <div className="flex items-start gap-3 w-full">
+                                    <Skeleton className="h-5 w-5 rounded-full shrink-0" />
+                                    <div className="space-y-1.5 w-full">
+                                        <Skeleton className="h-3 w-20" />
+                                        <Skeleton className="h-3 w-32" />
+                                    </div>
+                                </div>
+                                <Skeleton className="h-8 w-8" />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="grid gap-2 md:grid-cols-4">
+                        {wizCards.map((card) => (
+                            <WizCardDesign1 key={card.title} {...card} />
+                        ))}
+                    </div>
+                )}
                 {/* Ticket Table */}
                 <Card>
                     <CardHeader>

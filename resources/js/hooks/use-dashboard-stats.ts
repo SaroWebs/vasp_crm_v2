@@ -2,7 +2,8 @@ import axios from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { stats as dashboardStatsRoute } from '@/routes/admin/api/dashboard';
 
-type DashboardStats = Record<string, number>;
+type DashboardStatsValue = number | Record<string, number>;
+type DashboardStats = Record<string, DashboardStatsValue>;
 
 interface DashboardStatsResponse {
     stats?: DashboardStats;

@@ -112,26 +112,36 @@ class DashboardService
      */
     public function getAdminStats(): array
     {
-        $taskStats = $this->getSimplifiedTaskCountsForQuery(Task::withTrashed());
+        $ticketStats = $this->getTicketDashboardCounts();
+        $taskStats = $this->getTaskDashboardCounts(Task::withTrashed());
+        $visibleTaskStats = $this->getTaskDashboardCounts(Task::query());
 
         return [
             'total_departments' => Department::active()->count(),
             'total_users' => User::count(),
             'total_clients' => Client::where('status', 'active')->count(),
             'total_products' => Product::where('status', 'active')->count(),
-            'total_tickets' => Ticket::count(),
+            'total_tickets' => $ticketStats['total'],
             'total_tasks' => $taskStats['total'],
-            'open_tickets' => Ticket::where('status', 'open')->count(),
-            'tickets_closed_today' => Ticket::where('status', 'closed')
-                ->whereDate('updated_at', today())
-                ->count(),
+            'open_tickets' => $ticketStats['open'],
+            'tickets_closed_today' => $ticketStats['closed_today'],
             'pending_tasks' => $taskStats['pending'],
-            'tasks_completed_today' => Task::withTrashed()
-                ->whereIn('state', self::TASK_STATES_COMPLETED)
-                ->whereDate('updated_at', today())
-                ->count(),
+            'tasks_completed_today' => $taskStats['completed_today'],
             'active_users_today' => User::where('last_login_at', '>=', today())->count(),
-            'tickets_created_today' => Ticket::whereDate('created_at', today())->count(),
+            'tickets_created_today' => $ticketStats['created_today'],
+            'ticket_status_distribution' => [
+                'open' => $ticketStats['open'],
+                'approved' => $ticketStats['approved'],
+                'in_progress' => $ticketStats['in_progress'],
+                'closed' => $ticketStats['closed'],
+                'cancelled' => $ticketStats['cancelled'],
+            ],
+            'task_status_distribution' => [
+                'pending' => $visibleTaskStats['pending'],
+                'in_progress' => $visibleTaskStats['inprogress'],
+                'waiting' => $visibleTaskStats['waiting'],
+                'completed' => $visibleTaskStats['completed'],
+            ],
         ];
     }
 
@@ -335,12 +345,14 @@ class DashboardService
      */
     public function getTicketStats(): array
     {
+        $ticketStats = $this->getTicketDashboardCounts();
+
         return [
-            'open' => Ticket::where('status', 'open')->count(),
-            'approved' => Ticket::where('status', 'approved')->count(),
-            'in_progress' => Ticket::where('status', 'in-progress')->count(),
-            'closed' => Ticket::where('status', 'closed')->count(),
-            'cancelled' => Ticket::where('status', 'cancelled')->count(),
+            'open' => $ticketStats['open'],
+            'approved' => $ticketStats['approved'],
+            'in_progress' => $ticketStats['in_progress'],
+            'closed' => $ticketStats['closed'],
+            'cancelled' => $ticketStats['cancelled'],
         ];
     }
 
@@ -349,28 +361,100 @@ class DashboardService
      */
     public function getTaskStats(): array
     {
-        $taskStats = $this->getSimplifiedTaskCountsForQuery(Task::query());
+        $taskStats = $this->getTaskDashboardCounts(Task::query());
 
         return [
             'pending' => $taskStats['pending'],
             'in_progress' => $taskStats['inprogress'],
-            'waiting' => Task::where('state', 'InReview')->count(),
+            'waiting' => $taskStats['waiting'],
             'completed' => $taskStats['completed'],
         ];
     }
 
     /**
-     * @return array{total:int,pending:int,inprogress:int,completed:int}
+     * @return array{total:int,open:int,approved:int,in_progress:int,closed:int,cancelled:int,closed_today:int,created_today:int}
      */
-    private function getSimplifiedTaskCountsForQuery(Builder $query): array
+    private function getTicketDashboardCounts(): array
     {
-        $baseQuery = clone $query;
+        $todayStart = today();
+        $tomorrowStart = today()->addDay();
+
+        $counts = Ticket::query()
+            ->selectRaw(
+                <<<'SQL'
+                COUNT(*) as total,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as open,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as in_progress,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as closed,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled,
+                SUM(CASE WHEN status = ? AND updated_at >= ? AND updated_at < ? THEN 1 ELSE 0 END) as closed_today,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) as created_today
+                SQL,
+                [
+                    'open',
+                    'approved',
+                    'in-progress',
+                    'closed',
+                    'cancelled',
+                    'closed',
+                    $todayStart,
+                    $tomorrowStart,
+                    $todayStart,
+                    $tomorrowStart,
+                ]
+            )
+            ->first();
 
         return [
-            'total' => (int) $baseQuery->count(),
-            'pending' => (int) (clone $query)->whereIn('state', self::TASK_STATES_PENDING)->count(),
-            'inprogress' => (int) (clone $query)->whereIn('state', self::TASK_STATES_IN_PROGRESS)->count(),
-            'completed' => (int) (clone $query)->whereIn('state', self::TASK_STATES_COMPLETED)->count(),
+            'total' => (int) ($counts->total ?? 0),
+            'open' => (int) ($counts->open ?? 0),
+            'approved' => (int) ($counts->approved ?? 0),
+            'in_progress' => (int) ($counts->in_progress ?? 0),
+            'closed' => (int) ($counts->closed ?? 0),
+            'cancelled' => (int) ($counts->cancelled ?? 0),
+            'closed_today' => (int) ($counts->closed_today ?? 0),
+            'created_today' => (int) ($counts->created_today ?? 0),
+        ];
+    }
+
+    /**
+     * @return array{total:int,pending:int,inprogress:int,waiting:int,completed:int,completed_today:int}
+     */
+    private function getTaskDashboardCounts(Builder $query): array
+    {
+        $todayStart = today();
+        $tomorrowStart = today()->addDay();
+
+        $counts = (clone $query)
+            ->selectRaw(
+                <<<'SQL'
+                COUNT(*) as total,
+                SUM(CASE WHEN state IN (?, ?, ?) THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN state IN (?, ?) THEN 1 ELSE 0 END) as inprogress,
+                SUM(CASE WHEN state = ? THEN 1 ELSE 0 END) as waiting,
+                SUM(CASE WHEN state IN (?, ?, ?) THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN state IN (?, ?, ?) AND updated_at >= ? AND updated_at < ? THEN 1 ELSE 0 END) as completed_today
+                SQL,
+                [
+                    ...self::TASK_STATES_PENDING,
+                    ...self::TASK_STATES_IN_PROGRESS,
+                    'InReview',
+                    ...self::TASK_STATES_COMPLETED,
+                    ...self::TASK_STATES_COMPLETED,
+                    $todayStart,
+                    $tomorrowStart,
+                ]
+            )
+            ->first();
+
+        return [
+            'total' => (int) ($counts->total ?? 0),
+            'pending' => (int) ($counts->pending ?? 0),
+            'inprogress' => (int) ($counts->inprogress ?? 0),
+            'waiting' => (int) ($counts->waiting ?? 0),
+            'completed' => (int) ($counts->completed ?? 0),
+            'completed_today' => (int) ($counts->completed_today ?? 0),
         ];
     }
 
