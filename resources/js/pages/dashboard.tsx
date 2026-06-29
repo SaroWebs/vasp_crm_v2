@@ -14,18 +14,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface DashboardProps {
     dashboard_type?: 'admin' | 'manager' | 'employee';
     auth?: Auth;
-    ticketStats?: Record<string, number>;
-    taskStats?: Record<string, number>;
 }
 
 export default function Dashboard(props: DashboardProps) {
     const page = usePage<{ auth?: Auth }>();
-    const {
-        dashboard_type,
-        ticketStats,
-        taskStats,
-        auth = page.props.auth ?? null,
-    } = props;
+    const { dashboard_type = 'employee', auth = page.props.auth ?? null } = props;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs} auth={auth ?? undefined}>
@@ -34,7 +27,7 @@ export default function Dashboard(props: DashboardProps) {
                 {dashboard_type === 'employee' ? (
                     <EmployeeDashboard auth={auth} />
                 ) : (
-                    <AdminDashboard auth={auth} ticketStats={ticketStats} taskStats={taskStats} />
+                    <AdminDashboard auth={auth} />
                 )}
             </div>
         </AppLayout>

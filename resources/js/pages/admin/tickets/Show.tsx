@@ -249,7 +249,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .post(`/admin/tickets/${ticket.id}/approve`)
             .then(() => {
                 alert('Ticket approved successfully!');
-                router.reload({ preserveScroll: true });
+                router.reload();
             })
             .catch((err) => {
                 alert('Failed to approve ticket: ' + err.message);
@@ -271,7 +271,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .post(`/admin/tickets/${ticket.id}/reject`)
             .then(() => {
                 alert('Ticket rejected successfully!');
-                router.reload({ preserveScroll: true });
+                router.reload();
             })
             .catch((err) => {
                 alert('Failed to reject ticket: ' + err.message);
@@ -292,7 +292,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             .patch(`/admin/tickets/${ticket.id}/status`, { status: 'closed' })
             .then(() => {
                 toast.success('Ticket closed successfully!');
-                router.reload({ preserveScroll: true });
+                router.reload();
             })
             .catch((err) => {
                 toast.error(
@@ -314,7 +314,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             })
             .then(() => {
                 toast.success('Ticket reopened successfully!');
-                router.reload({ preserveScroll: true });
+                router.reload();
             })
             .catch((err) => {
                 toast.error(
@@ -336,7 +336,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             })
             .then(() => {
                 toast.success('Ticket marked as in progress!');
-                router.reload({ preserveScroll: true });
+                router.reload();
             })
             .catch((err) => {
                 toast.error(
@@ -395,7 +395,7 @@ export default function TicketsShow({ ticket }: TicketsShowProps) {
             })
             .then(() => {
                 toast.success('Ticket cancelled successfully!');
-                router.reload({ preserveScroll: true });
+                router.reload();
             })
             .catch((err) => {
                 toast.error(

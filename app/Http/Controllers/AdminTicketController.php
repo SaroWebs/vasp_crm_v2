@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminTicketController extends Controller
@@ -117,7 +118,17 @@ class AdminTicketController extends Controller
     /**
      * Display a listing of all tickets (Admin view).
      */
-    public function index(Request $request)
+    public function index(Request $request): Response
+    {
+        return Inertia::render('admin/tickets/Index', [
+            'filters' => $this->ticketFilters($request),
+        ]);
+    }
+
+    /**
+     * Load the paginated ticket table after the page shell has rendered.
+     */
+    public function data(Request $request): JsonResponse
     {
         $query = Ticket::withTrashed()
             ->with([
@@ -192,39 +203,49 @@ class AdminTicketController extends Controller
             return $ticket;
         });
 
-        // Get clients for filter dropdown
         $clients = Client::select('id', 'name')->where('status', 'active')->get();
 
-        $statsCallback = function () {
-            $statsRaw = DB::table('tickets')
-                ->whereNull('deleted_at')
-                ->selectRaw("
-                    COUNT(CASE WHEN status = 'open' THEN 1 END) as total_open,
-                    COUNT(CASE WHEN status = 'open' AND DATE(created_at) = ? THEN 1 END) as open_today,
-                    COUNT(CASE WHEN status = 'in-progress' THEN 1 END) as in_progress,
-                    COUNT(CASE WHEN status = 'closed' THEN 1 END) as completed
-                ", [Carbon::today()->toDateString()])
-                ->first();
-
-            return [
-                'total_open' => (int) ($statsRaw->total_open ?? 0),
-                'open_today' => (int) ($statsRaw->open_today ?? 0),
-                'in_progress' => (int) ($statsRaw->in_progress ?? 0),
-                'completed' => (int) ($statsRaw->completed ?? 0),
-            ];
-        };
-
-        return Inertia::render('admin/tickets/Index', [
+        return response()->json([
             'tickets' => $tickets,
-            'filters' => [
-                ...$request->only(['status', 'priority', 'client_id', 'search']),
-                'order_by' => $orderBy,
-                'order_direction' => $direction,
-            ],
             'clients' => $clients,
-            'stats' => Inertia::lazy($statsCallback),
-            'userPermissions' => Inertia::lazy(fn () => Auth::user()?->getAllPermissions()->pluck('slug')->toArray() ?? []),
         ]);
+    }
+
+    /**
+     * Load ticket summary cards independently from the ticket table.
+     */
+    public function stats(): JsonResponse
+    {
+        $stats = DB::table('tickets')
+            ->whereNull('deleted_at')
+            ->selectRaw("
+                COUNT(CASE WHEN status = 'open' THEN 1 END) as total_open,
+                COUNT(CASE WHEN status = 'open' AND DATE(created_at) = ? THEN 1 END) as open_today,
+                COUNT(CASE WHEN status = 'in-progress' THEN 1 END) as in_progress,
+                COUNT(CASE WHEN status = 'closed' THEN 1 END) as completed
+            ", [Carbon::today()->toDateString()])
+            ->first();
+
+        return response()->json([
+            'stats' => [
+                'total_open' => (int) ($stats->total_open ?? 0),
+                'open_today' => (int) ($stats->open_today ?? 0),
+                'in_progress' => (int) ($stats->in_progress ?? 0),
+                'completed' => (int) ($stats->completed ?? 0),
+            ],
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function ticketFilters(Request $request): array
+    {
+        return [
+            ...$request->only(['status', 'priority', 'client_id', 'search', 'page']),
+            'order_by' => $request->input('order_by', 'created_at'),
+            'order_direction' => $request->input('order_direction') === 'asc' ? 'asc' : 'desc',
+        ];
     }
 
     /**
@@ -886,6 +907,7 @@ class AdminTicketController extends Controller
             'message' => 'Ticket status updated successfully',
             'ticket' => $ticket,
         ]);
+
     }
 
     /**

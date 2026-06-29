@@ -8,7 +8,6 @@ use App\Http\Controllers\AdminTaskController;
 use App\Http\Controllers\AdminTaskTimeEntryController;
 use App\Http\Controllers\AdminTicketController;
 use App\Http\Controllers\AttendanceController;
-use App\Http\Controllers\MonthlyCycleRuleController;
 use App\Http\Controllers\Client\ClientCommentAttachmentController;
 use App\Http\Controllers\Client\ClientPortalAuthController;
 use App\Http\Controllers\Client\ClientTicketCommentController;
@@ -27,6 +26,7 @@ use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\MenuManagementController;
+use App\Http\Controllers\MonthlyCycleRuleController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizationUserController;
 use App\Http\Controllers\PermissionController;
@@ -248,6 +248,8 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         // Ticket routes (used in frontend)
         Route::get('/tickets', [AdminTicketController::class, 'index']);
         Route::get('/tickets/export', [AdminTicketController::class, 'exportTickets'])->name('tickets.export');
+        Route::get('/data/tickets', [AdminTicketController::class, 'data'])->name('tickets.index-data');
+        Route::get('/data/tickets/stats', [AdminTicketController::class, 'stats'])->name('tickets.stats');
         Route::get('/data/tickets/{ticket}', [AdminTicketController::class, 'getTicketData'])->name('tickets.data');
         Route::post('/tickets', [AdminTicketController::class, 'store']);
         Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('tickets.show');

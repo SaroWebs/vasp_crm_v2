@@ -1,23 +1,15 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
 import StatCard from '@/components/dashboard/StatCard';
-import { Users, FolderKanban, Clock, AlertCircle, Briefcase, Calendar, CheckCircle } from 'lucide-react';
+import { Users, FolderKanban, Clock, AlertCircle, Calendar, CheckCircle } from 'lucide-react';
 import WizCardDesign1 from '@/components/wizards/WizCardDesign1';
+import { useDashboardStats } from '@/hooks/use-dashboard-stats';
 
 interface DashboardStatsWidgetProps {
     dashboardType: 'admin' | 'manager' | 'employee';
+    userId?: number | string | null;
 }
 
-export default function DashboardStatsWidget({ dashboardType }: DashboardStatsWidgetProps) {
-    const [stats, setStats] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        axios.get('/admin/api/dashboard/stats')
-            .then(res => setStats(res.data.stats))
-            .catch(err => console.error(err))
-            .finally(() => setLoading(false));
-    }, []);
+export default function DashboardStatsWidget({ dashboardType, userId }: DashboardStatsWidgetProps) {
+    const { stats, loading } = useDashboardStats(userId);
 
     if (loading) {
         return <div className="h-24 animate-pulse bg-muted rounded-xl w-full" />;

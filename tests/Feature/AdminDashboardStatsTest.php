@@ -3,12 +3,15 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\Role;
 use App\Models\Task;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\DashboardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Inertia\Testing\AssertableInertia as Assert;
+use Mockery;
 use Tests\TestCase;
 
 class AdminDashboardStatsTest extends TestCase
@@ -73,6 +76,32 @@ class AdminDashboardStatsTest extends TestCase
             'waiting' => 1,
             'completed' => 2,
         ], $stats['task_status_distribution']);
+    }
+
+    public function test_dashboard_page_renders_without_loading_dashboard_stats(): void
+    {
+        $role = Role::create([
+            'name' => 'Admin',
+            'slug' => 'admin',
+            'guard_name' => 'web',
+        ]);
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $dashboardService = Mockery::mock(DashboardService::class);
+        $dashboardService->shouldNotReceive('getDashboardData');
+        $dashboardService->shouldNotReceive('getAdminStats');
+        $this->app->instance(DashboardService::class, $dashboardService);
+
+        $response = $this->actingAs($user, 'web')->get('/admin/dashboard');
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('dashboard_type', 'admin')
+            ->missing('stats')
+            ->missing('ticketStats')
+            ->missing('taskStats'));
     }
 
     private function createTicket(Client $client, string $ticketNumber, string $status, Carbon $createdAt): Ticket

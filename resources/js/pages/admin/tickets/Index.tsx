@@ -138,7 +138,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 interface TicketsIndexProps {
-    tickets: {
+    tickets?: TicketPage;
+    filters?: TicketFilters;
+    userPermissions?: string[];
+    clients?: Array<{ id: number; name: string }>;
+    stats?: TicketStats;
+}
+
+interface TicketPage {
         data: Ticket[];
         current_page: number;
         last_page: number;
@@ -146,32 +153,44 @@ interface TicketsIndexProps {
         total: number;
         from: number;
         to: number;
-    };
-    filters?: {
+}
+
+interface TicketFilters {
         status?: string;
         priority?: string;
         client_id?: string;
         search?: string;
+        page?: number;
         order_by?: SortField;
         order_direction?: 'asc' | 'desc';
-    };
-    userPermissions?: string[];
-    clients?: Array<{ id: number; name: string }>;
-    stats?: {
+}
+
+interface TicketStats {
         total_open: number;
         open_today: number;
         in_progress: number;
         completed: number;
-    };
 }
 
+const emptyTicketPage: TicketPage = {
+    data: [],
+    current_page: 1,
+    last_page: 1,
+    per_page: 15,
+    total: 0,
+    from: 0,
+    to: 0,
+};
+
 export default function TicketsIndex(props: TicketsIndexProps) {
-    const {
-        tickets,
-        filters = {},
-        clients = [],
-        stats,
-    } = props;
+    const { filters = {} } = props;
+    const [tickets, setTickets] = useState<TicketPage>(
+        props.tickets ?? emptyTicketPage,
+    );
+    const [clients, setClients] = useState<Array<{ id: number; name: string }>>(
+        props.clients ?? [],
+    );
+    const [stats, setStats] = useState<TicketStats | undefined>(props.stats);
 
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
@@ -185,11 +204,56 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         filters.order_direction || 'desc',
     );
 
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [closingTicketId, setClosingTicketId] = useState<number | null>(null);
     const [mounted, setMounted] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setIsLoading(true);
+            axios
+                .get('/admin/data/tickets', {
+                    params: {
+                        client_id: filters.client_id,
+                        order_by: filters.order_by,
+                        order_direction: filters.order_direction,
+                        page: filters.page,
+                        priority: filters.priority,
+                        search: filters.search,
+                        status: filters.status,
+                    },
+                })
+                .then((response) => {
+                    setTickets(response.data.tickets ?? emptyTicketPage);
+                    setClients(response.data.clients ?? []);
+                })
+                .catch(() => toast.error('Failed to load tickets'))
+                .finally(() => setIsLoading(false));
+        }, 350);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [
+        filters.client_id,
+        filters.order_by,
+        filters.order_direction,
+        filters.page,
+        filters.priority,
+        filters.search,
+        filters.status,
+    ]);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            axios
+                .get('/admin/data/tickets/stats')
+                .then((response) => setStats(response.data.stats))
+                .catch(() => toast.error('Failed to load ticket statistics'));
+        }, 900);
+
+        return () => window.clearTimeout(timeoutId);
+    }, []);
     const handleExport = async (config: ExportConfig) => {
         setIsExporting(true);
         try {
@@ -248,7 +312,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
             .patch(`/admin/tickets/${ticketId}/status`, { status: 'closed' })
             .then(() => {
                 toast.success('Ticket closed successfully!');
-                router.reload({ preserveScroll: true });
+                router.visit('/admin/tickets', { replace: true });
             })
             .catch((err) => {
                 toast.error(
@@ -296,7 +360,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
             {
                 preserveScroll: true,
                 preserveState: true,
-                onFinish: () => setIsLoading(false),
+                only: ['filters'],
             },
         );
     };
@@ -326,7 +390,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
             {
                 preserveScroll: true,
                 preserveState: true,
-                onFinish: () => setIsLoading(false),
+                only: ['filters'],
             },
         );
     };
@@ -386,7 +450,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
 
     // Get work status badge based on task status - with dropdown showing tasks
     const getWorkStatusBadge = (
-        workStatus: TicketsIndexProps['tickets']['data'][0]['work_status'],
+        workStatus: TicketPage['data'][0]['work_status'],
         ticketTasks: Ticket['tasks'],
     ) => {
         if (!workStatus) {
@@ -663,21 +727,23 @@ export default function TicketsIndex(props: TicketsIndexProps) {
         },
     ] as const : [];
 
-    useEffect(() => {
-        if (stats) {
-            return;
-        }
-
-        const timeoutId = window.setTimeout(() => {
-            router.reload({
-                only: ['stats'],
-                preserveScroll: true,
-                preserveState: true,
+    const handleConfirmPermanentDelete = (ticket_id : number) => {
+        axios
+            .delete(`/admin/tickets/${ticket_id}`, {
+                data: { force_delete: true },
+            })
+            .then(() => {
+                alert('Ticket permanently deleted successfully!');
+                router.visit('/admin/tickets', { replace: true });
+            })
+            .catch((err) => {
+                const errorMessage =
+                    err.response?.data?.message ||
+                    err.message ||
+                    'Failed to permanently delete ticket';
+                alert(errorMessage);
             });
-        }, 600);
-
-        return () => window.clearTimeout(timeoutId);
-    }, [stats]);
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -803,7 +869,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                     }
                                     leftSection={<Download size={14} />}
                                 >
-                                Export
+                                    Export
                                 </MantineButton>
                             </div>
                         </div>
@@ -1070,11 +1136,10 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                                         className="flex cursor-pointer items-center gap-2"
                                                                     >
                                                                         <Eye className="h-4 w-4" />
-                                                                        View
-                                                                        Details
+                                                                        View Details
                                                                     </Link>
                                                                 </DropdownMenuItem>
-                                                                {ticket.status !=
+                                                                {(ticket.deleted_at == null) && ticket.status !=
                                                                     'closed' &&
                                                                     ticket.status !=
                                                                     'cancelled' && (
@@ -1091,7 +1156,7 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                                     )}
 
                                                                 {/* Close Ticket */}
-                                                                {(
+                                                                {(ticket.deleted_at == null) && (
                                                                     [
                                                                         'open',
                                                                         'approved',
@@ -1121,18 +1186,33 @@ export default function TicketsIndex(props: TicketsIndexProps) {
                                                                     )}
 
                                                                 {/* Edit Ticket */}
-                                                                <DropdownMenuItem
-                                                                    asChild
-                                                                >
-                                                                    <Link
-                                                                        href={`/admin/tickets/${ticket.id}/edit`}
-                                                                        className="flex cursor-pointer items-center gap-2"
+                                                                {(ticket.deleted_at == null) ? (
+
+                                                                    <DropdownMenuItem
+                                                                        asChild
                                                                     >
-                                                                        <Edit className="h-4 w-4" />
-                                                                        Edit
-                                                                        Ticket
-                                                                    </Link>
-                                                                </DropdownMenuItem>
+                                                                        <Link
+                                                                            href={`/admin/tickets/${ticket.id}/edit`}
+                                                                            className="flex cursor-pointer items-center gap-2"
+                                                                        >
+                                                                            <Edit className="h-4 w-4" />
+                                                                            Edit
+                                                                            Ticket
+                                                                        </Link>
+                                                                    </DropdownMenuItem>
+                                                                ) : (
+                                                                    <DropdownMenuItem
+                                                                        asChild
+                                                                    >
+                                                                        <span
+                                                                            onClick={()=>handleConfirmPermanentDelete(ticket.id)}
+                                                                            className="flex cursor-pointer items-center gap-2"
+                                                                        >
+                                                                            <XCircle className="h-4 w-4" />
+                                                                            Delete Permanently
+                                                                        </span>
+                                                                    </DropdownMenuItem>
+                                                                )}
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
                                                     </div>

@@ -38,8 +38,16 @@ export function useDashboardStats(userId?: number | string | null): UseDashboard
     }, [userId]);
 
     useEffect(() => {
-        void refresh();
-    }, [refresh]);
+        if (!userId) {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            void refresh();
+        }, 750);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [refresh, userId]);
 
     useEffect(() => {
         if (!userId) {

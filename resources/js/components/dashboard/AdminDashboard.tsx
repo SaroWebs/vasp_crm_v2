@@ -12,11 +12,9 @@ import { useEffect, useState } from 'react';
 
 interface AdminDashboardProps {
     auth: Auth | null;
-    ticketStats?: Record<string, number>;
-    taskStats?: Record<string, number>;
 }
 
-export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDashboardProps) {
+export default function AdminDashboard({ auth }: AdminDashboardProps) {
     const { stats: dashboardStats } = useDashboardStats(auth?.user?.id);
     const [showSecondaryWidgets, setShowSecondaryWidgets] = useState(false);
 
@@ -40,8 +38,8 @@ export default function AdminDashboard({ auth, ticketStats, taskStats }: AdminDa
             ? value
             : undefined;
     };
-    const ticketStatusDistribution = statDistribution('ticket_status_distribution') ?? ticketStats ?? {};
-    const taskStatusDistribution = statDistribution('task_status_distribution') ?? taskStats ?? {};
+    const ticketStatusDistribution = statDistribution('ticket_status_distribution') ?? {};
+    const taskStatusDistribution = statDistribution('task_status_distribution') ?? {};
 
     const wizCards = [
         {

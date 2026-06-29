@@ -55,7 +55,7 @@ export default function EmployeeDashboard({ auth }: EmployeeDashboardProps) {
 
     return (
         <>
-            <DashboardStatsWidget dashboardType="employee" />
+            <DashboardStatsWidget dashboardType="employee" userId={auth?.user?.id} />
 
             <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
                 <DashboardTasksWidget />
