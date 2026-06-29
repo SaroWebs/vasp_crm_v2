@@ -89,21 +89,13 @@ class AttendanceDayPolicyService
 
     public function isHoliday(Carbon $date): bool
     {
-        if (Schema::hasTable('holidays')) {
-            $hasHoliday = Holiday::query()
-                ->whereDate('date', $date->toDateString())
-                ->exists();
-
-            if ($hasHoliday) {
-                return true;
-            }
-
-            if (Holiday::query()->whereYear('date', $date->year)->exists()) {
-                return false;
-            }
+        if (! Schema::hasTable('holidays')) {
+            return false;
         }
 
-        return $this->workingHoursService->isHoliday(new \DateTime($date->toDateString()));
+        return Holiday::query()
+            ->whereDate('date', $date->toDateString())
+            ->exists();
     }
 
     public function isEmployeeOnLeave(Employee $employee, Carbon $date): bool
@@ -111,8 +103,8 @@ class AttendanceDayPolicyService
         return LeaveRequest::query()
             ->where('employee_id', $employee->id)
             ->where('status', 'approved')
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->exists();
     }
 
@@ -120,8 +112,8 @@ class AttendanceDayPolicyService
     {
         $hasDirectAssignment = RemoteWorkAssignment::query()
             ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->exists();
 
         if ($hasDirectAssignment) {
@@ -131,8 +123,8 @@ class AttendanceDayPolicyService
         return RemoteWorkRequest::query()
             ->where('employee_id', $employee->id)
             ->where('status', 'approved')
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->exists();
     }
 
@@ -140,8 +132,8 @@ class AttendanceDayPolicyService
     {
         $hasApprovedAssignment = FieldWorkAssignment::query()
             ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->where('status', 'approved')
             ->exists();
 
@@ -151,8 +143,8 @@ class AttendanceDayPolicyService
 
         return FieldWorkRequest::query()
             ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->where('status', 'approved')
             ->exists();
     }
@@ -180,8 +172,8 @@ class AttendanceDayPolicyService
     {
         $fieldWork = FieldWorkAssignment::query()
             ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->where('status', 'approved')
             ->first();
 
@@ -191,8 +183,8 @@ class AttendanceDayPolicyService
 
         return FieldWorkRequest::query()
             ->where('employee_id', $employee->id)
-            ->where('start_date', '<=', $date->toDateString())
-            ->where('end_date', '>=', $date->toDateString())
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->where('status', 'approved')
             ->first();
     }
@@ -246,15 +238,14 @@ class AttendanceDayPolicyService
     private function resolveBaseSchedule(?Employee $employee, string $dateString, Carbon $date): array
     {
         $assignedShift = $this->resolveAssignedShift($employee, $dateString);
-        $schedule = $assignedShift['start_time'] && $assignedShift['end_time']
-            ? array_merge($assignedShift, ['source' => 'assigned_shift'])
-            : array_merge($this->resolveDefaultSchedule($date), ['source' => 'default_working_hours']);
 
-        if (! $schedule['start_time'] || ! $schedule['end_time']) {
+        if (! $assignedShift['start_time'] || ! $assignedShift['end_time']) {
             return $this->emptySchedule([
-                'source' => 'none',
+                'source' => 'unassigned_shift',
             ]);
         }
+
+        $schedule = array_merge($assignedShift, ['source' => 'assigned_shift']);
 
         if ($date->isSaturday()) {
             $schedule['end_time'] = $this->resolveHalfDayEndTime($dateString, $schedule['start_time'], $schedule['end_time']);
@@ -276,21 +267,6 @@ class AttendanceDayPolicyService
             'scheduled_minutes' => $scheduledMinutes,
             'source' => $schedule['source'],
         ]);
-    }
-
-    /**
-     * @return array{shift_id: ?int, start_time: ?string, end_time: ?string, grace_minutes: int}
-     */
-    private function resolveDefaultSchedule(Carbon $date): array
-    {
-        $workingHours = $this->workingHoursService->getWorkingHoursForDate(new \DateTime($date->toDateString()));
-
-        return [
-            'shift_id' => null,
-            'start_time' => $workingHours['start']?->format('H:i:s'),
-            'end_time' => $workingHours['end']?->format('H:i:s'),
-            'grace_minutes' => $this->resolveGraceMinutes(0),
-        ];
     }
 
     /**
@@ -371,6 +347,6 @@ class AttendanceDayPolicyService
 
     private function resolveGraceMinutes(int $graceMinutes): int
     {
-        return max(1, $graceMinutes);
+        return max(0, $graceMinutes);
     }
 }

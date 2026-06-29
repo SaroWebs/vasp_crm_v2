@@ -185,6 +185,15 @@ export default function ShiftsPage() {
     };
 
     const deleteShift = async (shiftId: number) => {
+        if (!confirm('Are you sure you want to delete this shift?')) {
+            return;
+        }
+        let xShift = shifts.filter((s) => s.id === shiftId)[0];
+        if (xShift.assignments_count && xShift.assignments_count > 0) {
+            alert('Cannot delete shift with existing assignments.');
+            return;
+        }
+        
         await axios.delete(`/admin/api/shifts/${shiftId}`);
         await fetchAll();
     };
@@ -237,6 +246,9 @@ export default function ShiftsPage() {
     };
 
     const deleteAssignment = async (assignmentId: number) => {
+        if (!confirm('Are you sure you want to delete this assignment?')) {
+            return;
+        }
         await axios.delete(`/admin/api/shift-assignments/${assignmentId}`);
         await fetchAll();
     };

@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Button, Switch, Tooltip, Alert, AlertProps } from '@mantine/core';
+import { Alert, Button, Switch, Tooltip } from '@mantine/core';
 import { Fingerprint, Info, CheckCircle2, XCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface PunchWidgetProps {
-    auth: any;
+    auth: {
+        user?: {
+            employee?: unknown;
+        } | null;
+    } | null;
     onPunchSuccess?: () => void;
 }
 
@@ -13,6 +17,7 @@ export function PunchWidget({ auth, onPunchSuccess }: PunchWidgetProps) {
     const [isRemote, setIsRemote] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [hasEmployeeCode, setHasEmployeeCode] = useState<boolean | null>(null);
+    const [canManualRemotePunch, setCanManualRemotePunch] = useState(false);
     const [loadingCode, setLoadingCode] = useState(true);
 
     useEffect(() => {
@@ -22,7 +27,10 @@ export function PunchWidget({ auth, onPunchSuccess }: PunchWidgetProps) {
                 const response = await axios.get('/api/my/attendance/today');
                 const data = response.data.data;
                 setHasEmployeeCode(data.shift !== null || data.punch_in !== null);
-            } catch (err: any) {
+                setCanManualRemotePunch(Boolean(data.shift?.can_manual_remote_punch));
+            } catch (error: unknown) {
+                const err = error as { response?: { status?: number; data?: { message?: string } } };
+
                 if (err.response?.status === 404 && err.response?.data?.message?.includes('Employee code')) {
                     setHasEmployeeCode(false);
                 } else {
@@ -101,7 +109,7 @@ export function PunchWidget({ auth, onPunchSuccess }: PunchWidgetProps) {
                         <div style={{ fontSize: 12, lineHeight: 1.5 }}>
                             First punch = <strong>Punch In</strong>.<br />
                             Second punch = <strong>Punch Out</strong>.<br />
-                            Toggle <em>Remote</em> if working from home.
+                            Remote punch is shown only for approved remote or field work days.
                         </div>
                     }
                     withArrow
@@ -109,13 +117,19 @@ export function PunchWidget({ auth, onPunchSuccess }: PunchWidgetProps) {
                     w={200}
                 >
                     <div className="flex flex-col gap-2">
-                        <Switch
-                            checked={isRemote}
-                            onChange={(e) => setIsRemote(e.currentTarget.checked)}
-                            label="Remote"
-                            labelPosition="left"
-                        />
-                        {isRemote && (
+                        {canManualRemotePunch ? (
+                            <Switch
+                                checked={isRemote}
+                                onChange={(e) => setIsRemote(e.currentTarget.checked)}
+                                label="Remote"
+                                labelPosition="left"
+                            />
+                        ) : (
+                            <Alert color="yellow" icon={<Info size={16} />}>
+                                Manual remote punch is available only after admin approves remote work or field work for today.
+                            </Alert>
+                        )}
+                        {canManualRemotePunch && isRemote && (
                             <Button
                                 onClick={handlePunch}
                                 loading={loading}

@@ -87,6 +87,22 @@ class AttendanceShiftMetricsTest extends TestCase
         Carbon::setTestNow('2026-06-10 10:00:00');
 
         $employee = Employee::factory()->create(['code' => 'CAL001']);
+        $shift = Shift::create([
+            'name' => 'Calendar Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '18:00:00',
+            'grace_minutes' => 0,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-06-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
         $method = new \ReflectionMethod(AttendanceController::class, 'buildAttendanceCalendarDays');
         $method->setAccessible(true);
 
@@ -149,7 +165,7 @@ class AttendanceShiftMetricsTest extends TestCase
         $this->assertSame('18:21:17', $days['2026-06-01']['record']['punch_out']);
     }
 
-    public function test_shift_metrics_fallback_to_working_hours_when_no_shift_is_assigned(): void
+    public function test_shift_metrics_do_not_use_fixed_working_hours_when_no_shift_is_assigned(): void
     {
         $employee = Employee::factory()->create(['code' => '9020']);
 
@@ -168,13 +184,13 @@ class AttendanceShiftMetricsTest extends TestCase
         $decorated = $ref->invoke($controller, $attendance);
 
         $this->assertNull($decorated['shift_id']);
-        $this->assertEquals(19, $decorated['late_minutes']);
+        $this->assertEquals(0, $decorated['late_minutes']);
         $this->assertEquals(0, $decorated['early_in_minutes']);
-        $this->assertEquals(20, $decorated['early_out_minutes']);
+        $this->assertEquals(0, $decorated['early_out_minutes']);
         $this->assertEquals(0, $decorated['late_out_minutes']);
-        $this->assertTrue($decorated['is_late']);
+        $this->assertFalse($decorated['is_late']);
         $this->assertFalse($decorated['is_early_in']);
-        $this->assertTrue($decorated['is_early_out']);
+        $this->assertFalse($decorated['is_early_out']);
         $this->assertFalse($decorated['is_late_out']);
     }
 
@@ -212,7 +228,7 @@ class AttendanceShiftMetricsTest extends TestCase
         $this->assertFalse($decorated['is_late_out']);
     }
 
-    public function test_shift_metrics_apply_a_minimum_one_minute_grace_for_late_entry(): void
+    public function test_shift_metrics_respect_zero_grace_for_late_entry(): void
     {
         $employee = Employee::factory()->create(['code' => '9011']);
         $shift = Shift::create([
@@ -234,7 +250,7 @@ class AttendanceShiftMetricsTest extends TestCase
         $attendance = Attendance::create([
             'employee_id' => $employee->code,
             'attendance_date' => '2026-05-18',
-            'punch_in' => '09:00:30',
+            'punch_in' => '09:01:00',
             'punch_out' => '18:00:00',
             'employee_name' => $employee->name,
             'mode' => 'office',
@@ -246,8 +262,8 @@ class AttendanceShiftMetricsTest extends TestCase
         $decorated = $ref->invoke($controller, $attendance);
 
         $this->assertSame($shift->id, $decorated['shift_id']);
-        $this->assertSame(0, $decorated['late_minutes']);
-        $this->assertFalse($decorated['is_late']);
+        $this->assertEquals(1, $decorated['late_minutes']);
+        $this->assertTrue($decorated['is_late']);
     }
 
     public function test_shift_metrics_calculates_early_in_and_late_out(): void
@@ -385,6 +401,21 @@ class AttendanceShiftMetricsTest extends TestCase
     public function test_monthly_summary_counts_early_arrival_and_late_departure_as_overtime_not_late(): void
     {
         $employee = Employee::factory()->create(['code' => 'OT001']);
+        $shift = Shift::create([
+            'name' => 'Overtime Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '19:00:00',
+            'grace_minutes' => 0,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-05-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
 
         Attendance::create([
             'employee_id' => $employee->code,
@@ -409,7 +440,7 @@ class AttendanceShiftMetricsTest extends TestCase
 
         $this->assertSame(0, $summary['late_days']);
         $this->assertSame(0, $summary['total_late_minutes']);
-        $this->assertSame(71, $summary['total_overtime_minutes']);
+        $this->assertSame(11, $summary['total_overtime_minutes']);
         $this->assertSame(10.18, $summary['total_hours']);
     }
 
@@ -418,6 +449,22 @@ class AttendanceShiftMetricsTest extends TestCase
         Carbon::setTestNow('2026-06-05 10:00:00');
 
         $employee = Employee::factory()->create(['code' => 'SAND001']);
+        $shift = Shift::create([
+            'name' => 'Sandwich Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '18:00:00',
+            'grace_minutes' => 0,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-06-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
         Holiday::create([
             'date' => '2026-06-03',
             'name' => 'Midweek Holiday',

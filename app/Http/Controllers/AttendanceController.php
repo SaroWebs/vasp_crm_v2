@@ -86,6 +86,7 @@ class AttendanceController extends Controller
             'is_holiday' => $shiftMeta['is_holiday'] ?? false,
             'is_field_work' => $shiftMeta['is_field_work'] ?? false,
             'is_remote_work' => $shiftMeta['is_remote_work'] ?? false,
+            'can_manual_remote_punch' => (bool) (($shiftMeta['is_remote_work'] ?? false) || ($shiftMeta['is_field_work'] ?? false)),
         ];
 
         return response()->json([
@@ -423,7 +424,19 @@ class AttendanceController extends Controller
             : now();
 
         $attendanceDate = $punchDateTime->toDateString();
-        $timeOnly = $punchDateTime->toTimeString();
+        $mode = $validated['mode'] ?? 'office';
+
+        if ($mode === 'remote') {
+            $shiftMeta = app(AttendanceCalculationService::class)
+                ->resolveEffectiveShiftForEmployeeDate($employee->code, $attendanceDate);
+
+            if (! ($shiftMeta['is_remote_work'] ?? false) && ! ($shiftMeta['is_field_work'] ?? false)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Remote punch is available only for approved remote work or field work days.',
+                ], 422);
+            }
+        }
 
         $existingPunchCount = Punch::where('EmployeeId', $employee->code)
             ->whereDate('PunchTime', $attendanceDate)
@@ -449,7 +462,7 @@ class AttendanceController extends Controller
         $this->syncAttendanceFromPunches(
             $employee->code,
             $punchDateTime,
-            $validated['mode'] ?? 'office'
+            $mode
         );
 
         $message = ($existingPunchCount % 2 === 0)
@@ -1919,18 +1932,14 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Distinguish assigned shifts from general working hours for display.
+     * Distinguish assigned shifts from days without an attendance shift.
      *
-     * @param  array{shift_id: ?int, start_time: ?string, end_time: ?string}  $shiftMeta
+     * @param  array{shift_id: ?int, start_time: ?string, end_time: ?string, source?: string}  $shiftMeta
      */
     private function resolveShiftSource(array $shiftMeta): string
     {
         if ($shiftMeta['shift_id']) {
             return 'assigned_shift';
-        }
-
-        if ($shiftMeta['start_time'] && $shiftMeta['end_time']) {
-            return 'general_hours';
         }
 
         return 'none';

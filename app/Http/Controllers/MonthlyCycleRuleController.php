@@ -237,11 +237,11 @@ class MonthlyCycleRuleController extends Controller
     }
 
     /**
-     * List all derived op_months up to today plus one month.
+     * List all derived op_months that have started by today.
      */
     public function listOpMonths(Request $request): JsonResponse
     {
-        $upTo = Carbon::today()->addMonth();
+        $upTo = Carbon::today();
         $opMonths = $this->monthlyCycleService->deriveAllOpMonths($upTo);
 
         $formatted = array_map(

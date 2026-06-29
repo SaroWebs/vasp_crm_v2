@@ -43,8 +43,8 @@ interface QueueItem {
     start_date: string;
     end_date: string;
     status: string;
-    title: string;
-    detail: string | null;
+    title?: string | null;
+    detail?: string | null;
 }
 
 interface QueueRequest {

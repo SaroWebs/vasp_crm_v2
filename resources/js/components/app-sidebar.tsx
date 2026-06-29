@@ -29,6 +29,7 @@ import {
     CalendarDays,
     CalendarCheck,
     CalendarCog,
+    CalendarClock,
     Handshake,
 } from 'lucide-react';
 import AppLogo from './app-logo';
@@ -231,6 +232,13 @@ const adminNavGroups: NavGroup[] = [
     {
         title: 'System',
         items: [
+            {
+                title: 'Shifts',
+                href: '/admin/shifts',
+                icon: CalendarClock,
+                roles: ['super-admin', 'admin', 'manager'],
+                menuKey: 'system.shifts',
+            },
             {
                 title: 'Notifications',
                 href: '/admin/notifications',

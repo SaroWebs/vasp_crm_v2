@@ -156,7 +156,7 @@ function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: Op
                 <StatCard label="Paid Leave" value={s.paid_leave_days ?? 0} color="text-purple-600" />
                 <StatCard label="Unpaid Leave" value={s.unpaid_leave_days ?? 0} color="text-orange-600" />
                 <StatCard label="Holidays" value={s.holiday_days ?? 0} color="text-indigo-600" />
-                <StatCard label="Late Days" value={s.late_days} color="text-yellow-600" />
+                <StatCard label="Late Time" value={fmtMinutes(s.total_late_minutes)} color="text-yellow-600" />
                 <StatCard label="Overtime" value={fmtMinutes(s.total_overtime_minutes)} color="text-cyan-600" />
                 <StatCard label="Total Hours" value={`${s.total_hours.toFixed(1)}h`} color="text-blue-600" />
             </div>

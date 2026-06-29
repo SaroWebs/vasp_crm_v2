@@ -211,11 +211,29 @@ class AttendanceCalculationTest extends TestCase
      */
     public function test_saturday_half_day_detection(): void
     {
+        $employee = Employee::factory()->create(['code' => 'SAT001']);
+        $shift = Shift::create([
+            'name' => 'Saturday Shift Source',
+            'start_time' => '09:00:00',
+            'end_time' => '18:00:00',
+            'grace_minutes' => 0,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-05-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
         $saturdayDate = '2026-05-30'; // Saturday
 
-        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate('test_code', $saturdayDate);
+        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate($employee->code, $saturdayDate);
 
         $this->assertTrue($shiftMeta['is_half_day']);
+        $this->assertSame($shift->id, $shiftMeta['shift_id']);
         $this->assertEquals('09:00:00', $shiftMeta['start_time']);
         $this->assertEquals('14:00:00', $shiftMeta['end_time']);
     }
@@ -225,9 +243,26 @@ class AttendanceCalculationTest extends TestCase
      */
     public function test_saturday_scheduled_hours(): void
     {
+        $employee = Employee::factory()->create(['code' => 'SAT002']);
+        $shift = Shift::create([
+            'name' => 'Saturday Hours Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '18:00:00',
+            'grace_minutes' => 0,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-05-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
         $saturdayDate = '2026-05-30'; // Saturday
 
-        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate('test_code', $saturdayDate);
+        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate($employee->code, $saturdayDate);
         $punchIn = '09:00:00';
         $punchOut = '14:00:00';
 
@@ -236,6 +271,19 @@ class AttendanceCalculationTest extends TestCase
         $this->assertEquals(5.0, $metrics['scheduled_hours']);
         $this->assertFalse($metrics['is_late_in']);
         $this->assertFalse($metrics['is_early_out']);
+    }
+
+    public function test_unassigned_shift_returns_no_attendance_working_hours(): void
+    {
+        $employee = Employee::factory()->create(['code' => 'NOSHIFT01']);
+
+        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate($employee->code, '2026-05-25');
+
+        $this->assertNull($shiftMeta['shift_id']);
+        $this->assertNull($shiftMeta['start_time']);
+        $this->assertNull($shiftMeta['end_time']);
+        $this->assertFalse($shiftMeta['is_working_day']);
+        $this->assertSame('unassigned_shift', $shiftMeta['source']);
     }
 
     public function test_saturday_half_day_uses_assigned_shift_start_time(): void

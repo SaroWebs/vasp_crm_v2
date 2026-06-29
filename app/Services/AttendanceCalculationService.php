@@ -39,7 +39,7 @@ class AttendanceCalculationService
 
     /**
      * Resolve the effective attendance schedule for an employee and date.
-     * Uses shift assignment if available, otherwise falls back to configured working hours.
+     * Uses shift assignment as the attendance working-hours source.
      * Holidays and non-working days return a null schedule.
      * Approved leave days return leave context.
      *
@@ -276,6 +276,6 @@ class AttendanceCalculationService
 
     private function resolveGraceMinutes(int $graceMinutes): int
     {
-        return max(1, $graceMinutes);
+        return max(0, $graceMinutes);
     }
 }

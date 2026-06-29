@@ -10,6 +10,7 @@ use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\RemoteWorkRequest;
 use App\Models\Role;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -23,6 +24,13 @@ class MyAttendanceApiTest extends TestCase
 
         $this->withoutMiddleware(VerifyCsrfToken::class);
         $this->withoutMiddleware(ValidateWebhookPassword::class);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     private function signInAsEmployee(): Employee
@@ -63,6 +71,7 @@ class MyAttendanceApiTest extends TestCase
                         'is_holiday',
                         'is_field_work',
                         'is_remote_work',
+                        'can_manual_remote_punch',
                     ],
                 ],
             ]);
@@ -85,6 +94,63 @@ class MyAttendanceApiTest extends TestCase
                 'status' => 'error',
                 'message' => 'Employee code is required for attendance entry. Please contact admin to generate biometric employee ID.',
             ]);
+    }
+
+    public function test_remote_punch_requires_approved_remote_or_field_work_day(): void
+    {
+        Carbon::setTestNow('2026-06-29 09:00:00');
+        $this->signInAsEmployee();
+
+        $response = $this->postJson('/api/my/attendance/punch', [
+            'mode' => 'remote',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'status' => 'error',
+                'message' => 'Remote punch is available only for approved remote work or field work days.',
+            ]);
+
+        $this->assertDatabaseCount('punches', 0);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_remote_punch_is_allowed_for_admin_assigned_remote_work_day(): void
+    {
+        Carbon::setTestNow('2026-06-29 09:00:00');
+        $employee = $this->signInAsEmployee();
+
+        RemoteWorkRequest::create([
+            'employee_id' => $employee->id,
+            'start_date' => '2026-06-29',
+            'end_date' => '2026-06-29',
+            'reason' => 'Approved work from home',
+            'status' => 'approved',
+            'requested_by_user_id' => $employee->user->id,
+            'approved_by_user_id' => $employee->user->id,
+        ]);
+
+        $todayResponse = $this->getJson('/api/my/attendance/today');
+
+        $todayResponse->assertOk()
+            ->assertJsonPath('data.shift.can_manual_remote_punch', true);
+
+        $response = $this->postJson('/api/my/attendance/punch', [
+            'mode' => 'remote',
+        ]);
+
+        $response->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Punch-in recorded successfully.',
+            ]);
+
+        $this->assertDatabaseHas('punches', [
+            'EmployeeId' => $employee->code,
+        ]);
+
+        Carbon::setTestNow();
     }
 
     public function test_get_leave_requests_returns_employee_leaves(): void
