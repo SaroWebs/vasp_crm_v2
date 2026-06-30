@@ -1903,7 +1903,12 @@ class AttendanceController extends Controller
         }
 
         if ($date->isToday()) {
+            $scheduledStart = Carbon::parse($date->toDateString().' '.$shiftMeta['start_time']);
             $scheduledEnd = Carbon::parse($date->toDateString().' '.$shiftMeta['end_time']);
+
+            if ($scheduledEnd->lessThanOrEqualTo($scheduledStart)) {
+                $scheduledEnd->addDay();
+            }
 
             if (now()->lt($scheduledEnd)) {
                 return 'pending';

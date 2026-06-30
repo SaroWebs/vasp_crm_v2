@@ -17,6 +17,42 @@ class ShiftAssignmentTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_night_shift_can_be_created_with_end_time_before_start_time(): void
+    {
+        $role = Role::create([
+            'name' => 'Admin',
+            'slug' => 'admin',
+            'guard_name' => 'web',
+        ]);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $this->withoutMiddleware(VerifyCsrfToken::class);
+        $this->withoutMiddleware(ValidateUserSession::class);
+        $this->actingAs($user, 'web');
+
+        $response = $this->postJson('/admin/api/shifts', [
+            'name' => 'Night Shift',
+            'start_time' => '19:00',
+            'end_time' => '03:00',
+            'grace_minutes' => 10,
+            'is_active' => true,
+        ]);
+
+        $response->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Shift created successfully.',
+            ]);
+
+        $this->assertDatabaseHas('shifts', [
+            'name' => 'Night Shift',
+            'start_time' => '19:00:00',
+            'end_time' => '03:00:00',
+        ]);
+    }
+
     public function test_multiple_employees_can_be_assigned_to_the_same_shift_and_previous_active_assignments_are_closed(): void
     {
         $role = Role::create([

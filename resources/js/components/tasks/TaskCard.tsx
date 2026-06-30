@@ -3,12 +3,10 @@ import { useDisclosure } from "@mantine/hooks";
 import { useDrag } from "react-dnd";
 import TaskTimeTracker from "./TaskTimeTracker";
 import { Modal, Menu, MenuTarget, MenuDropdown, MenuItem } from "@mantine/core";
-import { useState, useEffect } from "react";
 import { Eye, Forward, MessageSquare, History, AlertTriangle, GitBranch } from "lucide-react";
 import { Link } from "@inertiajs/react";
 import { useTimeTracking } from "@/context/TimeTrackingContext";
 import TaskComments from "./task-comments";
-import { fetchWorkingHoursConfig, HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from "@/utils/workingHours";
 import { isTaskForwarded } from "@/lib/taskForwarding";
 import TaskForwarding from "./TaskForwarding";
 import TaskHistories from "./TaskHistories";
@@ -66,38 +64,10 @@ const TaskCard: React.FC<{
     const [forwardingOpened, { open: openForwarding, close: closeForwarding }] = useDisclosure(false);
     const [commentsOpened, { open: openComments, close: closeComments }] = useDisclosure(false);
     const [historiesOpened, { open: openHistories, close: closeHistories }] = useDisclosure(false);
-    const [workingHoursConfig, setWorkingHoursConfig] = useState<WorkingHoursConfig | null>(null);
-    const [holidaysConfig, setHolidaysConfig] = useState<HolidaysConfig | null>(null);
-    const [configLoaded, setConfigLoaded] = useState(false);
-
-    useEffect(() => {
-        let isMounted = true;
-
-        fetchWorkingHoursConfig().then((config) => {
-            if (isMounted) {
-                setWorkingHoursConfig(config.working_hours);
-                setHolidaysConfig(config.holidays);
-                setConfigLoaded(true);
-            }
-        });
-
-        return () => {
-            isMounted = false;
-        };
-    }, []);
-
-    const isWorkingTime = () => {
-        if (!configLoaded) {
-            return true;
-        }
-
-        return isWithinWorkingHours(new Date(), workingHoursConfig, holidaysConfig);
-    };
 
     const [{ isDragging }, drag] = useDrag({
         type: 'TASK',
         item: { id: task.id, status: task.state },
-        canDrag: isWorkingTime,
         end: (item, monitor) => {
             const dropResult = monitor.getDropResult<{ status: string }>();
             if (item && dropResult && item.status !== dropResult.status) {

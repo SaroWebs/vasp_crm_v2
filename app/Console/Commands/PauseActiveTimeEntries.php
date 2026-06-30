@@ -21,7 +21,7 @@ class PauseActiveTimeEntries extends Command
      *
      * @var string
      */
-    protected $description = 'Pauses all active time entries that have passed their working period end time or are outside working hours';
+    protected $description = 'Manages active time entries for explicit force-stop and max-duration safeguards';
 
     /**
      * Execute the console command.
@@ -51,12 +51,10 @@ class PauseActiveTimeEntries extends Command
             return Command::SUCCESS;
         }
 
-        // Default: process entries based on working hours
         $stats = $autoPauseService->processActiveTimeEntries();
 
         $this->info("Processed {$stats['processed']} active time entries:");
         $this->info("  - Paused: {$stats['paused']}");
-        $this->info("  - Split (multi-day): {$stats['split']}");
         $this->info("  - Skipped (still active): {$stats['skipped']}");
 
         return Command::SUCCESS;

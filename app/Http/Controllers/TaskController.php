@@ -11,7 +11,6 @@ use App\Models\TaskTimeEntry;
 use App\Models\TaskType;
 use App\Models\User;
 use App\Models\WorkloadMetric;
-use App\Services\AttendanceDayPolicyService;
 use App\Services\DueDateCalculatorService;
 use App\Services\NotificationService;
 use App\Services\TaskActionAuthorizationService;
@@ -716,15 +715,6 @@ class TaskController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Check if current time is working time
-        $now = now();
-        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
-            return response()->json([
-                'error' => 'Task actions are not available outside working hours',
-                'message' => 'Please resume your work during working hours',
-            ], 403);
-        }
-
         $result = DB::transaction(function () use ($task, $user) {
             $activeEntries = TaskTimeEntry::query()
                 ->where('user_id', $user->id)
@@ -853,15 +843,6 @@ class TaskController extends Controller
         $isAssigned = $task->assignedUsers()->where('user_id', $user->id)->exists();
         if (! $isAssigned) {
             return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
-        // Check if current time is working time
-        $now = now();
-        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user->employee, $now)) {
-            return response()->json([
-                'error' => 'Task actions are not available outside working hours',
-                'message' => 'Please resume your work during working hours',
-            ], 403);
         }
 
         $result = DB::transaction(function () use ($task, $user) {

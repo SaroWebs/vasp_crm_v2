@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Text, Paper, Loader, Progress, Tooltip, ActionIcon } from '@mantine/core';
 import { Play, Pause, Square, SkipForward } from 'lucide-react';
 import { useTimeTracking } from '@/context/TimeTrackingContext';
 import { OverdueWarningDialog } from './OverdueWarningDialog';
-import { fetchWorkingHoursConfig, HolidaysConfig, WorkingHoursConfig, isWithinWorkingHours } from '@/utils/workingHours';
 
 interface TaskTimeTrackerProps {
   taskId: number;
@@ -36,60 +35,24 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     getWorkingTimeSpent
   } = useTimeTracking();
   
-  const [showOverdueDialog, setShowOverdueDialog] = useState(false);
-  
-  const [timeData, setTimeData] = useState({
-    timeSpent: 0,
-    totalTimeSpent: 0,
-    remainingTime: 0,
-    isActive: false
-  });
-
   const [workingTimeData, setWorkingTimeData] = useState<WorkingTimeData | null>(null);
   const [localSecondsElapsed, setLocalSecondsElapsed] = useState(0);
-  const [workingHoursConfig, setWorkingHoursConfig] = useState<WorkingHoursConfig | null>(null);
-  const [holidaysConfig, setHolidaysConfig] = useState<HolidaysConfig | null>(null);
-  const [configLoaded, setConfigLoaded] = useState(false);
-
-  // Watch for overdue warning and show dialog
-  useEffect(() => {
-    if (overdueWarning && overdueWarning.taskId === taskId) {
-      setShowOverdueDialog(true);
-    } else {
-      setShowOverdueDialog(false);
-    }
-  }, [overdueWarning, taskId]);
 
   const task = tasks.get(taskId);
-  const taskTimeEntries = timeEntries.get(taskId) || [];
+  const taskTimeEntries = useMemo(() => timeEntries.get(taskId) || [], [timeEntries, taskId]);
   const isMyTracking = Boolean(task?.my_is_tracking);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    fetchWorkingHoursConfig().then((config) => {
-      if (isMounted) {
-        setWorkingHoursConfig(config.working_hours);
-        setHolidaysConfig(config.holidays);
-        setConfigLoaded(true);
+  const isTaskTimerActive = activeTaskId === taskId && isMyTracking;
+  const showOverdueDialog = Boolean(overdueWarning && overdueWarning.taskId === taskId);
+  const taskWorkingTimeData: WorkingTimeData | null = task?.total_working_time_spent
+    ? {
+        total_working_time_spent: task.total_working_time_spent_seconds,
+        total_working_time_spent_hours: task.total_working_time_spent
       }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const isWorkingTime = () => {
-    if (!configLoaded) {
-      return true;
-    }
-
-    return isWithinWorkingHours(new Date(), workingHoursConfig, holidaysConfig);
-  };
+    : null;
 
   const pauseTaskAndRefresh = useCallback(async () => {
     await pauseTask(taskId);
+    setLocalSecondsElapsed(0);
     onTimeUpdate();
 
     if (onTaskAction) {
@@ -104,86 +67,33 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     }
   }, [pauseTask, taskId, onTimeUpdate, onTaskAction, getWorkingTimeSpent]);
 
-  // Initialize with working time from task data
+  // Initialize task data if the context does not have it yet.
   useEffect(() => {
     if (!task) {
       refreshTaskData(taskId);
-    } else {
-      if (task.total_working_time_spent) {
-        setWorkingTimeData({
-          total_working_time_spent: task.total_working_time_spent_seconds,
-          total_working_time_spent_hours: task.total_working_time_spent
-        });
-      }
-
-      setTimeData(prev => ({ ...prev, isActive: isMyTracking }));
     }
-  }, [task, taskTimeEntries, taskId, refreshTaskData, isMyTracking]);
-
-  // Sync isActive state with activeTaskId from context
-  // This ensures the timer stops when the task is no longer active in the context
-  // (e.g., when dragged to a different column)
-  useEffect(() => {
-    if (activeTaskId === null) {
-      // No task is active, so this task is not active
-      setTimeData(prev => ({ ...prev, isActive: false }));
-    } else if (activeTaskId === taskId) {
-      // This task is the active task - use current-user scoped tracking flag
-      setTimeData(prev => ({ ...prev, isActive: isMyTracking }));
-    } else {
-      // Another task is active, so this task is not active
-      setTimeData(prev => ({ ...prev, isActive: false }));
-    }
-  }, [activeTaskId, taskId, taskTimeEntries, isMyTracking]);
+  }, [task, taskId, refreshTaskData]);
 
   // Local timer counting each second
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
-    if (timeData.isActive) {
+    if (isTaskTimerActive) {
       interval = setInterval(() => {
         setLocalSecondsElapsed(prev => prev + 1);
       }, 1000);
-    } else {
-      setLocalSecondsElapsed(0);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timeData.isActive]);
-
-  // Auto-pause when the running entry leaves working hours
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-
-    if (timeData.isActive && configLoaded && workingHoursConfig) {
-      const checkWorkingHours = async () => {
-        if (!isWithinWorkingHours(new Date(), workingHoursConfig, holidaysConfig)) {
-          try {
-            await pauseTaskAndRefresh();
-          } catch (err) {
-            console.error('Failed to auto-pause task outside working hours:', err);
-          }
-        }
-      };
-
-      void checkWorkingHours();
-      interval = setInterval(() => {
-        void checkWorkingHours();
-      }, 60000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [timeData.isActive, configLoaded, workingHoursConfig, holidaysConfig, pauseTaskAndRefresh]);
+  }, [isTaskTimerActive]);
 
   // Sync with backend every 5 minutes
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
-    if (timeData.isActive) {
+    if (isTaskTimerActive) {
       interval = setInterval(async () => {
         try {
           const data = await getWorkingTimeSpent(taskId);
@@ -199,7 +109,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timeData.isActive, taskId, getWorkingTimeSpent, refreshTaskData]);
+  }, [isTaskTimerActive, taskId, getWorkingTimeSpent, refreshTaskData]);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds) || !isFinite(seconds)) {
@@ -214,6 +124,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
   const handleStart = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await startTask(taskId);
+    setLocalSecondsElapsed(0);
     // Only call callbacks if there's no overdue warning
     if (!overdueWarning) {
       onTimeUpdate();
@@ -229,7 +140,8 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   const handleStartAnyway = async () => {
     await startTask(taskId, true); // Skip overdue warning
-    setShowOverdueDialog(false);
+    clearOverdueWarning();
+    setLocalSecondsElapsed(0);
     onTimeUpdate();
     onTaskAction?.('start', taskId);
     try {
@@ -261,6 +173,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await resumeTask(taskId);
+    setLocalSecondsElapsed(0);
     onTimeUpdate();
     onTaskAction?.('resume', taskId);
     try {
@@ -274,6 +187,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
   const handleEnd = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await endTask(taskId);
+    setLocalSecondsElapsed(0);
     onTimeUpdate();
     onTaskAction?.('end', taskId);
     try {
@@ -297,8 +211,8 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   // Calculate total time spent (backend + local)
   const getTotalTimeSpent = () => {
-    const backendSeconds = workingTimeData?.total_working_time_spent || 0;
-    return backendSeconds + localSecondsElapsed;
+    const backendSeconds = workingTimeData?.total_working_time_spent || taskWorkingTimeData?.total_working_time_spent || 0;
+    return backendSeconds + (isTaskTimerActive ? localSecondsElapsed : 0);
   };
 
   const calculateProgress = () => {
@@ -318,9 +232,6 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
     return 'red';
   };
 
-  // Check if start/resume actions should be disabled
-  const shouldDisableStartResume = !isWorkingTime();
-
   return (
     <Paper shadow="xs" p="sm" radius="md" className="mt-4">
       <div className="w-full flex gap-2">
@@ -330,7 +241,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
             value={calculateProgress()}
             color={getProgressColor()}
             radius="xs" size="sm"
-            animated={timeData.isActive}
+            animated={isTaskTimerActive}
           />
           <div className="flex justify-between mt-1">
             <Text size="xs" color="dimmed">
@@ -351,27 +262,27 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
               </Tooltip>
             )}
 
-            {!timeData.isActive ? (
+            {!isTaskTimerActive ? (
               <>
                 {taskTimeEntries.length === 0 ? (
-                  <Tooltip label={shouldDisableStartResume ? "Task actions are not available outside working hours" : "Start tracking time"}>
+                  <Tooltip label="Start tracking time">
                     <ActionIcon
                       size="lg"
                       onClick={(e) => handleStart(e)}
-                      disabled={isLoading || shouldDisableStartResume}
-                      color={shouldDisableStartResume ? "gray" : "green"}
+                      disabled={isLoading}
+                      color="green"
                       variant="filled"
                     >
                       <Play size={18} />
                     </ActionIcon>
                   </Tooltip>
                 ) : (
-                  <Tooltip label={shouldDisableStartResume ? "Task actions are not available outside working hours" : "Resume tracking time"}>
+                  <Tooltip label="Resume tracking time">
                     <ActionIcon
                       size="lg"
                       onClick={(e) => handleResume(e)}
-                      disabled={isLoading || shouldDisableStartResume}
-                      color={shouldDisableStartResume ? "gray" : "blue"}
+                      disabled={isLoading}
+                      color="blue"
                       variant="filled"
                     >
                       <SkipForward size={18} />
@@ -414,7 +325,6 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
         <OverdueWarningDialog
           isOpen={showOverdueDialog}
           onClose={() => {
-            setShowOverdueDialog(false);
             clearOverdueWarning();
           }}
           onStartAnyway={handleStartAnyway}

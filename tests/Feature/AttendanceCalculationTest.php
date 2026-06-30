@@ -286,6 +286,37 @@ class AttendanceCalculationTest extends TestCase
         $this->assertSame('unassigned_shift', $shiftMeta['source']);
     }
 
+    public function test_night_shift_end_time_is_treated_as_next_day(): void
+    {
+        $employee = Employee::factory()->create(['code' => 'NIGHT01']);
+        $shift = Shift::create([
+            'name' => 'Night Shift',
+            'start_time' => '19:00:00',
+            'end_time' => '03:00:00',
+            'grace_minutes' => 10,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => '2026-05-01',
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
+        $shiftMeta = $this->service->resolveEffectiveShiftForEmployeeDate($employee->code, '2026-05-25');
+        $metrics = $this->service->buildShiftMetrics('2026-05-25', '19:15:00', '02:30:00', $shiftMeta);
+
+        $this->assertSame(480, $shiftMeta['scheduled_minutes']);
+        $this->assertSame(8.0, $metrics['scheduled_hours']);
+        $this->assertTrue($metrics['is_late_in']);
+        $this->assertEquals(5, $metrics['late_in_minutes']);
+        $this->assertTrue($metrics['is_early_out']);
+        $this->assertEquals(30, $metrics['early_out_minutes']);
+        $this->assertEquals(435, $metrics['total_work_minutes']);
+    }
+
     public function test_saturday_half_day_uses_assigned_shift_start_time(): void
     {
         $employee = Employee::factory()->create(['code' => 'WEEKEND01']);

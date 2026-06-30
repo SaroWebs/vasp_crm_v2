@@ -185,12 +185,12 @@ export default function ShiftsPage() {
     };
 
     const deleteShift = async (shiftId: number) => {
-        if (!confirm('Are you sure you want to delete this shift?')) {
-            return;
-        }
         let xShift = shifts.filter((s) => s.id === shiftId)[0];
         if (xShift.assignments_count && xShift.assignments_count > 0) {
             alert('Cannot delete shift with existing assignments.');
+            return;
+        }
+        if (!confirm('Are you sure you want to delete this shift?')) {
             return;
         }
         
@@ -292,7 +292,15 @@ export default function ShiftsPage() {
                                         <Table.Td>
                                             <Group gap="xs">
                                                 <Button size="xs" variant="light" onClick={() => openEditShiftModal(s)}>Edit</Button>
-                                                <Button size="xs" color="red" variant="light" onClick={() => deleteShift(s.id)}>Delete</Button>
+                                                <Button
+                                                    size="xs"
+                                                    color="red"
+                                                    variant="light"
+                                                    disabled={(s.assignments_count && s.assignments_count > 0) ? true : false}
+                                                    onClick={() => deleteShift(s.id)}
+                                                >
+                                                    Delete
+                                                </Button>
                                             </Group>
                                         </Table.Td>
                                     </Table.Tr>

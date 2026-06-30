@@ -89,7 +89,7 @@ class AttendanceCalculationService
 
         // Calculate scheduled hours
         $scheduledStart = Carbon::parse($attendanceDate.' '.$shiftMeta['start_time']);
-        $scheduledEnd = Carbon::parse($attendanceDate.' '.$shiftMeta['end_time']);
+        $scheduledEnd = $this->resolveShiftEnd($attendanceDate, $shiftMeta['start_time'], $shiftMeta['end_time']);
         $result['scheduled_hours'] = round($scheduledStart->diffInMinutes($scheduledEnd) / 60, 2);
 
         // Handle punch_in
@@ -108,7 +108,7 @@ class AttendanceCalculationService
 
         // Handle punch_out
         if ($punchOut) {
-            $actualOut = Carbon::parse($attendanceDate.' '.$punchOut);
+            $actualOut = $this->resolvePunchOut($attendanceDate, $punchOut, $scheduledStart);
 
             if ($actualOut->lt($scheduledEnd)) {
                 $result['early_out_minutes'] = abs($actualOut->diffInMinutes($scheduledEnd));
@@ -122,7 +122,7 @@ class AttendanceCalculationService
         // Calculate total work minutes if both punch_in and punch_out exist
         if ($punchIn && $punchOut) {
             $actualIn = Carbon::parse($attendanceDate.' '.$punchIn);
-            $actualOut = Carbon::parse($attendanceDate.' '.$punchOut);
+            $actualOut = $this->resolvePunchOut($attendanceDate, $punchOut, $scheduledStart);
             $result['total_work_minutes'] = $actualIn->diffInMinutes($actualOut);
         }
 
@@ -277,5 +277,28 @@ class AttendanceCalculationService
     private function resolveGraceMinutes(int $graceMinutes): int
     {
         return max(0, $graceMinutes);
+    }
+
+    private function resolveShiftEnd(string $attendanceDate, string $startTime, string $endTime): Carbon
+    {
+        $scheduledStart = Carbon::parse($attendanceDate.' '.$startTime);
+        $scheduledEnd = Carbon::parse($attendanceDate.' '.$endTime);
+
+        if ($scheduledEnd->lessThanOrEqualTo($scheduledStart)) {
+            $scheduledEnd->addDay();
+        }
+
+        return $scheduledEnd;
+    }
+
+    private function resolvePunchOut(string $attendanceDate, string $punchOut, Carbon $scheduledStart): Carbon
+    {
+        $actualOut = Carbon::parse($attendanceDate.' '.$punchOut);
+
+        if ($actualOut->lessThanOrEqualTo($scheduledStart)) {
+            $actualOut->addDay();
+        }
+
+        return $actualOut;
     }
 }

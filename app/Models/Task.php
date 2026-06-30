@@ -706,8 +706,9 @@ class Task extends Model
             if (! $entry->is_active) {
                 $totalWorkingSeconds += $entry->calculateDuration();
             } elseif ($entry->start_time) {
+                $entry->loadMissing('user.employee');
                 $timeCalculator = app(TimeCalculatorService::class);
-                $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now());
+                $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now(), $entry->user?->employee);
             }
         }
 
@@ -784,8 +785,9 @@ class Task extends Model
             if (! $entry->is_active) {
                 $totalWorkingSeconds += $entry->calculateDuration();
             } elseif ($entry->start_time) {
+                $entry->loadMissing('user.employee');
                 $timeCalculator = app(TimeCalculatorService::class);
-                $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now());
+                $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now(), $entry->user?->employee);
             }
         }
 
@@ -802,8 +804,9 @@ class Task extends Model
             if (! $entry->is_active) {
                 $totalWorkingSeconds += $entry->calculateDuration();
             } elseif ($entry->start_time) {
+                $entry->loadMissing('user.employee');
                 $timeCalculator = app(TimeCalculatorService::class);
-                $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now());
+                $totalWorkingSeconds += $timeCalculator->calculateWorkingDuration($entry->start_time, now(), $entry->user?->employee);
             }
         }
 

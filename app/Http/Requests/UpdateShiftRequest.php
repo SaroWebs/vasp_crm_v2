@@ -25,7 +25,7 @@ class UpdateShiftRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'start_time' => ['required', 'date_format:H:i'],
-            'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
+            'end_time' => ['required', 'date_format:H:i'],
             'grace_minutes' => ['nullable', 'integer', 'min:0', 'max:180'],
             'is_active' => ['nullable', 'boolean'],
         ];

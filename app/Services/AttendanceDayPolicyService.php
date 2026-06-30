@@ -162,10 +162,27 @@ class AttendanceDayPolicyService
             return false;
         }
 
-        $start = Carbon::parse($moment->toDateString().' '.$schedule['start_time']);
-        $end = Carbon::parse($moment->toDateString().' '.$schedule['end_time']);
+        [$start, $end] = $this->resolveScheduleWindow($moment->toDateString(), $schedule['start_time'], $schedule['end_time']);
 
-        return $moment->betweenIncluded($start, $end);
+        if ($moment->betweenIncluded($start, $end)) {
+            return true;
+        }
+
+        $previousDay = $moment->copy()->subDay();
+        $previousSchedule = $this->resolveForEmployeeDate($employee, $previousDay);
+
+        if (! $previousSchedule['start_time'] || ! $previousSchedule['end_time']) {
+            return false;
+        }
+
+        [$previousStart, $previousEnd] = $this->resolveScheduleWindow(
+            $previousDay->toDateString(),
+            $previousSchedule['start_time'],
+            $previousSchedule['end_time'],
+        );
+
+        return $previousEnd->gt($previousStart->copy()->endOfDay())
+            && $moment->betweenIncluded($previousStart, $previousEnd);
     }
 
     private function resolveFieldWorkRecord(Employee $employee, Carbon $date): FieldWorkAssignment|FieldWorkRequest|null
@@ -295,7 +312,7 @@ class AttendanceDayPolicyService
     private function resolveHalfDayEndTime(string $date, string $startTime, string $scheduledEndTime): string
     {
         $halfDayEnd = Carbon::parse($date.' '.$startTime)->addHours(5);
-        $scheduledEnd = Carbon::parse($date.' '.$scheduledEndTime);
+        [, $scheduledEnd] = $this->resolveScheduleWindow($date, $startTime, $scheduledEndTime);
 
         if ($scheduledEnd->lt($halfDayEnd)) {
             return $scheduledEnd->format('H:i:s');
@@ -332,8 +349,9 @@ class AttendanceDayPolicyService
 
     private function minutesBetween(string $date, string $startTime, string $endTime): int
     {
-        return (int) Carbon::parse($date.' '.$startTime)
-            ->diffInMinutes(Carbon::parse($date.' '.$endTime));
+        [$start, $end] = $this->resolveScheduleWindow($date, $startTime, $endTime);
+
+        return (int) $start->diffInMinutes($end);
     }
 
     private function formatTime(?string $time): ?string
@@ -348,5 +366,20 @@ class AttendanceDayPolicyService
     private function resolveGraceMinutes(int $graceMinutes): int
     {
         return max(0, $graceMinutes);
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function resolveScheduleWindow(string $date, string $startTime, string $endTime): array
+    {
+        $start = Carbon::parse($date.' '.$startTime);
+        $end = Carbon::parse($date.' '.$endTime);
+
+        if ($end->lessThanOrEqualTo($start)) {
+            $end->addDay();
+        }
+
+        return [$start, $end];
     }
 }

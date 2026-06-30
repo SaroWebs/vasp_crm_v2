@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Services\AttendanceDayPolicyService;
 use App\Services\TimeCalculatorService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -96,10 +95,10 @@ class TaskTimeEntry extends Model
 
         $endTime = $this->end_time ?? now();
 
-        // Use time calculator service to calculate working duration
+        $this->loadMissing('user.employee');
         $timeCalculator = app(TimeCalculatorService::class);
 
-        return $timeCalculator->calculateWorkingDuration($this->start_time, $endTime);
+        return $timeCalculator->calculateWorkingDuration($this->start_time, $endTime, $this->user?->employee);
     }
 
     /**
@@ -132,8 +131,9 @@ class TaskTimeEntry extends Model
             return 0;
         }
 
+        $this->loadMissing('user.employee');
         $timeCalculator = app(TimeCalculatorService::class);
-        $durationSeconds = $timeCalculator->calculateWorkingDuration($clippedStart, $clippedEnd);
+        $durationSeconds = $timeCalculator->calculateWorkingDuration($clippedStart, $clippedEnd, $this->user?->employee);
 
         return (int) round($durationSeconds);
     }
@@ -148,17 +148,10 @@ class TaskTimeEntry extends Model
 
     /**
      * Start a new time entry.
-     *
-     * @throws \Exception If trying to start outside working hours
      */
     public static function start(Task $task, int $userId, ?string $description = null): self
     {
-        $user = User::query()->with('employee')->find($userId);
         $now = now();
-
-        if (! app(AttendanceDayPolicyService::class)->isWithinWorkingWindow($user?->employee, $now)) {
-            throw new \Exception('Cannot start time entry outside working hours');
-        }
 
         return static::create([
             'task_id' => $task->id,
