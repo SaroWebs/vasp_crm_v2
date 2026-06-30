@@ -8,11 +8,26 @@ use App\Models\User;
 use App\Services\WorkloadMatrixService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class UserController extends Controller
 {
+
+    public function test()
+    {
+        $user = User::with(['roles', 'employee'])->find(Auth::user()->id);
+        $dashboardType = 'employee';
+        if ($user->hasRole(['super-admin', 'admin', 'manager'])) {
+            $dashboardType = 'admin';
+        }
+        $dashboardData = [
+            'dashboard_type' => $dashboardType,
+        ];
+        return Inertia::render('SamplePage', $dashboardData);
+    }
+
     /**
      * Display a listing of users with their roles and permissions.
      */
