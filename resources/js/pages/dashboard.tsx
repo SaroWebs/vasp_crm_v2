@@ -1,8 +1,8 @@
 ﻿import AppLayout from '@/layouts/app-layout';
 import { Auth, type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
-import AdminDashboard from '@/components/dashboard/AdminDashboard';
 import EmployeeDashboard from '@/components/dashboard/EmployeeDashboard';
+import AdminScreen from '@/components/dash/AdminScreen';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -27,7 +27,7 @@ export default function Dashboard(props: DashboardProps) {
                 {dashboard_type === 'employee' ? (
                     <EmployeeDashboard auth={auth} />
                 ) : (
-                    <AdminDashboard auth={auth} />
+                    <AdminScreen auth={auth} />
                 )}
             </div>
         </AppLayout>

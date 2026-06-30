@@ -120,7 +120,7 @@ export default function ReportsIndex(props: ReportsIndexProps) {
     const [reports, setReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [currentPage, setCurrentPage] = useState<number>(1);
-    const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+    const [itemsPerPage, setItemsPerPage] = useState<number>(50);
     const [totalItems, setTotalItems] = useState<number>(0);
     const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<Employee | null>(null);
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -326,7 +326,7 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                         </div>
 
                         <Group gap="xs">
-                            {isAdminView && canExportConsolidated ? (
+                            {isAdminView ? (
                                 <Button
                                     variant="light"
                                     leftSection={<Download size={16} />}
@@ -360,6 +360,7 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                                     }
 
                                     const employee = employees.find((emp) => emp.id === Number(value));
+                                    setCurrentPage(1);
                                     setSelectedEmployeeFilter(employee ?? null);
                                 }}
                                 searchable
@@ -459,9 +460,9 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                                     value={String(itemsPerPage)}
                                     data={[
                                         { value: '5', label: '5' },
-                                        { value: '10', label: '10' },
                                         { value: '20', label: '20' },
                                         { value: '50', label: '50' },
+                                        { value: '100', label: '100' },
                                     ]}
                                     onChange={(e) => setItemsPerPage(Number(e.currentTarget.value))}
                                 />

@@ -4,6 +4,9 @@ import { CheckCircle, Clock, TicketIcon } from 'lucide-react';
 import WizCardDesign1 from "../wizards/WizCardDesign1";
 import { useEffect, useState } from "react";
 import RecentTicketsWidget from "../dashboard/widgets/RecentTicketsWidget";
+import DailyAttendancePanel from "../admin/employees/DailyAttendancePanel";
+import RecentReportSection from "../reports/RecentReportSection";
+import TaskTimeline from "../admin/TaskTimeline";
 
 interface AdminScreenProps {
     auth?: Auth | null;
@@ -64,33 +67,39 @@ const AdminScreen = ({ auth }: AdminScreenProps) => {
 
     return (
         <div className="">
-            <div className="md:col-span-8">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                    {wizCards.map((wizCard) => (
-                        <WizCardDesign1
-                            key={wizCard.title}
-                            title={wizCard.title}
-                            text={wizCard.text}
-                            stats={wizCard.stats}
-                            icon={wizCard.icon}
-                            color={wizCard.color}
-                            link={wizCard.link}
-                        />
-                    ))}
+            <div className="grid gap-4 md:grid-cols-8">
+                <div className="md:col-span-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                        {wizCards.map((wizCard) => (
+                            <WizCardDesign1
+                                key={wizCard.title}
+                                title={wizCard.title}
+                                text={wizCard.text}
+                                stats={wizCard.stats}
+                                icon={wizCard.icon}
+                                color={wizCard.color}
+                                link={wizCard.link}
+                            />
+                        ))}
+                    </div>
                 </div>
-            </div>
-            {showSecondaryWidgets && (
-                <>
-                    <div className="md:col-span-8 space-y-4">
-                        <RecentTicketsWidget />
-                    </div>
-                    <div className="md:col-span-8 space-y-4">
-                        {/* <DailyAttendancePanel />
-                        <RecentReportSection /> */}
-                    </div>
-                </>
+                {showSecondaryWidgets && (
+                    <>
+                        <div className="md:col-span-8 space-y-4">
+                            <RecentTicketsWidget />
+                        </div>
+                        <div className="md:col-span-8 space-y-4">
+                            <DailyAttendancePanel />
+                            <RecentReportSection />
+                        </div>
+                        <div className="md:col-span-8 space-y-4">
+                            <TaskTimeline />
+                        </div>
+                    </>
                 )}
-        </div>
+            </div>
+        
+        </div >
     );
 }
 

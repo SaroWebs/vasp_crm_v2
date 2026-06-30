@@ -440,6 +440,8 @@ class AttendanceShiftMetricsTest extends TestCase
 
         $this->assertSame(0, $summary['late_days']);
         $this->assertSame(0, $summary['total_late_minutes']);
+        $this->assertSame(6, $summary['total_early_in_minutes']);
+        $this->assertSame(5, $summary['total_late_out_minutes']);
         $this->assertSame(11, $summary['total_overtime_minutes']);
         $this->assertSame(10.18, $summary['total_hours']);
     }

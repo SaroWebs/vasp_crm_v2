@@ -12,7 +12,14 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Loader2, Download, Eye, Users, TrendingUp, Clock, Timer, AlertCircle, CalendarCheck2, Palmtree, Umbrella, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Loader2, Download, Eye, Users, TrendingUp, Clock, Timer, AlertCircle, CalendarCheck2, Palmtree, Umbrella, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -36,7 +43,9 @@ interface EmployeeSummary {
         late_days: number;
         early_out_days: number;
         total_late_minutes: number;
+        total_early_in_minutes: number;
         total_early_out_minutes: number;
+        total_late_out_minutes: number;
         total_overtime_minutes: number;
         total_hours: number;
     };
@@ -51,10 +60,15 @@ interface DayRecord {
         punch_in?: string | null;
         punch_out?: string | null;
         late_minutes?: number;
+        early_in_minutes?: number;
         early_out_minutes?: number;
+        late_out_minutes?: number;
+        overtime_minutes?: number;
         total_work_minutes?: number | null;
         is_late?: boolean;
+        is_early_in?: boolean;
         is_early_out?: boolean;
+        is_late_out?: boolean;
     } | null;
     holiday: { name: string; type?: string } | null;
     shift_start?: string | null;
@@ -120,6 +134,63 @@ function StatCard({ label, value, color = '' }: { label: string; value: string |
     );
 }
 
+interface BreakdownItem {
+    label: string;
+    value: string | number;
+    color?: string;
+}
+
+function BreakdownMenu({ label, value, color = '', items }: { label: string; value: string | number; color?: string; items: BreakdownItem[] }) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button
+                    type="button"
+                    className={`group inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 py-0.5 text-left font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${color}`}
+                    aria-label={`${label} breakdown`}
+                >
+                    <span>{value}</span>
+                    <ChevronDown className="h-3.5 w-3.5 opacity-55 transition-opacity group-hover:opacity-100" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel>{label} Breakdown</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="space-y-1 px-2 py-1">
+                    {items.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-4 rounded-sm py-1 text-sm">
+                            <span className="text-muted-foreground">{item.label}</span>
+                            <span className={`font-medium tabular-nums ${item.color ?? ''}`}>{item.value}</span>
+                        </div>
+                    ))}
+                </div>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
+function CalculatedStatCard({ label, value, color = '', items }: { label: string; value: string | number; color?: string; items: BreakdownItem[] }) {
+    return (
+        <Card className="border-none shadow-sm">
+            <CardContent className="px-2.5 py-1.5">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+                <BreakdownMenu label={label} value={value} color={`mt-0.5 text-lg ${color}`} items={items} />
+            </CardContent>
+        </Card>
+    );
+}
+
+function topEmployeeBreakdown(summaries: EmployeeSummary[], selector: (employee: EmployeeSummary) => number, formatter: (value: number) => string = String): BreakdownItem[] {
+    const items = summaries
+        .map((employee) => ({ label: employee.name, value: selector(employee) }))
+        .filter((item) => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5)
+        .map((item) => ({ label: item.label, value: formatter(item.value) }));
+
+    return items.length > 0 ? items : [{ label: 'No matching records', value: '-' }];
+}
+
 function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: OpMonth }) {
     const [days, setDays] = useState<DayRecord[]>([]);
     const [loading, setLoading] = useState(false);
@@ -156,8 +227,24 @@ function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: Op
                 <StatCard label="Paid Leave" value={s.paid_leave_days ?? 0} color="text-purple-600" />
                 <StatCard label="Unpaid Leave" value={s.unpaid_leave_days ?? 0} color="text-orange-600" />
                 <StatCard label="Holidays" value={s.holiday_days ?? 0} color="text-indigo-600" />
-                <StatCard label="Late Time" value={fmtMinutes(s.total_late_minutes)} color="text-yellow-600" />
-                <StatCard label="Overtime" value={fmtMinutes(s.total_overtime_minutes)} color="text-cyan-600" />
+                <CalculatedStatCard
+                    label="Late Time"
+                    value={fmtMinutes(s.total_late_minutes)}
+                    color="text-yellow-600"
+                    items={[
+                        { label: 'Late-in minutes', value: fmtMinutes(s.total_late_minutes), color: 'text-yellow-700' },
+                        { label: 'Late instances', value: s.late_days, color: 'text-yellow-700' },
+                    ]}
+                />
+                <CalculatedStatCard
+                    label="Overtime"
+                    value={fmtMinutes(s.total_overtime_minutes)}
+                    color="text-cyan-600"
+                    items={[
+                        { label: 'Early-in minutes', value: fmtMinutes(s.total_early_in_minutes), color: 'text-cyan-700' },
+                        { label: 'Late-out minutes', value: fmtMinutes(s.total_late_out_minutes), color: 'text-cyan-700' },
+                    ]}
+                />
                 <StatCard label="Total Hours" value={`${s.total_hours.toFixed(1)}h`} color="text-blue-600" />
             </div>
 
@@ -188,6 +275,7 @@ function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: Op
                                         <TableHead className="text-center">Work Time</TableHead>
                                         <TableHead className="text-center">Late</TableHead>
                                         <TableHead className="text-center">Early Out</TableHead>
+                                        <TableHead className="text-center">Overtime</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -242,6 +330,19 @@ function EmployeeDetailTab({ emp, opMonth }: { emp: EmployeeSummary; opMonth: Op
                                                         ? <span className="text-orange-600 font-medium">{fmtMinutes(d.record.early_out_minutes)}</span>
                                                         : '—'}
                                                 </TableCell>
+                                                <TableCell className="text-center text-xs">
+                                                    {(d.record?.overtime_minutes ?? 0) > 0 ? (
+                                                        <BreakdownMenu
+                                                            label="Overtime"
+                                                            value={fmtMinutes(d.record?.overtime_minutes)}
+                                                            color="text-cyan-700"
+                                                            items={[
+                                                                { label: 'Early-in minutes', value: fmtMinutes(d.record?.early_in_minutes), color: 'text-cyan-700' },
+                                                                { label: 'Late-out minutes', value: fmtMinutes(d.record?.late_out_minutes), color: 'text-cyan-700' },
+                                                            ]}
+                                                        />
+                                                    ) : '-'}
+                                                </TableCell>
                                             </TableRow>
                                         );
                                     })}
@@ -264,7 +365,9 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
     const totalLate = summaries.reduce((s, e) => s + e.summary.late_days, 0);
     const totalEarlyOut = summaries.reduce((s, e) => s + e.summary.early_out_days, 0);
     const totalLateMinutes = summaries.reduce((s, e) => s + e.summary.total_late_minutes, 0);
+    const totalEarlyInMinutes = summaries.reduce((s, e) => s + e.summary.total_early_in_minutes, 0);
     const totalEarlyOutMinutes = summaries.reduce((s, e) => s + e.summary.total_early_out_minutes, 0);
+    const totalLateOutMinutes = summaries.reduce((s, e) => s + e.summary.total_late_out_minutes, 0);
     const totalOvertimeMinutes = summaries.reduce((s, e) => s + e.summary.total_overtime_minutes, 0);
     const totalHours = summaries.reduce((s, e) => s + e.summary.total_hours, 0);
 
@@ -305,7 +408,12 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                         <TrendingUp className="h-5 w-5 shrink-0 text-yellow-500" />
                         <div>
                             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Late Instances</p>
-                            <p className="text-lg font-bold text-yellow-600">{totalLate}</p>
+                            <BreakdownMenu
+                                label="Late Instances"
+                                value={totalLate}
+                                color="text-lg text-yellow-600"
+                                items={topEmployeeBreakdown(summaries, (employee) => employee.summary.late_days)}
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -348,19 +456,34 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                 <Card className="border-none shadow-sm">
                     <CardContent className="px-2.5 py-1.5">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Early Out Days</p>
-                        <p className="text-lg font-bold text-orange-600">{totalEarlyOut}</p>
+                        <BreakdownMenu
+                            label="Early Out Days"
+                            value={totalEarlyOut}
+                            color="text-lg text-orange-600"
+                            items={topEmployeeBreakdown(summaries, (employee) => employee.summary.early_out_days)}
+                        />
                     </CardContent>
                 </Card>
                 <Card className="border-none shadow-sm">
                     <CardContent className="px-2.5 py-1.5">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Late Minutes</p>
-                        <p className="text-lg font-bold text-yellow-700">{totalLateMinutes}</p>
+                        <BreakdownMenu
+                            label="Late Minutes"
+                            value={totalLateMinutes}
+                            color="text-lg text-yellow-700"
+                            items={topEmployeeBreakdown(summaries, (employee) => employee.summary.total_late_minutes)}
+                        />
                     </CardContent>
                 </Card>
                 <Card className="border-none shadow-sm">
                     <CardContent className="px-2.5 py-1.5">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Early-Out Min.</p>
-                        <p className="text-lg font-bold text-amber-700">{totalEarlyOutMinutes}</p>
+                        <BreakdownMenu
+                            label="Early-Out Minutes"
+                            value={totalEarlyOutMinutes}
+                            color="text-lg text-amber-700"
+                            items={topEmployeeBreakdown(summaries, (employee) => employee.summary.total_early_out_minutes)}
+                        />
                     </CardContent>
                 </Card>
                 <Card className="border-none shadow-sm">
@@ -368,7 +491,16 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                         <Timer className="h-5 w-5 shrink-0 text-cyan-500" />
                         <div>
                             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Overtime</p>
-                            <p className="text-lg font-bold text-cyan-700">{fmtMinutes(totalOvertimeMinutes)}</p>
+                            <BreakdownMenu
+                                label="Overtime"
+                                value={fmtMinutes(totalOvertimeMinutes)}
+                                color="text-lg text-cyan-700"
+                                items={[
+                                    { label: 'Early-in minutes', value: fmtMinutes(totalEarlyInMinutes), color: 'text-cyan-700' },
+                                    { label: 'Late-out minutes', value: fmtMinutes(totalLateOutMinutes), color: 'text-cyan-700' },
+                                    ...topEmployeeBreakdown(summaries, (employee) => employee.summary.total_overtime_minutes, fmtMinutes),
+                                ]}
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -449,19 +581,55 @@ function OverallTab({ summaries, loading }: { summaries: EmployeeSummary[]; load
                                                     <span className="font-medium text-orange-600">{emp.summary.unpaid_leave_days ?? 0}</span>
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <span className="font-medium text-yellow-600">{emp.summary.late_days}</span>
+                                                    <BreakdownMenu
+                                                        label="Late Instances"
+                                                        value={emp.summary.late_days}
+                                                        color="text-yellow-600"
+                                                        items={[
+                                                            { label: 'Late-in minutes', value: emp.summary.total_late_minutes, color: 'text-yellow-700' },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <span className="font-medium text-orange-600">{emp.summary.early_out_days}</span>
+                                                    <BreakdownMenu
+                                                        label="Early Out Days"
+                                                        value={emp.summary.early_out_days}
+                                                        color="text-orange-600"
+                                                        items={[
+                                                            { label: 'Early-out minutes', value: emp.summary.total_early_out_minutes, color: 'text-amber-700' },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="text-center text-sm text-yellow-700">
-                                                    {emp.summary.total_late_minutes}
+                                                    <BreakdownMenu
+                                                        label="Late Minutes"
+                                                        value={emp.summary.total_late_minutes}
+                                                        color="text-yellow-700"
+                                                        items={[
+                                                            { label: 'Late instances', value: emp.summary.late_days, color: 'text-yellow-700' },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="text-center text-sm text-amber-700">
-                                                    {emp.summary.total_early_out_minutes}
+                                                    <BreakdownMenu
+                                                        label="Early-Out Minutes"
+                                                        value={emp.summary.total_early_out_minutes}
+                                                        color="text-amber-700"
+                                                        items={[
+                                                            { label: 'Early out days', value: emp.summary.early_out_days, color: 'text-orange-600' },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="text-center text-sm text-cyan-700">
-                                                    {fmtMinutes(emp.summary.total_overtime_minutes)}
+                                                    <BreakdownMenu
+                                                        label="Overtime"
+                                                        value={fmtMinutes(emp.summary.total_overtime_minutes)}
+                                                        color="text-cyan-700"
+                                                        items={[
+                                                            { label: 'Early-in minutes', value: fmtMinutes(emp.summary.total_early_in_minutes), color: 'text-cyan-700' },
+                                                            { label: 'Late-out minutes', value: fmtMinutes(emp.summary.total_late_out_minutes), color: 'text-cyan-700' },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="text-center text-sm">
                                                     {emp.summary.total_hours.toFixed(1)}h

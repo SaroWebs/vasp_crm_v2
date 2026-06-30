@@ -1009,7 +1009,7 @@ class AttendanceController extends Controller
      * Compute summary stats for a collection of attendance records for a given date range.
      *
      * @param  Collection<int, Attendance>  $records
-     * @return array{total_days: int, total_working_days: int, present_days: int, absent_days: int, paid_leave_days: int, unpaid_leave_days: int, leave_days: int, holiday_days: int, remote_days: int, field_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_out_minutes: int, total_overtime_minutes: int, total_hours: float}
+     * @return array{total_days: int, total_working_days: int, present_days: int, absent_days: int, paid_leave_days: int, unpaid_leave_days: int, leave_days: int, holiday_days: int, remote_days: int, field_days: int, late_days: int, early_out_days: int, total_late_minutes: int, total_early_in_minutes: int, total_early_out_minutes: int, total_late_out_minutes: int, total_overtime_minutes: int, total_hours: float}
      */
     private function computeSummary(Employee $employee, Collection $records, Carbon $startDate, Carbon $endDate): array
     {
@@ -1106,7 +1106,9 @@ class AttendanceController extends Controller
         $lateDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_late_in'] ?? false)->count();
         $earlyOutDays = $dailyShiftMetrics->filter(fn (array $metrics) => $metrics['is_early_out'] ?? false)->count();
         $totalLateMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_in_minutes'] ?? 0);
+        $totalEarlyInMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_in_minutes'] ?? 0);
         $totalEarlyOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['early_out_minutes'] ?? 0);
+        $totalLateOutMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['late_out_minutes'] ?? 0);
         $totalOvertimeMinutes = (int) $dailyShiftMetrics->sum(fn (array $metrics) => $metrics['overtime_minutes'] ?? 0);
 
         $totalHours = $dailyShiftMetrics->sum(function (array $metrics) {
@@ -1132,7 +1134,9 @@ class AttendanceController extends Controller
             'late_days' => $lateDays,
             'early_out_days' => $earlyOutDays,
             'total_late_minutes' => $totalLateMinutes,
+            'total_early_in_minutes' => $totalEarlyInMinutes,
             'total_early_out_minutes' => $totalEarlyOutMinutes,
+            'total_late_out_minutes' => $totalLateOutMinutes,
             'total_overtime_minutes' => $totalOvertimeMinutes,
             'total_hours' => round($totalHours, 2),
         ];

@@ -1,5 +1,5 @@
 import AdminScreen from "@/components/dash/AdminScreen";
-import EmployeeScreen from "@/components/dash/AdminScreen";
+import EmployeeScreen from "@/components/dash/EmployeeScreen";
 import AppLayout from "@/layouts/app-layout";
 import { Auth, BreadcrumbItem } from "@/types";
 import { Head, usePage } from "@inertiajs/react";
