@@ -18,15 +18,15 @@ export default function DashboardStatsWidget({ dashboardType, userId }: Dashboar
     if (dashboardType === 'manager') {
         return (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <StatCard title="Team Members" value={stats?.total_team_members || 0} icon={Users} />
-                <StatCard title="Department Tasks" value={stats?.total_department_tasks || 0} icon={FolderKanban} />
+                <StatCard title="Team Members" value={String(stats?.total_team_members || 0)} icon={Users} />
+                <StatCard title="Department Tasks" value={String(stats?.total_department_tasks || 0)} icon={FolderKanban} />
                 <StatCard
                     title="Tasks Due This Week"
-                    value={stats?.tasks_due_this_week || 0}
+                    value={String(stats?.tasks_due_this_week || 0)}
                     icon={Clock}
-                    variant={stats?.tasks_due_this_week && stats.tasks_due_this_week > 0 ? 'warning' : 'default'}
+                    variant={stats?.tasks_due_this_week && Number(stats.tasks_due_this_week) > 0 ? 'warning' : 'default'}
                 />
-                <StatCard title="Overdue Tasks" value={stats?.overdue_tasks || 0} icon={AlertCircle} variant="destructive" />
+                <StatCard title="Overdue Tasks" value={String(stats?.overdue_tasks || 0)} icon={AlertCircle} variant="destructive" />
             </div>
         );
     }
@@ -37,7 +37,7 @@ export default function DashboardStatsWidget({ dashboardType, userId }: Dashboar
                 <WizCardDesign1
                     title={"Due Today"}
                     text={""}
-                    stats={stats?.tasks_due_today || 0}
+                    stats={Number(stats?.tasks_due_today || 0)}
                     icon={Calendar}
                     color={'orange'}
                     link={'/my/tasks?filter=pending&due=today'}
@@ -45,7 +45,7 @@ export default function DashboardStatsWidget({ dashboardType, userId }: Dashboar
                 <WizCardDesign1
                    title={"Overdue"}
                     text={""}
-                    stats={stats?.overdue_tasks || 0}
+                    stats={Number(stats?.overdue_tasks || 0)}
                     icon={AlertCircle}
                     color={'red'}
                     link={'/my/tasks?filter=pending'}
@@ -54,7 +54,7 @@ export default function DashboardStatsWidget({ dashboardType, userId }: Dashboar
                 <WizCardDesign1
                     title={"In Progress"}
                     text={""}
-                    stats={stats?.in_progress_tasks || 0}
+                    stats={Number(stats?.in_progress_tasks || 0)}
                     icon={Clock}
                     color={'blue'}
                     link={'/my/tasks?filter=in_progress'}
@@ -62,7 +62,7 @@ export default function DashboardStatsWidget({ dashboardType, userId }: Dashboar
                 <WizCardDesign1
                     title={"Completed This Month"}
                     text={""}
-                    stats={stats?.completed_this_month || 0}
+                    stats={Number(stats?.completed_this_month || 0)}
                     icon={CheckCircle}
                     color={'green'}
                     link={'/my/tasks?filter=done'}

@@ -28,7 +28,6 @@ export default function AdminDashboard({ auth }: AdminDashboardProps) {
 
     const statNumber = (key: string): number => {
         const value = dashboardStats[key];
-
         return typeof value === 'number' ? value : 0;
     };
     const statDistribution = (key: string): Record<string, number> | undefined => {
