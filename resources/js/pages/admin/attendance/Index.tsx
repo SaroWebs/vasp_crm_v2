@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import DailyAttendancePanel from '@/components/admin/employees/DailyAttendancePanel';
 import { LeavePanel } from '@/components/admin/employees/LeavePanel';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
     Alert,
@@ -18,7 +18,6 @@ import {
     Text,
 } from '@mantine/core';
 import { CalendarClock, CheckCircle2, ListChecks, RotateCcw, UserCog, XCircle } from 'lucide-react';
-import ShiftChangePanel from '@/components/admin/employees/ShiftChangePanel';
 import { AttendanceSummaryTab } from '@/components/attendance';
 
 
@@ -92,7 +91,7 @@ function RequestQueue() {
     const [type, setType] = useState<string | null>('all');
     const [actingId, setActingId] = useState<string | null>(null);
 
-    const fetchQueue = async () => {
+    const fetchQueue = useCallback(async () => {
         setLoading(true);
         setError('');
 
@@ -147,11 +146,11 @@ function RequestQueue() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [status]);
 
     useEffect(() => {
         fetchQueue();
-    }, [status]);
+    }, [fetchQueue]);
 
     const filteredItems = useMemo(() => {
         if (!type || type === 'all') {
@@ -307,7 +306,7 @@ function AssignmentPanel({ employees }: { employees: Employee[] }) {
             {employeeId ? (
                 <LeavePanel employeeId={employeeId} />
             ) : (
-                <Alert color="yellow">Select an employee to assign leave, remote work, or field work.</Alert>
+                <Alert color="yellow">Select an employee to manage leave, remote work, field work, or shift assignments.</Alert>
             )}
         </Stack>
     );
@@ -333,7 +332,6 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
                             <Tabs.Tab value="daily" leftSection={<CalendarClock size={16} />}>Daily Attendance</Tabs.Tab>
                             <Tabs.Tab value="requests" leftSection={<ListChecks size={16} />}>Requests</Tabs.Tab>
                             <Tabs.Tab value="assignments" leftSection={<UserCog size={16} />}>Assignments</Tabs.Tab>
-                            <Tabs.Tab value="shifts" leftSection={<UserCog size={16} />}>Shifts</Tabs.Tab>
                         </Tabs.List>
                         <Tabs.Panel value="summary" pt="md">
                             {activeTab === 'summary' && <AttendanceSummaryTab />}
@@ -349,11 +347,6 @@ export default function AdminAttendancePage({ employees }: AdminAttendancePagePr
                         <Tabs.Panel value="assignments" pt="md">
                             {activeTab === 'assignments' && <AssignmentPanel employees={employees} />}
                         </Tabs.Panel>
-
-                        <Tabs.Panel value="shifts" pt="md">
-                            {activeTab === 'shifts' && <ShiftChangePanel employees={employees} selectedId={null} />}
-                        </Tabs.Panel>
-
                     </Tabs>
                 </div>
             </AppLayout>

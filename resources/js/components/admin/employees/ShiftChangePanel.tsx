@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { DateInput } from '@mantine/dates';
 import axios from "axios";
-import { Alert, Badge, Button, Card, Divider, Group, Loader, Select, Stack, Table, Tabs, Textarea, ThemeIcon, Tooltip } from "@mantine/core";
-import { ExternalLink, AlertCircle, CheckCircle2, UserCog, Calendar, Clock, Info } from "lucide-react";
+import { Alert, Badge, Button, Card, Divider, Group, Loader, Select, Stack, Table, Tabs, Text, Textarea } from "@mantine/core";
+import { ExternalLink, AlertCircle, CheckCircle2, UserCog, Calendar, Clock, Info, Users } from "lucide-react";
 
 interface Employee {
     id: number;
@@ -110,12 +110,10 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
         const loadShiftData = async () => {
             setLoadingHistory(true);
             try {
-                const response = await axios.get(`/admin/employees/${employeeId}`, {
-                    headers: { Accept: 'application/json' },
-                });
-                const data = response.data.employee ?? response.data;
-                setCurrentShift(data.currentShiftAssignment ?? null);
-                setShiftHistory(data.shiftAssignmentHistory ?? []);
+                const response = await axios.get(`/admin/api/employees/${employeeId}/shift-assignments`);
+                const assignments = (response.data.data ?? []) as ShiftAssignment[];
+                setCurrentShift(assignments.find((assignment) => assignment.is_active) ?? null);
+                setShiftHistory(assignments);
             } catch (error) {
                 console.error('Failed to load shift data:', error);
                 setCurrentShift(null);
@@ -158,12 +156,10 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
 
             // Reload shift data
             if (employeeId) {
-                const response = await axios.get(`/admin/employees/${employeeId}`, {
-                    headers: { Accept: 'application/json' },
-                });
-                const data = response.data.employee ?? response.data;
-                setCurrentShift(data.currentShiftAssignment ?? null);
-                setShiftHistory(data.shiftAssignmentHistory ?? []);
+                const response = await axios.get(`/admin/api/employees/${employeeId}/shift-assignments`);
+                const assignments = (response.data.data ?? []) as ShiftAssignment[];
+                setCurrentShift(assignments.find((assignment) => assignment.is_active) ?? null);
+                setShiftHistory(assignments);
             }
 
             setMessage({ type: 'success', text: 'Shift changed successfully.' });
@@ -171,19 +167,51 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
             setEffectiveFrom('');
             setEffectiveTo('');
             setNotes('');
-        } catch (err: any) {
-            setMessage({ type: 'error', text: err.response?.data?.message ?? 'Failed to change shift.' });
+        } catch (error: unknown) {
+            setMessage({
+                type: 'error',
+                text: axios.isAxiosError(error)
+                    ? error.response?.data?.message ?? 'Failed to change shift.'
+                    : 'Failed to change shift.',
+            });
         } finally {
             setSaving(false);
         }
     };
 
     const selectedShift = shiftId ? shifts.find(s => String(s.id) === shiftId) : null;
+    const availableEmployees = employees.length > 0 ? employees : employeeList;
+    const selectedEmployee = availableEmployees.find((employee) => String(employee.id) === employeeId);
 
     return (
-        <Stack gap="lg">
-            <Tabs defaultValue="change" orientation="vertical">
-                <Tabs.List>
+        <Stack gap="md">
+            <Card withBorder radius="md" padding="lg">
+                <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <div>
+                        <Group gap="xs">
+                            <Users size={18} />
+                            <Text fw={600}>Employee shift workspace</Text>
+                        </Group>
+                        <Text size="sm" c="dimmed" mt={4}>
+                            Select an employee once to review their current assignment, history, or schedule a change.
+                        </Text>
+                    </div>
+                    <Select
+                        label="Employee"
+                        placeholder="Select employee"
+                        searchable
+                        clearable
+                        value={employeeId}
+                        onChange={setEmployeeId}
+                        data={employeeOptions(availableEmployees)}
+                        disabled={selectedId !== null}
+                        className="w-full sm:w-80"
+                    />
+                </Group>
+            </Card>
+
+            <Tabs defaultValue="change">
+                <Tabs.List grow>
                     <Tabs.Tab value="change" leftSection={<UserCog size={16} />}>
                         Change Shift
                     </Tabs.Tab>
@@ -195,23 +223,14 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
                     </Tabs.Tab>
                 </Tabs.List>
 
-                <Tabs.Panel value="change" className="flex-1">
+                <Tabs.Panel value="change" pt="md">
                     <Stack gap="md">
-                        {/* Employee Selection */}
-                        <Card withBorder>
-                            <Stack gap="sm">
-                                <Select
-                                    label="Employee"
-                                    placeholder="Select employee"
-                                    searchable
-                                    clearable
-                                    value={employeeId}
-                                    onChange={setEmployeeId}
-                                    data={employeeOptions(employees.length > 0 ? employees : employeeList)}
-                                    disabled={selectedId !== null}
-                                />
-                            </Stack>
-                        </Card>
+                        {selectedEmployee && (
+                            <Text size="sm" c="dimmed">
+                                Changing shift for <Text span fw={600} c="inherit">{selectedEmployee.name}</Text>
+                                {selectedEmployee.code ? ` (${selectedEmployee.code})` : ''}.
+                            </Text>
+                        )}
 
                         {/* Shift Selection */}
                         <Card withBorder>
@@ -257,7 +276,7 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
                         {/* Effective Dates */}
                         <Card withBorder>
                             <Stack gap="sm">
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <DateInput
                                         label="Effective From *"
                                         placeholder="YYYY-MM-DD"
@@ -320,7 +339,7 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
                     </Stack>
                 </Tabs.Panel>
 
-                <Tabs.Panel value="current" className="flex-1">
+                <Tabs.Panel value="current" pt="md">
                     <Stack gap="md">
                         {loadingHistory ? (
                             <div className="flex justify-center py-8">
@@ -340,7 +359,7 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
 
                                     <Divider />
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                         <div>
                                             <Group gap="xs" mb="xs">
                                                 <Clock size={16} className="text-gray-600" />
@@ -385,7 +404,7 @@ function ShiftChangePanel({ employees = [], selectedId = null }: { employees: Em
                     </Stack>
                 </Tabs.Panel>
 
-                <Tabs.Panel value="history" className="flex-1">
+                <Tabs.Panel value="history" pt="md">
                     <Stack gap="md">
                         {loadingHistory ? (
                             <div className="flex justify-center py-8">

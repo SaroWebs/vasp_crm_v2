@@ -434,6 +434,7 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
         Route::patch('/api/shifts/{shift}', [ShiftController::class, 'updateShift'])->name('api.shifts.update');
         Route::delete('/api/shifts/{shift}', [ShiftController::class, 'destroyShift'])->name('api.shifts.destroy');
         Route::get('/api/shift-assignments', [ShiftController::class, 'assignments'])->name('api.shift-assignments.list');
+        Route::get('/api/employees/{employee}/shift-assignments', [ShiftController::class, 'employeeAssignments'])->name('api.employees.shift-assignments');
         Route::post('/api/shift-assignments', [ShiftController::class, 'storeAssignment'])->name('api.shift-assignments.store');
         Route::patch('/api/shift-assignments/{assignment}', [ShiftController::class, 'updateAssignment'])->name('api.shift-assignments.update');
         Route::delete('/api/shift-assignments/{assignment}', [ShiftController::class, 'destroyAssignment'])->name('api.shift-assignments.destroy');

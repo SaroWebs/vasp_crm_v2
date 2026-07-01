@@ -129,4 +129,106 @@ class ShiftAssignmentTest extends TestCase
             );
         }
     }
+
+    public function test_admin_can_fetch_an_employees_current_shift_and_assignment_history(): void
+    {
+        $role = Role::create([
+            'name' => 'Admin',
+            'slug' => 'admin',
+            'guard_name' => 'web',
+        ]);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $this->withoutMiddleware(VerifyCsrfToken::class);
+        $this->withoutMiddleware(ValidateUserSession::class);
+        $this->actingAs($user, 'web');
+
+        $employee = Employee::factory()->create();
+        $previousShift = Shift::create([
+            'name' => 'Morning Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '17:00:00',
+            'grace_minutes' => 10,
+            'is_active' => true,
+        ]);
+        $currentShift = Shift::create([
+            'name' => 'Evening Shift',
+            'start_time' => '14:00:00',
+            'end_time' => '22:00:00',
+            'grace_minutes' => 5,
+            'is_active' => true,
+        ]);
+
+        EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $previousShift->id,
+            'effective_from' => Carbon::today()->subMonth()->toDateString(),
+            'effective_to' => Carbon::today()->subDay()->toDateString(),
+            'is_active' => false,
+        ]);
+        $currentAssignment = EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $currentShift->id,
+            'effective_from' => Carbon::today()->toDateString(),
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
+        $this->getJson("/admin/api/employees/{$employee->id}/shift-assignments")
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $currentAssignment->id)
+            ->assertJsonPath('data.0.shift.name', 'Evening Shift')
+            ->assertJsonPath('data.0.employee_id', $employee->id);
+    }
+
+    public function test_admin_can_edit_and_deactivate_an_expired_shift_assignment(): void
+    {
+        $role = Role::create([
+            'name' => 'Admin',
+            'slug' => 'admin',
+            'guard_name' => 'web',
+        ]);
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $this->withoutMiddleware(VerifyCsrfToken::class);
+        $this->withoutMiddleware(ValidateUserSession::class);
+        $this->actingAs($user, 'web');
+
+        $employee = Employee::factory()->create();
+        $shift = Shift::create([
+            'name' => 'Morning Shift',
+            'start_time' => '09:00:00',
+            'end_time' => '17:00:00',
+            'grace_minutes' => 10,
+            'is_active' => true,
+        ]);
+        $assignment = EmployeeShiftAssignment::create([
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => Carbon::today()->subMonth()->toDateString(),
+            'effective_to' => null,
+            'is_active' => true,
+        ]);
+
+        $effectiveTo = Carbon::today()->subDay()->toDateString();
+
+        $this->patchJson("/admin/api/shift-assignments/{$assignment->id}", [
+            'employee_id' => $employee->id,
+            'shift_id' => $shift->id,
+            'effective_from' => Carbon::today()->subMonth()->toDateString(),
+            'effective_to' => $effectiveTo,
+            'is_active' => false,
+        ])->assertOk()
+            ->assertJsonPath('data.is_active', false);
+
+        $this->assertDatabaseHas('employee_shift_assignments', [
+            'id' => $assignment->id,
+            'effective_to' => Carbon::parse($effectiveTo)->startOfDay(),
+            'is_active' => false,
+        ]);
+    }
 }

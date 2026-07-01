@@ -14,7 +14,7 @@ import {
 import {
     CheckCircle2, XCircle, Clock, AlertCircle,
     CalendarDays, TrendingUp, Ban, MapPin, Laptop, Plus,
-    Edit2, Trash2, ChevronDown, ChevronUp, Loader2, ExternalLink,
+    Edit2, Trash2, ChevronDown, ChevronUp, Loader2, ExternalLink, CalendarClock,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -90,8 +90,26 @@ interface FieldWorkAssignment {
     approved_by_user?: { name: string } | null;
 }
 
+interface Shift {
+    id: number;
+    name: string;
+    start_time: string;
+    end_time: string;
+    is_active: boolean;
+}
+
+interface ShiftAssignment {
+    id: number;
+    employee_id: number;
+    shift_id: number;
+    effective_from: string;
+    effective_to: string | null;
+    is_active: boolean;
+    shift?: Shift;
+}
+
 type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
-type PanelView = 'leaves' | 'remote' | 'field';
+type PanelView = 'leaves' | 'remote' | 'field' | 'shift';
 
 interface LeavePanelProps {
     employeeId: number | string;
@@ -135,6 +153,12 @@ function apiErr(e: unknown): string {
     if (!axios.isAxiosError(e)) return 'Unexpected error.';
     const d = e.response?.data;
     return d?.message ?? d?.error ?? e.message ?? 'Request failed.';
+}
+
+function isShiftAssignmentActive(assignment: ShiftAssignment): boolean {
+    const today = new Date().toISOString().slice(0, 10);
+
+    return assignment.is_active && (!assignment.effective_to || assignment.effective_to >= today);
 }
 
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
@@ -525,6 +549,170 @@ function FieldRow({ fw, onEdit, onAction, onDelete }: {
 
 // ─── Assign Leave Dialog ──────────────────────────────────────────────────────
 
+function ShiftAssignmentsTable({ assignments, onEdit }: {
+    assignments: ShiftAssignment[];
+    onEdit: (assignment: ShiftAssignment) => void;
+}) {
+    return (
+        <div className="overflow-x-auto rounded-lg border bg-card">
+            <table className="w-full min-w-[640px] text-left text-xs">
+                <thead className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                        <th className="px-3 py-2.5 font-semibold">Shift Name</th>
+                        <th className="px-3 py-2.5 font-semibold">From</th>
+                        <th className="px-3 py-2.5 font-semibold">To</th>
+                        <th className="px-3 py-2.5 font-semibold">Status</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y">
+                    {assignments.map((assignment) => {
+                        const active = isShiftAssignmentActive(assignment);
+
+                        return (
+                            <tr key={assignment.id} className="transition-colors hover:bg-muted/30">
+                                <td className="px-3 py-3">
+                                    <div className="font-semibold text-foreground">{assignment.shift?.name ?? 'Unknown shift'}</div>
+                                    {assignment.shift && <div className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
+                                        {assignment.shift.start_time.slice(0, 5)}–{assignment.shift.end_time.slice(0, 5)}
+                                    </div>}
+                                </td>
+                                <td className="px-3 py-3 tabular-nums">{fmt(assignment.effective_from)}</td>
+                                <td className="px-3 py-3 tabular-nums">{assignment.effective_to ? fmt(assignment.effective_to) : 'Ongoing'}</td>
+                                <td className="px-3 py-3">
+                                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${active
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
+                                        : 'border-border bg-muted/60 text-muted-foreground'}`}>
+                                        <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-muted-foreground/50'}`} />
+                                        {active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td className="px-3 py-3 text-right">
+                                    <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => onEdit(assignment)}>
+                                        <Edit2 className="mr-1 h-3.5 w-3.5" />Edit
+                                    </Button>
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+interface ShiftAssignmentForm {
+    shift_id: string;
+    effective_from: string;
+    effective_to: string;
+}
+
+const EMPTY_SHIFT_ASSIGNMENT_FORM: ShiftAssignmentForm = { shift_id: '', effective_from: '', effective_to: '' };
+
+function ShiftAssignmentDialog({ open, onOpenChange, employeeId, shifts, editing, onSuccess }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    employeeId: number | string;
+    shifts: Shift[];
+    editing: ShiftAssignment | null;
+    onSuccess: () => void;
+}) {
+    const id = useId();
+    const [form, setForm] = useState<ShiftAssignmentForm>(EMPTY_SHIFT_ASSIGNMENT_FORM);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        setForm(editing ? {
+            shift_id: String(editing.shift_id),
+            effective_from: editing.effective_from.slice(0, 10),
+            effective_to: editing.effective_to?.slice(0, 10) ?? '',
+        } : EMPTY_SHIFT_ASSIGNMENT_FORM);
+        setError('');
+    }, [editing, open]);
+
+    async function submit() {
+        if (!form.shift_id || !form.effective_from) {
+            setError('Shift and effective from date are required.');
+            return;
+        }
+        if (form.effective_to && form.effective_to < form.effective_from) {
+            setError('Effective to date cannot be before the effective from date.');
+            return;
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const payload = {
+            employee_id: Number(employeeId),
+            shift_id: Number(form.shift_id),
+            effective_from: form.effective_from,
+            effective_to: form.effective_to || null,
+            is_active: !form.effective_to || form.effective_to >= today,
+        };
+
+        setSaving(true);
+        setError('');
+        try {
+            if (editing) {
+                await axios.patch(`/admin/api/shift-assignments/${editing.id}`, payload);
+            } else {
+                await axios.post('/admin/api/shift-assignments', payload);
+            }
+            onOpenChange(false);
+            onSuccess();
+        } catch (e) {
+            setError(apiErr(e));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-md">
+                <DialogHeader><DialogTitle>{editing ? 'Edit Shift Assignment' : 'Assign Shift'}</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                    <div className="space-y-1.5">
+                        <Label htmlFor={`${id}-shift`} className="text-xs">Shift *</Label>
+                        <Select value={form.shift_id} onValueChange={(value) => setForm((current) => ({ ...current, shift_id: value }))}>
+                            <SelectTrigger id={`${id}-shift`} className="h-9 text-xs"><SelectValue placeholder="Select shift" /></SelectTrigger>
+                            <SelectContent>
+                                {shifts.filter((shift) => shift.is_active || shift.id === editing?.shift_id).map((shift) => (
+                                    <SelectItem key={shift.id} value={String(shift.id)} className="text-xs">
+                                        {shift.name} ({shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <Label htmlFor={`${id}-from`} className="text-xs">From *</Label>
+                            <Input id={`${id}-from`} type="date" className="h-9 text-xs" value={form.effective_from}
+                                onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor={`${id}-to`} className="text-xs">To</Label>
+                            <Input id={`${id}-to`} type="date" className="h-9 text-xs" min={form.effective_from || undefined}
+                                value={form.effective_to}
+                                onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} />
+                            <p className="text-[10px] text-muted-foreground">Leave blank for an ongoing assignment.</p>
+                        </div>
+                    </div>
+                    {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button size="sm" onClick={submit} disabled={saving || shifts.length === 0}>
+                        {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        {editing ? 'Save Changes' : 'Assign Shift'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function AssignLeaveDialog({ open, onOpenChange, employeeId, leaveTypes, onSuccess }: {
     open: boolean;
     onOpenChange: (o: boolean) => void;
@@ -876,20 +1064,25 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
     const [remoteAssign, setRemoteAssign] = useState<RemoteWorkAssignment[]>([]);
     const [fieldWork, setFieldWork] = useState<FieldWorkAssignment[]>([]);
     const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+    const [shiftAssignments, setShiftAssignments] = useState<ShiftAssignment[]>([]);
+    const [shifts, setShifts] = useState<Shift[]>([]);
 
     // Loading / error per section
     const [balL, setBalL] = useState(false); const [balE, setBalE] = useState('');
     const [reqL, setReqL] = useState(false); const [reqE, setReqE] = useState('');
     const [remL, setRemL] = useState(false); const [remE, setRemE] = useState('');
     const [fwL, setFwL] = useState(false); const [fwE, setFwE] = useState('');
+    const [shiftL, setShiftL] = useState(false); const [shiftE, setShiftE] = useState('');
     const [delL, setDelL] = useState(false);
 
     // Dialog state
     const [leaveOpen, setLeaveOpen] = useState(false);
     const [remoteAssignOpen, setRemoteAssignOpen] = useState(false);
     const [fieldOpen, setFieldOpen] = useState(false);
+    const [shiftOpen, setShiftOpen] = useState(false);
     const [editingFw, setEditingFw] = useState<FieldWorkAssignment | null>(null);
     const [editingRemoteAssign, setEditingRemoteAssign] = useState<RemoteWorkAssignment | null>(null);
+    const [editingShift, setEditingShift] = useState<ShiftAssignment | null>(null);
     const [deleteId, setDeleteId] = useState<{ type: 'field' | 'remote'; id: number } | null>(null);
 
     // ── Fetchers ────────────────────────────────────────────────────────────
@@ -933,6 +1126,22 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
         } catch (e) { setFwE(apiErr(e)); } finally { setFwL(false); }
     }, [employeeId]);
 
+    const fetchShiftAssignments = useCallback(async () => {
+        setShiftL(true); setShiftE('');
+        try {
+            const [assignmentsResponse, shiftsResponse] = await Promise.all([
+                axios.get(`/admin/api/employees/${employeeId}/shift-assignments`),
+                axios.get('/admin/api/shifts'),
+            ]);
+            setShiftAssignments(unpack<ShiftAssignment>(assignmentsResponse.data));
+            setShifts(unpack<Shift>(shiftsResponse.data));
+        } catch (e) {
+            setShiftE(apiErr(e));
+        } finally {
+            setShiftL(false);
+        }
+    }, [employeeId]);
+
     const fetchLeaveTypes = useCallback(async () => {
         try {
             // GET /api/leave-types?active_only=true
@@ -953,8 +1162,9 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
         fetchRemote(year);
         fetchRemoteAssign(year);
         fetchField(year);
+        fetchShiftAssignments();
         setFilter('all');
-    }, [year, fetchBalances, fetchLeaveReqs, fetchRemote, fetchRemoteAssign, fetchField]);
+    }, [year, fetchBalances, fetchLeaveReqs, fetchRemote, fetchRemoteAssign, fetchField, fetchShiftAssignments]);
 
     // ── Delete operations ────────────────────────────────────────────────────
 
@@ -979,11 +1189,18 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
     const pendingRemote = remoteReqs.filter((r) => r.status === 'pending').length;
     const filteredLeave = filter === 'all' ? leaveReqs : leaveReqs.filter((r) => r.status === filter);
     const filteredRemote = filter === 'all' ? remoteReqs : remoteReqs.filter((r) => r.status === filter);
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+    const visibleShiftAssignments = shiftAssignments.filter((assignment) => (
+        assignment.effective_from.slice(0, 10) <= yearEnd
+        && (!assignment.effective_to || assignment.effective_to.slice(0, 10) >= yearStart)
+    ));
 
     const VIEW_CONFIG: Record<PanelView, { label: string; pending?: number }> = {
         leaves: { label: 'Leave', pending: pendingLeave },
         remote: { label: 'Remote Work', pending: pendingRemote },
         field: { label: 'Field Work', pending: 0 },
+        shift: { label: 'Shift', pending: 0 },
     };
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -1150,6 +1367,26 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                         }
                     </section>
                 )}
+
+                {view === 'shift' && (
+                    <section className="space-y-2.5">
+                        <SectionHead icon={CalendarClock} title={`Shift Assignments — ${year}`}
+                            action={
+                                <Button size="sm" className="h-8 text-xs"
+                                    onClick={() => { setEditingShift(null); setShiftOpen(true); }}>
+                                    <Plus className="mr-1 h-3.5 w-3.5" />Assign Shift
+                                </Button>
+                            }
+                        />
+                        {shiftL ? <Skeleton rows={3} h="h-14" />
+                            : shiftE ? <SectionErr msg={shiftE} onRetry={fetchShiftAssignments} />
+                                : visibleShiftAssignments.length === 0
+                                    ? <Empty icon={CalendarClock} msg={`No shift assignments found for ${year}.`} />
+                                    : <ShiftAssignmentsTable assignments={visibleShiftAssignments}
+                                        onEdit={(assignment) => { setEditingShift(assignment); setShiftOpen(true); }} />
+                        }
+                    </section>
+                )}
             </div>
 
             {/* ── Dialogs ── */}
@@ -1168,6 +1405,11 @@ export function LeavePanel({ employeeId }: LeavePanelProps) {
                 open={fieldOpen} onOpenChange={setFieldOpen}
                 employeeId={employeeId} editing={editingFw}
                 onSuccess={() => fetchField(year)}
+            />
+            <ShiftAssignmentDialog
+                open={shiftOpen} onOpenChange={setShiftOpen}
+                employeeId={employeeId} shifts={shifts} editing={editingShift}
+                onSuccess={fetchShiftAssignments}
             />
             <DeleteDialog
                 open={deleteId !== null} onOpenChange={(o) => { if (!o) setDeleteId(null); }}
