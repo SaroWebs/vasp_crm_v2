@@ -50,7 +50,19 @@ export default function EmployeeDashboard({ auth }: EmployeeDashboardProps) {
     }, [auth?.user?.id]);
 
     useEffect(() => {
-        loadBoardTasks();
+        const loadAfterPageReady = () => {
+            window.setTimeout(() => {
+                void loadBoardTasks();
+            }, 0);
+        };
+
+        if (document.readyState === 'complete') {
+            loadAfterPageReady();
+        } else {
+            window.addEventListener('load', loadAfterPageReady, { once: true });
+        }
+
+        return () => window.removeEventListener('load', loadAfterPageReady);
     }, [loadBoardTasks]);
 
     return (
@@ -85,12 +97,8 @@ export default function EmployeeDashboard({ auth }: EmployeeDashboardProps) {
                         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
                             {boardError}
                         </div>
-                    ) : boardLoading ? (
-                        <div className="py-8 text-center text-muted-foreground">
-                            Loading task board...
-                        </div>
                     ) : (
-                        <Board tasks={boardTasks} loadTasks={loadBoardTasks} />
+                        <Board tasks={boardTasks} loadTasks={loadBoardTasks} isLoading={boardLoading} />
                     )}
                 </CardContent>
             </Card>

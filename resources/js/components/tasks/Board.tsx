@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export interface BoardProps {
   tasks: Task[];
-  loadTasks: () => void;
+  loadTasks: () => void | Promise<void>;
   isLoading?: boolean;
 }
 
@@ -165,7 +165,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
     axios.patch(`/data/tasks/${taskId}/status`, { state: newStatus })
       .then(async () => {
         await handleTaskStatusChange(taskId, newStatus);
-        loadTasks();
+        await loadTasks();
       })
       .catch(() => {
         setError('Failed to update task status');
@@ -176,7 +176,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
   };
 
   const handleTaskAction = async () => {
-    loadTasks();
+    await loadTasks();
   };
 
   const isRecentlyCompleted = (task: Task) => {
@@ -203,7 +203,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
   };
 
   const handleCreateSuccess = () => {
-    loadTasks();
+    void loadTasks();
   };
 
   if (loading || isLoading) {
