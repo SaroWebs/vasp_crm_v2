@@ -68,7 +68,10 @@ class AdminDashboardController extends Controller
             $tasks = $this->dashboardService->getMyTasks($user);
         }
 
-        return response()->json(['tasks' => $tasks]);
+        return response()
+            ->json(['tasks' => $tasks])
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache');
     }
 
     public function getActivities(Request $request)

@@ -2,12 +2,13 @@ import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import { Auth } from "@/types";
 import WizCardDesign1 from "../wizards/WizCardDesign1";
 import { AlertCircle, Calendar, CheckCircle, Clock } from "lucide-react";
+import { AttendanceCalendar } from "../attendance";
+import DashboardTasksWidget from "../dashboard/widgets/DashboardTasksWidget";
 
 interface EmployeeScreenProps{
     auth?: Auth | null;
 }
 const EmployeeScreen = ({auth}:EmployeeScreenProps) => {
-
     const { stats } = useDashboardStats(auth?.user?.id);
     const wizData = [
         {
@@ -43,6 +44,7 @@ const EmployeeScreen = ({auth}:EmployeeScreenProps) => {
             link: '/my/tasks?filter=done'
         }
     ] as const;
+
     return(
         <div className="">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -59,7 +61,8 @@ const EmployeeScreen = ({auth}:EmployeeScreenProps) => {
                 ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-                
+                <DashboardTasksWidget />
+                <AttendanceCalendar auth={auth} />
             </div>
         </div>
     );

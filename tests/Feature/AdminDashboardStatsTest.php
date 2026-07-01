@@ -104,6 +104,33 @@ class AdminDashboardStatsTest extends TestCase
             ->missing('taskStats'));
     }
 
+    public function test_dashboard_tasks_endpoint_is_not_cached(): void
+    {
+        $role = Role::create([
+            'name' => 'Admin',
+            'slug' => 'admin',
+            'guard_name' => 'web',
+        ]);
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $dashboardService = Mockery::mock(DashboardService::class);
+        $dashboardService->shouldReceive('getRecentTasks')->once()->andReturn(collect());
+        $this->app->instance(DashboardService::class, $dashboardService);
+
+        $response = $this->actingAs($user, 'web')->getJson('/admin/api/dashboard/tasks');
+
+        $response
+            ->assertOk()
+            ->assertHeader('Pragma', 'no-cache')
+            ->assertJson(['tasks' => []]);
+
+        $cacheControl = $response->headers->get('Cache-Control', '');
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+        $this->assertStringContainsString('must-revalidate', $cacheControl);
+    }
+
     private function createTicket(Client $client, string $ticketNumber, string $status, Carbon $createdAt): Ticket
     {
         return Ticket::unguarded(fn () => Ticket::create([
