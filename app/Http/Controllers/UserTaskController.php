@@ -168,6 +168,8 @@ class UserTaskController extends TimeTrackingController
                     ->unique()
                     ->count()
             );
+            $task->setAttribute('total_working_time_spent', $task->total_working_time_spent);
+            $task->setAttribute('total_working_time_spent_seconds', $task->total_working_time_spent_seconds);
 
             $this->appendForwardingMeta($task);
         });
@@ -239,6 +241,8 @@ class UserTaskController extends TimeTrackingController
                     ->unique()
                     ->count()
             );
+            $task->setAttribute('total_working_time_spent', $task->total_working_time_spent);
+            $task->setAttribute('total_working_time_spent_seconds', $task->total_working_time_spent_seconds);
 
             $this->appendForwardingMeta($task);
         });

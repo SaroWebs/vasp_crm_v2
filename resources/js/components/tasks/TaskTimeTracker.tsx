@@ -46,14 +46,29 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, in
     [timeEntries, taskId, initialTask?.time_entries],
   );
   const isMyTracking = Boolean(task?.my_is_tracking);
-  const isTaskTimerActive = activeTaskId === taskId && isMyTracking;
   const showOverdueDialog = Boolean(overdueWarning && overdueWarning.taskId === taskId);
-  const taskWorkingTimeData: WorkingTimeData | null = task?.total_working_time_spent
-    ? {
-        total_working_time_spent: task.total_working_time_spent_seconds,
-        total_working_time_spent_hours: task.total_working_time_spent
-      }
-    : null;
+  const isInitialActiveTask = !activeTaskId && isMyTracking;
+  const isTaskTimerActive = (activeTaskId === taskId || isInitialActiveTask) && isMyTracking;
+  const taskWorkingTimeData: WorkingTimeData | null = useMemo(() => {
+    const seconds = Number(task?.total_working_time_spent_seconds);
+    const hours = Number(task?.total_working_time_spent);
+
+    if (Number.isFinite(seconds)) {
+      return {
+        total_working_time_spent: seconds,
+        total_working_time_spent_hours: Number.isFinite(hours) ? hours : seconds / 3600,
+      };
+    }
+
+    if (Number.isFinite(hours)) {
+      return {
+        total_working_time_spent: hours * 3600,
+        total_working_time_spent_hours: hours,
+      };
+    }
+
+    return null;
+  }, [task?.total_working_time_spent, task?.total_working_time_spent_seconds]);
 
   const pauseTaskAndRefresh = useCallback(async () => {
     await pauseTask(taskId);
@@ -115,6 +130,21 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, in
       if (interval) clearInterval(interval);
     };
   }, [isTaskTimerActive, taskId, getWorkingTimeSpent, refreshTaskData]);
+
+  useEffect(() => {
+    if (!isTaskTimerActive) {
+      return;
+    }
+
+    void getWorkingTimeSpent(taskId)
+      .then((data) => {
+        setWorkingTimeData(data);
+        setLocalSecondsElapsed(0);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch working time data:', err);
+      });
+  }, [isTaskTimerActive, taskId, getWorkingTimeSpent]);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds) || !isFinite(seconds)) {
@@ -216,15 +246,17 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, in
 
   // Calculate total time spent (backend + local)
   const getTotalTimeSpent = () => {
-    const backendSeconds = workingTimeData?.total_working_time_spent || taskWorkingTimeData?.total_working_time_spent || 0;
+    const backendSeconds = workingTimeData?.total_working_time_spent ?? taskWorkingTimeData?.total_working_time_spent ?? 0;
     return backendSeconds + (isTaskTimerActive ? localSecondsElapsed : 0);
   };
 
   const calculateProgress = () => {
-    if (!task?.estimate_hours || task.estimate_hours <= 0) return 0;
+    const estimateHours = Number(task?.estimate_hours ?? 0);
+
+    if (estimateHours <= 0) return 0;
     
     const totalTimeSpentHours = getTotalTimeSpent() / 3600;
-    const progress = (totalTimeSpentHours / task.estimate_hours) * 100;
+    const progress = (totalTimeSpentHours / estimateHours) * 100;
     return Math.min(100, Math.max(0, progress));
   };
 
@@ -250,7 +282,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, in
           />
           <div className="flex justify-between mt-1">
             <Text size="xs" color="dimmed">
-              {formatTime(getTotalTimeSpent())} / {formatTimeFromSeconds((task?.estimate_hours || 0) * 3600)}
+              {formatTime(getTotalTimeSpent())} / {formatTimeFromSeconds(Number(task?.estimate_hours ?? 0) * 3600)}
             </Text>
             <Text size="xs" color="dimmed">
               {Math.round(calculateProgress())}%

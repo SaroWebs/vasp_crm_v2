@@ -153,6 +153,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { activeTaskId, handleTaskStatusChange } = useTimeTracking();
+  const visibleActiveTaskId = activeTaskId ?? tasks.find((task) => task.my_is_tracking)?.id ?? null;
 
   const moveTask = (taskId: number, newStatus: string) => {
     const task = tasks.find((task) => task.id === taskId);
@@ -228,7 +229,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
             tasks={getTasksByStatus('Draft').concat(getTasksByStatus('Assigned'))}
             moveTask={moveTask}
             onTaskAction={handleTaskAction}
-            activeTaskId={activeTaskId}
+            activeTaskId={visibleActiveTaskId}
           />
           <TaskColumn
             key="Active"
@@ -236,7 +237,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
             tasks={getTasksByStatus('InProgress').concat(getTasksByStatus('Blocked'), getTasksByStatus('InReview'))}
             moveTask={moveTask}
             onTaskAction={handleTaskAction}
-            activeTaskId={activeTaskId}
+            activeTaskId={visibleActiveTaskId}
           />
           <TaskColumn
             key="Completed"
@@ -244,7 +245,7 @@ const BoardContent: React.FC<BoardProps> = ({ tasks, loadTasks, isLoading = fals
             tasks={getRecentlyCompletedTasks(['Done', 'Cancelled', 'Rejected'])}
             moveTask={moveTask}
             onTaskAction={handleTaskAction}
-            activeTaskId={activeTaskId}
+            activeTaskId={visibleActiveTaskId}
           />
         </div>
       </DndProvider>

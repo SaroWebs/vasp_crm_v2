@@ -81,7 +81,7 @@ const TaskCard: React.FC<{
 
     // Improved version using context
     const { activeTaskId } = useTimeTracking();
-    const isActive = activeTaskId === task.id;
+    const isActive = activeTaskId === task.id || (!activeTaskId && Boolean(task.my_is_tracking));
 
 
     const statusClass =

@@ -31,16 +31,9 @@ export default function EmployeeDashboard({ auth }: EmployeeDashboardProps) {
         setBoardError(null);
 
         try {
-            const response = await axios.get('/admin/data/tasks', {
-                params: {
-                    assigned_to: auth.user.id,
-                    per_page: 100,
-                    sort_by: 'due_at',
-                    sort_order: 'asc',
-                },
-            });
+            const response = await axios.get('/data/my/board-tasks');
 
-            const taskData = response.data.tasks?.data ?? response.data.tasks ?? [];
+            const taskData = response.data.data ?? [];
             setBoardTasks(Array.isArray(taskData) ? taskData : []);
         } catch {
             setBoardError('Unable to load your task board.');
