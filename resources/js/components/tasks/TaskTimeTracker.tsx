@@ -3,10 +3,12 @@ import { Text, Paper, Loader, Progress, Tooltip, ActionIcon } from '@mantine/cor
 import { Play, Pause, Square, SkipForward } from 'lucide-react';
 import { useTimeTracking } from '@/context/TimeTrackingContext';
 import { OverdueWarningDialog } from './OverdueWarningDialog';
+import { Task } from '@/types';
 
 interface TaskTimeTrackerProps {
   taskId: number;
   taskState?: string;
+  initialTask?: Task;
   onTimeUpdate: () => void;
   onTaskAction?: (action: 'start' | 'resume' | 'pause' | 'end', taskId: number) => void;
 }
@@ -16,7 +18,7 @@ interface WorkingTimeData {
   total_working_time_spent_hours?: number | string;
 }
 
-const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, onTimeUpdate, onTaskAction }) => {
+const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, initialTask, onTimeUpdate, onTaskAction }) => {
   const isCompleted = taskState === 'Done' || taskState === 'Cancelled' || taskState === 'Rejected';
   const { 
     tasks, 
@@ -38,8 +40,11 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
   const [workingTimeData, setWorkingTimeData] = useState<WorkingTimeData | null>(null);
   const [localSecondsElapsed, setLocalSecondsElapsed] = useState(0);
 
-  const task = tasks.get(taskId);
-  const taskTimeEntries = useMemo(() => timeEntries.get(taskId) || [], [timeEntries, taskId]);
+  const task = tasks.get(taskId) ?? initialTask;
+  const taskTimeEntries = useMemo(
+    () => timeEntries.get(taskId) || initialTask?.time_entries || [],
+    [timeEntries, taskId, initialTask?.time_entries],
+  );
   const isMyTracking = Boolean(task?.my_is_tracking);
   const isTaskTimerActive = activeTaskId === taskId && isMyTracking;
   const showOverdueDialog = Boolean(overdueWarning && overdueWarning.taskId === taskId);
@@ -69,10 +74,10 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   // Initialize task data if the context does not have it yet.
   useEffect(() => {
-    if (!task) {
-      refreshTaskData(taskId);
+    if (!task && !initialTask) {
+      void refreshTaskData(taskId);
     }
-  }, [task, taskId, refreshTaskData]);
+  }, [initialTask, task, taskId, refreshTaskData]);
 
   // Local timer counting each second
   useEffect(() => {
@@ -154,7 +159,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, taskState, on
 
   const handleExtendAndStart = async (newDueDate: string) => {
     await extendDueDateAndStart(taskId, newDueDate);
-    setShowOverdueDialog(false);
+    clearOverdueWarning();
     onTimeUpdate();
     onTaskAction?.('start', taskId);
     try {

@@ -31,6 +31,30 @@ interface TaskCreateDrawerProps {
     onSuccess?: () => void;
 }
 
+type TaskOption = {
+    value: string;
+    label: string;
+    code?: string;
+};
+
+type SlaPolicyOption = {
+    value: string;
+    label: string;
+    priority?: string;
+};
+
+type TaskTypeResponse = {
+    id: number | string;
+    name: string;
+    code?: string;
+};
+
+type SlaPolicyResponse = {
+    id: number | string;
+    name: string;
+    priority?: string | null;
+};
+
 const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
     onSuccess,
 }) => {
@@ -41,7 +65,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
     const [opened, { open, close }] = useDisclosure(false);
     const [generatedTaskCode, setGeneratedTaskCode] = useState('');
     const [loadingData, setLoadingData] = useState(false);
-    const [filteredSlaPolicies, setFilteredSlaPolicies] = useState<{ value: string; label: string; priority?: string }[]>([]);
+    const [filteredSlaPolicies, setFilteredSlaPolicies] = useState<SlaPolicyOption[]>([]);
     const [minDueDate, setMinDueDate] = useState<string>('');
     const [loadingMinDueDate, setLoadingMinDueDate] = useState(false);
 
@@ -119,6 +143,10 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
 
     // Update minimum due date when estimate hours or start_at change, with 2s debounce
     useEffect(() => {
+        if (!opened) {
+            return;
+        }
+
         if (formData.estimate_hours) {
             const handler = setTimeout(() => {
                 fetchMinDueDate(formData.estimate_hours, formData.start_at);
@@ -127,9 +155,9 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
         } else {
             fetchMinDueDate(formData.estimate_hours, formData.start_at);
         }
-    }, [formData.estimate_hours, formData.start_at]);
+    }, [formData.estimate_hours, formData.start_at, opened]);
 
-    const [taskTypes, setTaskTypes] = useState<{ value: string; label: string; code?: string }[]>([]);
+    const [taskTypes, setTaskTypes] = useState<TaskOption[]>([]);
 
     const generateTaskCode = () => {
         const prefix = 'TASK';
@@ -140,7 +168,7 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
         setFormData(prev => ({ ...prev, task_code: code }));
     };
 
-    const handleInputChange = (field: string, value: any) => {
+    const handleInputChange = (field: keyof typeof formData, value: string) => {
         setFormData(prev => ({
             ...prev,
             [field]: value
@@ -150,16 +178,17 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
     const fetchTaskTypes = async () => {
         setLoadingTaskTypes(true);
         try {
-            const res = await axios.get('/data/task-types');
-            const options = (res.data?.data || res.data || []).map((t: any) => ({
+            const res = await axios.get<{ data?: TaskTypeResponse[] } | TaskTypeResponse[]>('/data/task-types');
+            const taskTypes = Array.isArray(res.data) ? res.data : res.data?.data || [];
+            const options = taskTypes.map((t) => ({
                 value: String(t.id),
                 label: t.name,
                 code: t.code,
             }));
             setTaskTypes(options);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to load task types', err);
-            setError(err.response?.data?.message || 'Failed to load task types');
+            setError(axios.isAxiosError(err) ? err.response?.data?.message || 'Failed to load task types' : 'Failed to load task types');
         } finally {
             setLoadingTaskTypes(false);
         }
@@ -173,16 +202,17 @@ const TaskCreateDrawer: React.FC<TaskCreateDrawerProps> = ({
 
         setLoadingSlaPolicies(true);
         try {
-            const res = await axios.get(`/data/task-types/${taskTypeId}/sla-policies`);
-            const options = (res.data?.data || res.data || []).map((p: any) => ({
+            const res = await axios.get<{ data?: SlaPolicyResponse[] } | SlaPolicyResponse[]>(`/data/task-types/${taskTypeId}/sla-policies`);
+            const policies = Array.isArray(res.data) ? res.data : res.data?.data || [];
+            const options = policies.map((p) => ({
                 value: String(p.id),
                 label: `${p.name} (${p.priority || 'N/A'})`,
-                priority: p.priority,
+                priority: p.priority ?? undefined,
             }));
             setFilteredSlaPolicies(options);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to load SLA policies', err);
-            setError(err.response?.data?.message || 'Failed to load SLA policies');
+            setError(axios.isAxiosError(err) ? err.response?.data?.message || 'Failed to load SLA policies' : 'Failed to load SLA policies');
         } finally {
             setLoadingSlaPolicies(false);
         }

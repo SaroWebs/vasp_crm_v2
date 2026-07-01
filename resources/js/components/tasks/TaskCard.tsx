@@ -166,6 +166,7 @@ const TaskCard: React.FC<{
                         <TaskTimeTracker
                             taskId={task.id}
                             taskState={task.state}
+                            initialTask={task}
                             onTimeUpdate={() => { }}
                             onTaskAction={onTaskAction}
                         />
@@ -208,7 +209,7 @@ const TaskCard: React.FC<{
                 size={'lg'}
                 title="Forward Task"
             >
-                <TaskForwarding task={task}/>
+                {forwardingOpened ? <TaskForwarding task={task}/> : null}
             </Modal>
 
             {/* Comments Modal */}
@@ -218,7 +219,7 @@ const TaskCard: React.FC<{
                 size={'lg'}
                 title="Task Comments"
             >
-                <TaskComments taskId={task.id} />
+                {commentsOpened ? <TaskComments taskId={task.id} /> : null}
             </Modal>
 
             {/* Histories Modal */}
@@ -228,7 +229,7 @@ const TaskCard: React.FC<{
                 size={'lg'}
                 title="Task History"
             >
-                <TaskHistories task={task} />
+                {historiesOpened ? <TaskHistories task={task} /> : null}
             </Modal>
         </>
     );

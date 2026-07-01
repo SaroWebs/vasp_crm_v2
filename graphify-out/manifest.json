@@ -1488,351 +1488,351 @@
     "hash": "3fe770e4415ba644325e96ad5e64ffd7"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\index.ts": {
-    "mtime": 1782888899.9988856,
+    "mtime": 1782892530.4217005,
     "hash": "b5d60acca88c413c20ab7a382b978e8e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\index.ts": {
-    "mtime": 1782888900.0082998,
+    "mtime": 1782892530.4217005,
     "hash": "72e9f486a4c5ebc3bf38e731bc69eb31"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ActivityLogController.ts": {
-    "mtime": 1782888903.1904964,
+    "mtime": 1782892534.164249,
     "hash": "319c046debc20ac0a89074d1ba568e01"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AdminAuthController.ts": {
-    "mtime": 1782888900.5888276,
+    "mtime": 1782892531.2481198,
     "hash": "b94445e465ea37ca0004cb6e09763e43"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AdminDashboardController.ts": {
-    "mtime": 1782888900.725924,
+    "mtime": 1782892531.3753347,
     "hash": "464364301e688437bc0f84115dcf84ca"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AdminPasswordResetController.ts": {
-    "mtime": 1782888900.632315,
+    "mtime": 1782892531.3032205,
     "hash": "17405d6b53eb55bc1819ed67b54bdf13"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AdminTaskController.ts": {
-    "mtime": 1782888901.6142752,
+    "mtime": 1782892532.322293,
     "hash": "8e8ffec76f2cb24350064182180bc37a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AdminTaskTimeEntryController.ts": {
-    "mtime": 1782888901.6562395,
+    "mtime": 1782892532.365735,
     "hash": "401ac9a6b01c8af1bfabc89caf0b8c32"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AdminTicketController.ts": {
-    "mtime": 1782888901.4414413,
+    "mtime": 1782892532.1280277,
     "hash": "b74732fff9aa270669d9faa3015a10eb"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\AttendanceController.ts": {
-    "mtime": 1782888900.2987552,
+    "mtime": 1782892530.901717,
     "hash": "10fc3bc8e5764853bc52ed5d1ff3c264"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ClientController.ts": {
-    "mtime": 1782888900.9243581,
+    "mtime": 1782892531.5775015,
     "hash": "b33835d720208b51ebd715574463fd81"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ClientSsoController.ts": {
-    "mtime": 1782888900.3911605,
+    "mtime": 1782892531.0434406,
     "hash": "96ad03740e687a17968937f0ab8050a9"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\CommentAttachmentController.ts": {
-    "mtime": 1782888901.5223148,
+    "mtime": 1782892532.222736,
     "hash": "985baacec3da6651d5811b4385bbf7d5"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\DepartmentController.ts": {
-    "mtime": 1782888901.8023229,
+    "mtime": 1782892532.5039587,
     "hash": "974247b9b494a990211b35779fcb51ba"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\EmployeeCategoryController.ts": {
-    "mtime": 1782888900.3076868,
+    "mtime": 1782892530.9533873,
     "hash": "4a10973d79e870eb9d3266bf6661ed88"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\EmployeeController.ts": {
-    "mtime": 1782888902.0898967,
+    "mtime": 1782892532.8323412,
     "hash": "d8bf1f7e4ea26eec5f0d5f4d41d6ba2f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\EmployeeOfficeController.ts": {
-    "mtime": 1782888903.651778,
+    "mtime": 1782892534.7083426,
     "hash": "a1aed0028db996147cc0b6c762825f39"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\EmployeeProgressController.ts": {
-    "mtime": 1782888902.2109518,
+    "mtime": 1782892533.003019,
     "hash": "b7dac1dbd28402a07e698f47724e2ed5"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\FieldWorkController.ts": {
-    "mtime": 1782888902.6192963,
+    "mtime": 1782892533.5268295,
     "hash": "8fae7d3baa59086f1917bc61e5f77404"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\FieldWorkRequestController.ts": {
-    "mtime": 1782888903.5363762,
+    "mtime": 1782892534.5676415,
     "hash": "910ab0f53b93aa6f53c93c195bd392d9"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\HolidayController.ts": {
-    "mtime": 1782888903.25122,
+    "mtime": 1782892534.2335408,
     "hash": "a8a01f51091e4d0c47d427232619bd6f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\HolidayWorkController.ts": {
-    "mtime": 1782888903.6155555,
+    "mtime": 1782892534.6374743,
     "hash": "dc18574f617ae5f2de2a1a46f9e4183d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\index.ts": {
-    "mtime": 1782888900.0082998,
+    "mtime": 1782892530.4217005,
     "hash": "43c9e4471204e2ab3870324e0d764680"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\LeaveBalanceController.ts": {
-    "mtime": 1782888903.4142337,
+    "mtime": 1782892534.4015803,
     "hash": "c7fbce91c9843656ccfbd3dce22a40c3"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\LeaveController.ts": {
-    "mtime": 1782888903.3488529,
+    "mtime": 1782892534.353868,
     "hash": "0e93adc458017b6c4d27a06b8fe05339"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\LeaveTypeController.ts": {
-    "mtime": 1782888903.29899,
+    "mtime": 1782892534.274312,
     "hash": "c3a176808bf24bf66631e9d95895b20d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\MenuManagementController.ts": {
-    "mtime": 1782888901.8826756,
+    "mtime": 1782892532.627165,
     "hash": "92e63106f718cd43dd60d09c7f061c38"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\MonthlyCycleRuleController.ts": {
-    "mtime": 1782888902.287147,
+    "mtime": 1782892533.1292396,
     "hash": "f4a2cfb5ada499622e560da7f9b7ac5b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\NotificationController.ts": {
-    "mtime": 1782888901.8661628,
+    "mtime": 1782892532.580033,
     "hash": "d8b0a02917d18d9ee458bae5beb6cc53"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\OrganizationUserController.ts": {
-    "mtime": 1782888900.9668248,
+    "mtime": 1782892531.6251862,
     "hash": "143929bb7018dff3e643ad73439d2dac"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\PermissionController.ts": {
-    "mtime": 1782888902.005411,
+    "mtime": 1782892532.7686138,
     "hash": "7e9d0379fb20aa1e962ddbc887294cd5"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ProductController.ts": {
-    "mtime": 1782888901.315724,
+    "mtime": 1782892532.0229003,
     "hash": "cd99735d9bfd289ecf369af77ffa3be3"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ProjectAttachmentController.ts": {
-    "mtime": 1782888901.2490396,
+    "mtime": 1782892531.9526415,
     "hash": "38f113311e5633101037faaa2864cd83"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ProjectController.ts": {
-    "mtime": 1782888901.0469093,
+    "mtime": 1782892531.7194922,
     "hash": "372d1cef34c7f3932fc4ac59136c1ec7"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ProjectPhaseController.ts": {
-    "mtime": 1782888901.1158063,
+    "mtime": 1782892531.7882123,
     "hash": "e41c1f10204c5c1ae29ca16fd157cc8d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ProjectTimelineController.ts": {
-    "mtime": 1782888901.1822424,
+    "mtime": 1782892531.8630762,
     "hash": "2a9e8d1419f15b94ea0bc9fb4b68190e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\RemoteWorkAssignmentController.ts": {
-    "mtime": 1782888902.5613153,
+    "mtime": 1782892533.4486635,
     "hash": "c1a41d1573baa4acbe97ad06279e32c2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\RemoteWorkController.ts": {
-    "mtime": 1782888903.4680912,
+    "mtime": 1782892534.4811132,
     "hash": "221d28886c2c69ad6ce41ae1982d880d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ReportController.ts": {
-    "mtime": 1782888902.492481,
+    "mtime": 1782892533.3842604,
     "hash": "286799f6f068141cba53368c3b705f85"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\RoleController.ts": {
-    "mtime": 1782888901.932104,
+    "mtime": 1782892532.689552,
     "hash": "b06b918af784f15ea9fdbd2db944bcb6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\SalesLeadController.ts": {
-    "mtime": 1782888900.832301,
+    "mtime": 1782892531.4882166,
     "hash": "849161a57426a9e4945df5a99a232f9b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\ShiftController.ts": {
-    "mtime": 1782888902.3657806,
+    "mtime": 1782892533.225423,
     "hash": "3c0505236706a26280247b2d0530f6e6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TaskAssignmentController.ts": {
-    "mtime": 1782888901.7051094,
+    "mtime": 1782892532.4317431,
     "hash": "29df1004343eef9bb5e66ba781cc71c5"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TaskAttachmentController.ts": {
-    "mtime": 1782888902.824406,
+    "mtime": 1782892533.7574573,
     "hash": "4fd6b4003686cf4fd98ae9b455141c9a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TaskCommentController.ts": {
-    "mtime": 1782888902.777392,
+    "mtime": 1782892533.7102118,
     "hash": "3010a6243f1c06d5f8d2dd20d0522314"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TaskController.ts": {
-    "mtime": 1782888902.7299905,
+    "mtime": 1782892533.6464765,
     "hash": "d6c279786871adc08fb3118d1c373c35"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TaskDependencyController.ts": {
-    "mtime": 1782888903.115575,
+    "mtime": 1782892534.1007786,
     "hash": "319ec6b4fd7ca06b8d66403d6abe4ee9"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TaskForwardingController.ts": {
-    "mtime": 1782888902.8735821,
+    "mtime": 1782892533.8212361,
     "hash": "62bcc72ef186acd4cae264a45a593e37"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TicketCommentController.ts": {
-    "mtime": 1782888901.5157857,
+    "mtime": 1782892532.2070396,
     "hash": "37a2cbb408f48685434d084642a5703c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TimelineEventController.ts": {
-    "mtime": 1782888903.061878,
+    "mtime": 1782892534.0377717,
     "hash": "c82417d0ddf19c80f25196866dc6f193"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\TimeTrackingController.ts": {
-    "mtime": 1782888902.9829245,
+    "mtime": 1782892533.940648,
     "hash": "94ef0f8d5dfab3e0d6806e8920fcc174"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\UserController.ts": {
-    "mtime": 1782888900.3821495,
+    "mtime": 1782892531.0277345,
     "hash": "a42cce800cd2e69eaff3aa1a87a20640"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\UserTaskController.ts": {
-    "mtime": 1782888902.9391425,
+    "mtime": 1782892533.8885858,
     "hash": "deaf4f4ffc2e0ebad3820e4fe044eb3a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\VisitorController.ts": {
-    "mtime": 1782888902.1628597,
+    "mtime": 1782892532.896223,
     "hash": "58f4dffa74cfbb33226c07bde807940b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\WorkloadMatrixController.ts": {
-    "mtime": 1782888902.4131489,
+    "mtime": 1782892533.272894,
     "hash": "b57be30e65203d7509cb41adf3ef41ac"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Client\\ClientCommentAttachmentController.ts": {
-    "mtime": 1782888900.5552852,
+    "mtime": 1782892531.226535,
     "hash": "c87b2a96ddf0a7c8cfc800eb998da119"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Client\\ClientPortalAuthController.ts": {
-    "mtime": 1782888900.417371,
+    "mtime": 1782892531.0791335,
     "hash": "d7bad62b8715c163cf6d599bff554e67"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Client\\ClientTicketCommentController.ts": {
-    "mtime": 1782888900.5422883,
+    "mtime": 1782892531.212139,
     "hash": "3ff1e87c63f55a0b25a3aa6a1da218c6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Client\\ClientTicketController.ts": {
-    "mtime": 1782888900.4823947,
+    "mtime": 1782892531.1611576,
     "hash": "f32500654d88369b00dc49dba27586b6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Client\\index.ts": {
-    "mtime": 1782888900.0082998,
+    "mtime": 1782892530.4217005,
     "hash": "fbe276758df43fb33b5a5e36c4b0796e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Settings\\index.ts": {
-    "mtime": 1782888900.0109646,
+    "mtime": 1782892530.4217005,
     "hash": "11c909ff6a86d9ba10e324f57c7e24fe"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Settings\\PasswordController.ts": {
-    "mtime": 1782888903.6598241,
+    "mtime": 1782892534.7459242,
     "hash": "873d1fdb4bed0fb32dc68ddf60ca294d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Settings\\ProfileController.ts": {
-    "mtime": 1782888903.6467316,
+    "mtime": 1782892534.703832,
     "hash": "b16d42df9126dd66502455fdae963dfa"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\App\\Http\\Controllers\\Settings\\TwoFactorAuthenticationController.ts": {
-    "mtime": 1782888903.6812541,
+    "mtime": 1782892534.7855604,
     "hash": "e00bc30ef1a224894d045c14bacc159b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Illuminate\\index.ts": {
-    "mtime": 1782888900.0109646,
+    "mtime": 1782892530.4276555,
     "hash": "96972f3fd2a947d17b4ed0d6cc5c79d2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Illuminate\\Broadcasting\\BroadcastController.ts": {
-    "mtime": 1782888903.6857939,
+    "mtime": 1782892534.8256214,
     "hash": "5dd70c427577cd3622d420d8c56be3a4"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Illuminate\\Broadcasting\\index.ts": {
-    "mtime": 1782888900.0150397,
+    "mtime": 1782892530.4276555,
     "hash": "0f9fb5e3d7904af548fc740250145e96"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Illuminate\\Routing\\index.ts": {
-    "mtime": 1782888900.0109646,
+    "mtime": 1782892530.4276555,
     "hash": "cc50a0350e0a85987ab032ed6d5f82d2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Illuminate\\Routing\\RedirectController.ts": {
-    "mtime": 1782888903.6284263,
+    "mtime": 1782892534.6502144,
     "hash": "15c44fabb038fc3cf5d4eef07e59240b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\index.ts": {
-    "mtime": 1782888899.9988856,
+    "mtime": 1782892530.4178474,
     "hash": "c9296ba15474f3224af2ea3820ce5eff"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\index.ts": {
-    "mtime": 1782888899.9988856,
+    "mtime": 1782892530.4178474,
     "hash": "ac932069e48b3cafd8966a036f2d68c6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\index.ts": {
-    "mtime": 1782888899.9988856,
+    "mtime": 1782892530.4206867,
     "hash": "72e9f486a4c5ebc3bf38e731bc69eb31"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\AuthenticatedSessionController.ts": {
-    "mtime": 1782888900.0294108,
+    "mtime": 1782892530.4336817,
     "hash": "319ec6960f9d9e283cd422abe6b3bf01"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\ConfirmablePasswordController.ts": {
-    "mtime": 1782888900.1489673,
+    "mtime": 1782892530.6418958,
     "hash": "130bcc318d362b1cad91018bc7892168"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\ConfirmedPasswordStatusController.ts": {
-    "mtime": 1782888900.1596682,
+    "mtime": 1782892530.6822095,
     "hash": "bc26b94b367d5df955fe3390f95ad988"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\ConfirmedTwoFactorAuthenticationController.ts": {
-    "mtime": 1782888900.1776628,
+    "mtime": 1782892530.7163928,
     "hash": "3a703282b76e08b6ae20b9c0a139db32"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\EmailVerificationNotificationController.ts": {
-    "mtime": 1782888900.1155841,
+    "mtime": 1782892530.581313,
     "hash": "fced3f9f3da081ece0b131b4cfba53e4"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\EmailVerificationPromptController.ts": {
-    "mtime": 1782888900.1060996,
+    "mtime": 1782892530.5525079,
     "hash": "005a952bd5c4c828e7a7b554cebb66ba"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\index.ts": {
-    "mtime": 1782888899.9988856,
+    "mtime": 1782892530.4217005,
     "hash": "df022c5b08ccdc50fb3c8bbf5dc71ace"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\NewPasswordController.ts": {
-    "mtime": 1782888900.0831032,
+    "mtime": 1782892530.520762,
     "hash": "b8c3abae5651d0e80af61b60f6d15ba2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\PasswordResetLinkController.ts": {
-    "mtime": 1782888900.0632904,
+    "mtime": 1782892530.4784765,
     "hash": "940b49f0b7f793e55159aabfea246d6e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\RecoveryCodeController.ts": {
-    "mtime": 1782888900.2143774,
+    "mtime": 1782892530.8111756,
     "hash": "a4efc748b121e5312f075222cf8859cd"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\TwoFactorAuthenticatedSessionController.ts": {
-    "mtime": 1782888900.167624,
+    "mtime": 1782892530.6933331,
     "hash": "8ba4d11ecf0f23f281202f8b846d9650"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\TwoFactorAuthenticationController.ts": {
-    "mtime": 1782888900.1736894,
+    "mtime": 1782892530.706637,
     "hash": "042ef8d18c2f2981f38f1e773f8d4e25"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\TwoFactorQrCodeController.ts": {
-    "mtime": 1782888900.1991181,
+    "mtime": 1782892530.7482488,
     "hash": "18ff42e92d7ef4470cf8a0a595f7a54d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\TwoFactorSecretKeyController.ts": {
-    "mtime": 1782888900.207338,
+    "mtime": 1782892530.7610385,
     "hash": "5e81e307d81851ac196438ea810ff74a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\actions\\Laravel\\Fortify\\Http\\Controllers\\VerifyEmailController.ts": {
-    "mtime": 1782888900.1102912,
+    "mtime": 1782892530.574458,
     "hash": "55466bd61dae0c5aa019fd2b019ff2e6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\alert-error.tsx": {
@@ -2096,8 +2096,8 @@
     "hash": "1faf09011ad89faf05358347da756d33"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\dash\\EmployeeScreen.tsx": {
-    "mtime": 1782888432.7229538,
-    "hash": "f7ba0ed50ae7a5a7a8960864b32bc805"
+    "mtime": 1782892327.3665237,
+    "hash": "d3b2072deae08c79d5ed5d29b5f7d9d4"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\dashboard\\ActivityEntryCard.tsx": {
     "mtime": 1777549189.1984737,
@@ -2116,8 +2116,8 @@
     "hash": "6164518d48bd0c856dfc61e2e297c827"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\dashboard\\EmployeeDashboard.tsx": {
-    "mtime": 1782715499.9979768,
-    "hash": "8bc963d40789b0fcc8dfc8ea4ecb5d9b"
+    "mtime": 1782892336.069588,
+    "hash": "2f9116b1d677db6c81e2f62bfbe6215d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\dashboard\\SimpleTaskCard.tsx": {
     "mtime": 1777549170.6273806,
@@ -2284,8 +2284,8 @@
     "hash": "f815c27de2286f3c132012b995a50f54"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\Board.tsx": {
-    "mtime": 1780912032.5765831,
-    "hash": "d85ccd9ecd411fa4e8f257c8b4c1fb40"
+    "mtime": 1782892341.7243893,
+    "hash": "6d9d3e6ed80734b5b805c3a0a575c1d1"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\MajorTasks.tsx": {
     "mtime": 1778566288.5965023,
@@ -2312,12 +2312,12 @@
     "hash": "4e7d8f7aca6668280250f6d94ddb2e46"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\TaskCard.tsx": {
-    "mtime": 1782732398.2003682,
-    "hash": "a0d899e66010fa253897f0ced566c07c"
+    "mtime": 1782898599.808521,
+    "hash": "6e5c4a22ea263b9abce44474144a65d6"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\TaskCreateDrawer.tsx": {
-    "mtime": 1775117155.622928,
-    "hash": "33ea88b48dd91ccc074259bf15e7893f"
+    "mtime": 1782898733.1446812,
+    "hash": "44871fefa6436c76c3fd4c7d292c2e30"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\TaskDashboard.tsx": {
     "mtime": 1768536181.2543561,
@@ -2348,8 +2348,8 @@
     "hash": "aa41540c2ce09e22ea967719431d5ba7"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\TaskTimeTracker.tsx": {
-    "mtime": 1782732796.115515,
-    "hash": "253a6451daefbda98cbaaddff8fcdc5e"
+    "mtime": 1782898591.269972,
+    "hash": "42fc5b45e49d5e101f18abfc4e04b9cc"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\components\\tasks\\Timeline.tsx": {
     "mtime": 1768536181.2563853,
@@ -2876,447 +2876,447 @@
     "hash": "1c9a98e2632ba34f5e7cf970134cbbbc"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\index.ts": {
-    "mtime": 1782888906.3362572,
+    "mtime": 1782892537.0711346,
     "hash": "3c9dcc957051526c102b2004770d8fc1"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\index.ts": {
-    "mtime": 1782888906.818215,
+    "mtime": 1782892537.5850174,
     "hash": "c8037790f8194392d5274d0823d55fe2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\admin\\index.ts": {
-    "mtime": 1782888910.6825495,
+    "mtime": 1782892542.6814034,
     "hash": "2409e0a8556a62065b4841a92773307e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\admin\\field-work-assignments\\index.ts": {
-    "mtime": 1782888909.3559995,
+    "mtime": 1782892540.6869996,
     "hash": "0232948298e833687a53a96cd4be56fe"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\admin\\remote-work-assignments\\index.ts": {
-    "mtime": 1782888909.280495,
+    "mtime": 1782892540.629766,
     "hash": "a060d18c517ffe30b10583f656beb719"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\index.ts": {
-    "mtime": 1782888909.0542414,
+    "mtime": 1782892540.328751,
     "hash": "5adff8a168700188e815a5d1c7af1c99"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\attendance\\index.ts": {
-    "mtime": 1782888908.8082745,
+    "mtime": 1782892539.949386,
     "hash": "e37c682ee8f7064f2c6c602fbe027366"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\attendance\\cycle-rules\\index.ts": {
-    "mtime": 1782888908.8721151,
+    "mtime": 1782892540.028438,
     "hash": "0cb74da9ab6262f1d8c078455a4314d0"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\attendance\\op-month\\index.ts": {
-    "mtime": 1782888908.8880575,
+    "mtime": 1782892540.0543337,
     "hash": "21d3de3a464c1a03a14679141ee8d387"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\dashboard\\index.ts": {
-    "mtime": 1782888907.059425,
+    "mtime": 1782892537.8963902,
     "hash": "23bcc073de2fb10c92f97211b3fda3d5"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\employee\\index.ts": {
-    "mtime": 1782888908.697255,
+    "mtime": 1782892539.7794979,
     "hash": "1ce02fc4c90b43bb5dfd4c222668548b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\employee\\progress\\index.ts": {
-    "mtime": 1782888908.709136,
+    "mtime": 1782892539.8289678,
     "hash": "16aaa89c26ef8f716b7286c17a06c219"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\employees\\index.ts": {
-    "mtime": 1782888908.5696392,
+    "mtime": 1782892539.5784936,
     "hash": "38b9d1a192c832205aa58027570701ad"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\reports\\index.ts": {
-    "mtime": 1782888909.2091546,
+    "mtime": 1782892540.530238,
     "hash": "85f8b154d8ff247b87ac7f1ee5138bdf"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\reports\\consolidated\\index.ts": {
-    "mtime": 1782888909.2239778,
+    "mtime": 1782892540.5539823,
     "hash": "d203eadf683a30eb7b7c07cb7834941f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\reports\\daily\\index.ts": {
-    "mtime": 1782888909.2179413,
+    "mtime": 1782892540.5442097,
     "hash": "f42b05fd0716f8112abcc28dabcc89b7"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\shift-assignments\\index.ts": {
-    "mtime": 1782888909.0321882,
+    "mtime": 1782892540.234979,
     "hash": "44cd348a93ac2c4cef8c6cb728941bb0"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\shifts\\index.ts": {
-    "mtime": 1782888908.980843,
+    "mtime": 1782892540.1956427,
     "hash": "125d70f76ebfb7eda29e1217a6039fd4"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\api\\workload-matrix\\index.ts": {
-    "mtime": 1782888909.0687952,
+    "mtime": 1782892540.3821669,
     "hash": "8f570a5f4810ff87d3a6c6a437999898"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\attendance\\index.ts": {
-    "mtime": 1782888908.7445328,
+    "mtime": 1782892539.8880446,
     "hash": "3839b5c9e0ed8910f2e63a86cbff9111"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\clients\\index.ts": {
-    "mtime": 1782888907.1406927,
+    "mtime": 1782892537.9987023,
     "hash": "612247f950b75f5240f6b54b6b73181d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\clients\\organization-users\\index.ts": {
-    "mtime": 1782888907.205526,
+    "mtime": 1782892538.05443,
     "hash": "cd71deb472719292a6e14a4c37064671"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\clients\\tickets\\index.ts": {
-    "mtime": 1782888907.650933,
+    "mtime": 1782892538.5085993,
     "hash": "5cb2575989d3b286fc3740be1d113559"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\comments\\index.ts": {
-    "mtime": 1782888910.681548,
+    "mtime": 1782892542.679393,
     "hash": "1b3b3b2389471a27f0caba0641abd63c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\comments\\attachments\\index.ts": {
-    "mtime": 1782888907.7747073,
+    "mtime": 1782892538.6958177,
     "hash": "0901a5f3cf8e0c05e864330e7403917b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\departments\\index.ts": {
-    "mtime": 1782888908.1097343,
+    "mtime": 1782892538.998157,
     "hash": "7f385e0ae27dba45e784813de17ffef0"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\employee\\index.ts": {
-    "mtime": 1782888908.6528177,
+    "mtime": 1782892539.7159421,
     "hash": "f9601c3d3b7c0312ab6495a131e0188f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\employees\\index.ts": {
-    "mtime": 1782888908.5222652,
+    "mtime": 1782892539.527156,
     "hash": "ed4e80c72c64bc848a8926d59079fd10"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\holidays\\index.ts": {
-    "mtime": 1782888909.3933904,
+    "mtime": 1782892540.766125,
     "hash": "bff5687c39cda393bccf60d1773cb224"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\leave-types\\index.ts": {
-    "mtime": 1782888909.3933904,
+    "mtime": 1782892540.7364743,
     "hash": "13d44d6f1e8e3413c344aca5b2473ff5"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\login\\index.ts": {
-    "mtime": 1782888906.848519,
+    "mtime": 1782892537.6259673,
     "hash": "5fc43295695308b8d2548a64ff6ea00d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\logout\\index.ts": {
-    "mtime": 1782888907.0874307,
+    "mtime": 1782892537.94647,
     "hash": "0e8aba6f59c4d1f3e066f641ab4dbf0a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\menu\\index.ts": {
-    "mtime": 1782888908.1873338,
+    "mtime": 1782892539.1044095,
     "hash": "6575434011d52e1e7abd07de632cecd3"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\notifications\\index.ts": {
-    "mtime": 1782888908.1729784,
+    "mtime": 1782892539.0584414,
     "hash": "a4b93ee4c384c264ae745ff52ced3c04"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\password\\index.ts": {
-    "mtime": 1782888906.8816905,
+    "mtime": 1782892537.6745012,
     "hash": "5a99b9c5308da71974546fd5f025a263"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\permissions\\index.ts": {
-    "mtime": 1782888908.348277,
+    "mtime": 1782892539.2808444,
     "hash": "d3bff62b05cea6c7b1bbbf2527ff529f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\products\\index.ts": {
-    "mtime": 1782888907.6429741,
+    "mtime": 1782892538.5085993,
     "hash": "ea55fc27324c7092256ffb6116e3999c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\projects\\index.ts": {
-    "mtime": 1782888907.2870257,
+    "mtime": 1782892538.1427424,
     "hash": "ddccd7c5bbe71b41a6495cc7df632a3d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\projects\\attachments\\index.ts": {
-    "mtime": 1782888907.574389,
+    "mtime": 1782892538.4282644,
     "hash": "1e14d1dfe234de38bd43b720d44d99bf"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\projects\\phases\\index.ts": {
-    "mtime": 1782888907.419602,
+    "mtime": 1782892538.285903,
     "hash": "90a5da8c0a0a2be8e1ea965238e085c1"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\projects\\progress\\index.ts": {
-    "mtime": 1782888907.2926948,
+    "mtime": 1782892538.15215,
     "hash": "a922a6bc61253fdf1b67b3e570ce7f40"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\projects\\team\\index.ts": {
-    "mtime": 1782888907.3439715,
+    "mtime": 1782892538.200277,
     "hash": "508097812a14aca82d54dd4001ef320e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\projects\\timeline\\index.ts": {
-    "mtime": 1782888907.505612,
+    "mtime": 1782892538.349869,
     "hash": "75c6270806308be80978727c32587a94"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\reports\\index.ts": {
-    "mtime": 1782888909.1061563,
+    "mtime": 1782892540.4352286,
     "hash": "ecac19b235eb472758ecc5fba0f9bdf1"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\roles\\index.ts": {
-    "mtime": 1782888908.26892,
+    "mtime": 1782892539.171306,
     "hash": "5b26b55d95e0f78b65417a1b836bc351"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\roles-permissions\\index.ts": {
-    "mtime": 1782888908.1951077,
+    "mtime": 1782892539.1081753,
     "hash": "c8a3f365678e2b565faad8b4fcfd28dd"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\sales-leads\\index.ts": {
-    "mtime": 1782888906.9599962,
+    "mtime": 1782892537.7382033,
     "hash": "fb7b57f6f8b6cb0bfb93aae3bf3347d0"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\sales-leads\\activities\\index.ts": {
-    "mtime": 1782888906.9651628,
+    "mtime": 1782892537.7605865,
     "hash": "cc08adcdb5a3ec26b5c071a3c6740358"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\sales-leads\\follow-up\\index.ts": {
-    "mtime": 1782888906.991859,
+    "mtime": 1782892537.8012881,
     "hash": "942c0315e7c12dd3699f888e7ef19b8c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\sales-leads\\reminders\\index.ts": {
-    "mtime": 1782888907.007771,
+    "mtime": 1782892537.8333328,
     "hash": "515a0750db3240df65d5537fb543e848"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\shifts\\index.ts": {
-    "mtime": 1782888908.9315531,
+    "mtime": 1782892540.113809,
     "hash": "7a9cddeb652484b3315aa53bce0fd0b2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tasks\\index.ts": {
-    "mtime": 1782888907.8222535,
+    "mtime": 1782892538.7301416,
     "hash": "b24b7d09d9aa1f1f6c83d1a1e43b6bc3"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tasks\\admin\\index.ts": {
-    "mtime": 1782888907.913658,
+    "mtime": 1782892538.8356285,
     "hash": "b396669f15f93419f3524c0627519357"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tasks\\admin\\time-entries\\index.ts": {
-    "mtime": 1782888907.994556,
+    "mtime": 1782892538.9153924,
     "hash": "9592d79e8369d1524274ee66ff61094f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tasks\\admin\\time-entries\\batch\\index.ts": {
-    "mtime": 1782888907.9613128,
+    "mtime": 1782892538.8835087,
     "hash": "32d14220e915f38c35633df2446156aa"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tasks\\admin\\time-entries\\manual\\index.ts": {
-    "mtime": 1782888907.9475026,
+    "mtime": 1782892538.875798,
     "hash": "4dbcbf478b31d9ac5ee7b8ae86f82a8b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\ticket\\index.ts": {
-    "mtime": 1782888907.8222535,
+    "mtime": 1782892538.7301416,
     "hash": "044a8eb69f4b040ab49f5fe152524d5b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tickets\\index.ts": {
-    "mtime": 1782888907.7256126,
+    "mtime": 1782892538.5974157,
     "hash": "32122fab4d88b953a92ac8ee97981032"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\tickets\\comments\\index.ts": {
-    "mtime": 1782888907.7747073,
+    "mtime": 1782892538.6511471,
     "hash": "b0a6527476fe0e9fa275358d9f3aff20"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\users\\index.ts": {
-    "mtime": 1782888908.4432983,
+    "mtime": 1782892539.438275,
     "hash": "ca35761d6ff077d63688af374d12f35b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\visitors\\index.ts": {
-    "mtime": 1782888908.6487992,
+    "mtime": 1782892539.653369,
     "hash": "df6217577336d29580aa058aa1934ab3"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\admin\\workload-matrix\\index.ts": {
-    "mtime": 1782888909.0472848,
+    "mtime": 1782892540.2818477,
     "hash": "775c187ce0840d13543f07aba11ca69c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\index.ts": {
-    "mtime": 1782888910.1383915,
+    "mtime": 1782892541.813886,
     "hash": "4cdd58b6a7e95d381ec979088b15dc77"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\activity-logs\\index.ts": {
-    "mtime": 1782888910.5084548,
+    "mtime": 1782892542.3188882,
     "hash": "c7913e19bd5fec01e866c2fe5d596b81"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\attendance\\index.ts": {
-    "mtime": 1782888910.518548,
+    "mtime": 1782892542.3507106,
     "hash": "5ebc400be4407b554ba3149611990bcc"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\milestones\\index.ts": {
-    "mtime": 1782888910.3223267,
+    "mtime": 1782892542.05069,
     "hash": "139824a3e6c75fcf77b8a0abeecd3553"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\my\\index.ts": {
-    "mtime": 1782888910.5283492,
+    "mtime": 1782892542.3981934,
     "hash": "b7fced6a6f6dc138eb00f9022bf9a091"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\my\\attendance\\index.ts": {
-    "mtime": 1782888910.537922,
+    "mtime": 1782892542.430394,
     "hash": "329d3300710e01d4499edf93bebf796e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\notifications\\index.ts": {
-    "mtime": 1782888909.4552102,
+    "mtime": 1782892540.846131,
     "hash": "83f17ee9eaf73b6408a5fe347b5afe52"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\task-assignments\\index.ts": {
-    "mtime": 1782888910.4258864,
+    "mtime": 1782892542.2398634,
     "hash": "f2e95305a8903663dbbb50308be03f59"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\task-dependencies\\index.ts": {
-    "mtime": 1782888910.3917763,
+    "mtime": 1782892542.1032023,
     "hash": "1ebdf192c7b5756e042ba7930b86c882"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\task-types\\index.ts": {
-    "mtime": 1782888909.5931625,
+    "mtime": 1782892541.1410956,
     "hash": "738afdf4ec66508abf434966854b1abc"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\tasks\\index.ts": {
-    "mtime": 1782888909.554571,
+    "mtime": 1782892541.052528,
     "hash": "4dcdd6373779064bb0689e0966c6cb34"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\tasks\\attachments\\index.ts": {
-    "mtime": 1782888909.758945,
+    "mtime": 1782892541.315851,
     "hash": "acb98c201775b5b0792b7ac30baa1061"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\tasks\\comments\\index.ts": {
-    "mtime": 1782888909.676037,
+    "mtime": 1782892541.2286592,
     "hash": "254f5b0b5df4d3d0d4ab060754a8f63b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\tasks\\forwardings\\index.ts": {
-    "mtime": 1782888909.7735796,
+    "mtime": 1782892541.3474867,
     "hash": "cd72dce5cfe1ce5cdf4ea1728eba347c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\timeline-events\\index.ts": {
-    "mtime": 1782888910.2216194,
+    "mtime": 1782892541.9449406,
     "hash": "b1416822b8a5cdda056be643b6f153c7"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\api\\timeline-events\\milestones\\index.ts": {
-    "mtime": 1782888910.2830865,
+    "mtime": 1782892542.0031896,
     "hash": "2260a9d3569db0cbd1470f1d732f679b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\appearance\\index.ts": {
-    "mtime": 1782888910.6573048,
+    "mtime": 1782892542.6643374,
     "hash": "82b9f1e607e9f1a13f23770e441cae1e"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\boost\\index.ts": {
-    "mtime": 1782888906.2887025,
+    "mtime": 1782892537.0215476,
     "hash": "3b65f7df901ccb3305077be4deac844a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\client\\index.ts": {
-    "mtime": 1782888906.6379528,
+    "mtime": 1782892537.3997529,
     "hash": "23dc5e9fe960f634ab427c8f40fd3da7"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\client\\comments\\index.ts": {
-    "mtime": 1782888910.6795447,
+    "mtime": 1782892542.679393,
     "hash": "1b3b3b2389471a27f0caba0641abd63c"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\client\\comments\\attachments\\index.ts": {
-    "mtime": 1782888906.7737982,
+    "mtime": 1782892537.5497725,
     "hash": "8b431fac25ed10740ac2cd6a19ff5a65"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\client\\logout\\index.ts": {
-    "mtime": 1782888906.6160128,
+    "mtime": 1782892537.382684,
     "hash": "40e22445689aad5c2ab48e6bb62cf050"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\client\\tickets\\index.ts": {
-    "mtime": 1782888906.7104764,
+    "mtime": 1782892537.4585457,
     "hash": "53f1680702962c859c34303ec3e451d3"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\client\\tickets\\comments\\index.ts": {
-    "mtime": 1782888906.7668319,
+    "mtime": 1782892537.5257027,
     "hash": "adf6ff015c68fa2765377cec61d1e2ac"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\data\\index.ts": {
-    "mtime": 1782888910.6837704,
+    "mtime": 1782892542.6854193,
     "hash": "8c77892b22db79419db5c9b917e327b9"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\data\\tasks\\index.ts": {
-    "mtime": 1782888909.4774868,
+    "mtime": 1782892540.9226177,
     "hash": "cc61a5ba0bcf4219265925d9bd2c2309"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\login\\index.ts": {
-    "mtime": 1782888906.3362572,
+    "mtime": 1782892537.074174,
     "hash": "a2e810edc3326c10d09abf6daf4bbf61"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\my\\index.ts": {
-    "mtime": 1782888909.9733918,
+    "mtime": 1782892541.6277049,
     "hash": "428dff6a92ee0f9e1b23092c2fdc915d"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\my\\sales-leads\\index.ts": {
-    "mtime": 1782888910.039293,
+    "mtime": 1782892541.7026014,
     "hash": "88ec2b9400a074fc4c1742cf4bf24239"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\my\\sales-leads\\activities\\index.ts": {
-    "mtime": 1782888910.053041,
+    "mtime": 1782892541.7092905,
     "hash": "6cb346b221eea7e2f0a3952c09fd231a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\my\\sales-leads\\follow-up\\index.ts": {
-    "mtime": 1782888910.0909748,
+    "mtime": 1782892541.7545235,
     "hash": "6f52e06380b4475b99f84b8adb496822"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\my\\tasks\\index.ts": {
-    "mtime": 1782888909.8845448,
+    "mtime": 1782892541.445324,
     "hash": "a9314455426611f4f4dbd15021cf6845"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\my\\tasks\\single\\index.ts": {
-    "mtime": 1782888910.150218,
+    "mtime": 1782892541.8813674,
     "hash": "3b7df861ca39147a035ccfbda58a764a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\password\\index.ts": {
-    "mtime": 1782888906.393543,
+    "mtime": 1782892537.1261837,
     "hash": "29c5a0691e7612ec335ffb748be8b6b2"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\password\\confirm\\index.ts": {
-    "mtime": 1782888906.489236,
+    "mtime": 1782892537.2047088,
     "hash": "b9053207934be293a65bf40c5f85053b"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\profile\\index.ts": {
-    "mtime": 1782888910.6076195,
+    "mtime": 1782892542.5108025,
     "hash": "9ed8e2e44195e096f78a507b885e3585"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\profile\\active-office\\index.ts": {
-    "mtime": 1782888910.615913,
+    "mtime": 1782892542.5522354,
     "hash": "4ba0eed9adb270e892f9ca617cbaf926"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\sso\\index.ts": {
-    "mtime": 1782888906.6160128,
+    "mtime": 1782892537.3628857,
     "hash": "84470e4770a61a1885680765261bf73a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\storage\\index.ts": {
-    "mtime": 1782888910.6735442,
+    "mtime": 1782892542.6696477,
     "hash": "ae80c488810d3bf040899bbdfaca90df"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\storage\\local\\index.ts": {
-    "mtime": 1782888910.6785462,
+    "mtime": 1782892542.679393,
     "hash": "c73ba92b0fed390e135db84b07ca2e67"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\task-forwarding\\index.ts": {
-    "mtime": 1782888910.417511,
+    "mtime": 1782892542.1568198,
     "hash": "3d58ac049b36af6d08560f2ffc45b711"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\tasks\\index.ts": {
-    "mtime": 1782888909.966034,
+    "mtime": 1782892541.571588,
     "hash": "97dd0b1b8f87389d9d8e74501285219f"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\tasks\\forwarding\\index.ts": {
-    "mtime": 1782888910.4041772,
+    "mtime": 1782892542.1032023,
     "hash": "84e93797c07d073176472d7a5a231734"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\tasks\\my\\index.ts": {
-    "mtime": 1782888910.1266494,
+    "mtime": 1782892541.8029428,
     "hash": "7f51940a8455ce144d580dc55395f810"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\tasks\\self\\index.ts": {
-    "mtime": 1782888909.4610956,
+    "mtime": 1782892540.897124,
     "hash": "e07041993b8c2c8d4303cec07160e453"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\two-factor\\index.ts": {
-    "mtime": 1782888906.5464048,
+    "mtime": 1782892537.2837539,
     "hash": "a77a4117955d1a51f0d2a3c3d3902fce"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\two-factor\\login\\index.ts": {
-    "mtime": 1782888906.5685205,
+    "mtime": 1782892537.3154302,
     "hash": "22a383675bec5d127b32d1df1fece8f8"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\user-password\\index.ts": {
-    "mtime": 1782888910.6526766,
+    "mtime": 1782892542.6039176,
     "hash": "3227bd98a2b6a1ecd1968ea1016e2496"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\routes\\verification\\index.ts": {
-    "mtime": 1782888906.4571693,
+    "mtime": 1782892537.1662502,
     "hash": "2a7056aa6ea244f2447b17f5c84d4136"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\types\\index.d.ts": {
@@ -3348,7 +3348,7 @@
     "hash": "5627db9d1aec74f430e59460f850acf8"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\js\\wayfinder\\index.ts": {
-    "mtime": 1782888910.713627,
+    "mtime": 1782892542.6886022,
     "hash": "5cb337fd1e1810cd32f5d27f1696780a"
   },
   "D:\\office\\VASP_CRM_V2\\resources\\views\\app.blade.php": {

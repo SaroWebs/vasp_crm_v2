@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import TimeSpentBarChart from '@/components/dashboard/TimeSpentBarChart';
@@ -6,6 +6,15 @@ import { Link } from '@inertiajs/react';
 import { BarChart3, Activity, Clock, PlusCircle, CheckCircle, UserPlus, ArrowRight, MessageSquare, RefreshCcw, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { activities as activitiesRoute } from '@/routes/admin/api/dashboard';
+
+interface EmployeeActivity {
+    id: number | string;
+    icon: string;
+    description: string;
+    timestamp: string;
+    link?: string | null;
+}
 
 const getIconComponent = (iconName: string) => {
     switch (iconName) {
@@ -36,52 +45,72 @@ const getIconBg = (iconName: string) => {
 };
 
 export default function EmployeeActivitiesWidget() {
-    const [activities, setActivities] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [activities, setActivities] = useState<EmployeeActivity[]>([]);
+    const [hasLoaded, setHasLoaded] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    useEffect(() => {
-        axios.get('/admin/api/dashboard/activities')
-            .then(res => {
-                setActivities(res.data.activities || []);
-            })
-            .catch(err => console.error(err))
-            .finally(() => setLoading(false));
+    const loadActivities = useCallback(async (signal?: AbortSignal) => {
+        setIsRefreshing(true);
+
+        try {
+            const response = await axios.get<{ activities?: EmployeeActivity[] }>(
+                activitiesRoute.url({
+                    query: {
+                        refresh: Date.now(),
+                    },
+                }),
+                {
+                    signal,
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        Pragma: 'no-cache',
+                    },
+                },
+            );
+
+            setActivities(Array.isArray(response.data.activities) ? response.data.activities : []);
+        } catch (error) {
+            if (!axios.isCancel(error)) {
+                console.error(error);
+            }
+        } finally {
+            if (!signal?.aborted) {
+                setHasLoaded(true);
+                setIsRefreshing(false);
+            }
+        }
     }, []);
 
-    if (loading) {
-        return (
-            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-                <Card className="shadow-sm border-border/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <BarChart3 className="h-5 w-5 text-primary" />
-                            Daily Time Spent
-                        </CardTitle>
-                        <CardDescription>Loading chart data...</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[300px] animate-pulse bg-muted rounded-xl" />
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm border-border/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Activity className="h-5 w-5 text-primary" />
-                            Employee Activities
-                        </CardTitle>
-                        <CardDescription>Loading activities...</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {[1, 2, 3, 4].map(i => (
-                                <div key={i} className="h-16 animate-pulse bg-muted rounded-xl" />
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
+    useEffect(() => {
+        const controller = new AbortController();
+        const loadAfterPageReady = () => {
+            window.setTimeout(() => {
+                void loadActivities(controller.signal);
+            }, 0);
+        };
+
+        const refreshVisiblePage = () => {
+            if (document.visibilityState === 'visible') {
+                void loadActivities();
+            }
+        };
+
+        if (document.readyState === 'complete') {
+            loadAfterPageReady();
+        } else {
+            window.addEventListener('load', loadAfterPageReady, { once: true });
+        }
+
+        window.addEventListener('focus', refreshVisiblePage);
+        document.addEventListener('visibilitychange', refreshVisiblePage);
+
+        return () => {
+            controller.abort();
+            window.removeEventListener('load', loadAfterPageReady);
+            window.removeEventListener('focus', refreshVisiblePage);
+            document.removeEventListener('visibilitychange', refreshVisiblePage);
+        };
+    }, [loadActivities]);
 
     return (
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -105,12 +134,19 @@ export default function EmployeeActivitiesWidget() {
                     <CardTitle className="flex items-center gap-2">
                         <Activity className="h-5 w-5 text-primary" />
                         Employee Activities
+                        {isRefreshing && (
+                            <RefreshCcw className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
                     </CardTitle>
                     <CardDescription>Recent time entries and activity history for your work.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3">
-                        {activities.length ? (
+                        {!hasLoaded ? (
+                            [1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
+                            ))
+                        ) : activities.length ? (
                             activities.map((activity) => {
                                 const ActivityContent = (
                                     <div className="flex gap-3 items-start p-3 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50">
